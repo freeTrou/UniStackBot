@@ -1,0 +1,15 @@
+# ROS 2 / colcon 构建产物
+build/
+install/
+log/
+
+# 编辑器与系统
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 编译中间文件
+*.o
+*.so
+*.a
