@@ -12,9 +12,14 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>forward_command_controller</exec_depend>
   <exec_depend>unistackbot_controller</exec_depend>
   <exec_depend>unistackbot_description</exec_depend>
   <exec_depend>unistackbot_hardware</exec_depend>
+  <exec_depend>unistackbot_hardware_mock</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

@@ -6,7 +6,7 @@
         <ros2_control name="piper_system" type="system">
 
             <hardware>
-                <plugin>unistackbot_hardware/PiperSystem</plugin>
+                <plugin>unistackbot_hardware_mock/MockPiperHardware</plugin>
                 <param name="device">/dev/piper_arm</param>
                 <param name="baudrate">2000000</param>
                 <param name="loop_rate">500</param>
@@ -73,16 +73,6 @@
                     <state_interface name="velocity"/>
                     <param name="min">0</param>
                     <param name="max">0.1</param>
-                </joint>
-
-                <joint name="gripper_joint1">
-                    <param name="mimic">gripper</param>
-                    <param name="multiplier">0.5</param>
-                </joint>
-
-                <joint name="gripper_joint2">
-                    <param name="mimic">gripper</param>
-                    <param name="multiplier">-0.5</param>
                 </joint>
             </xacro:if>
 

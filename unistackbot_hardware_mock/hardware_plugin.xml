@@ -1,0 +1,7 @@
+<library path="unistackbot_hardware_mock">
+  <class name="unistackbot_hardware_mock/MockPiperHardware"
+         type="unistackbot_hardware_mock::MockPiperHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>Mock Piper arm hardware for simulation. Internal kinematics, no external simulator.</description>
+  </class>
+</library>
