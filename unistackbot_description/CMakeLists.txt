@@ -3,7 +3,7 @@ project(unistackbot_description)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY urdf launch config
+install(DIRECTORY arms config launch
   DESTINATION share/${PROJECT_NAME}
 )
 

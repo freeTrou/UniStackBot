@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="piper">
+
+    <xacro:arg name="use_gripper" default="true" />
+    <xacro:arg name="use_ros2_control" default="false" />
+    <xacro:arg name="use_world" default="true" />
+
+    <xacro:include filename="$(find unistackbot_description)/arms/piper/urdf/piper_macro.xacro"/>
+    <xacro:include filename="$(find unistackbot_description)/arms/piper/urdf/piper_gripper_macro.xacro"/>
+    <xacro:include filename="$(find unistackbot_description)/arms/piper/urdf/piper_ros2_control.xacro"/>
+
+    <xacro:if value="$(arg use_world)">
+        <link name="world"/>
+        <xacro:piper_arm parent="world"/>
+    </xacro:if>
+    <xacro:unless value="$(arg use_world)">
+        <xacro:piper_arm parent="base_link"/>
+    </xacro:unless>
+
+    <xacro:if value="$(arg use_gripper)">
+        <xacro:piper_gripper/>
+    </xacro:if>
+
+    <xacro:if value="$(arg use_ros2_control)">
+        <xacro:piper_ros2_control use_gripper="$(arg use_gripper)"/>
+    </xacro:if>
+
+</robot>
