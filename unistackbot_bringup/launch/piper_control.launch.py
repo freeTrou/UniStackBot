@@ -54,7 +54,22 @@ def _launch_setup(context):
             output='screen',
         ))
 
-    return nodes
+    spawners = [
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+            output='screen',
+        ),
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['joint_trajectory_controller', '--controller-manager', '/controller_manager'],
+            output='screen',
+        ),
+    ]
+
+    return nodes + spawners
 
 
 def generate_launch_description():

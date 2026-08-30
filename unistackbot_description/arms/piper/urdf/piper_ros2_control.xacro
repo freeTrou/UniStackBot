@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <xacro:macro name="piper_ros2_control" params="use_gripper:=true">
+    <xacro:macro name="piper_ros2_control" params="use_gripper:=true use_gazebo:=false">
 
         <ros2_control name="piper_system" type="system">
 
             <hardware>
-                <plugin>unistackbot_hardware_mock/MockPiperHardware</plugin>
+                <xacro:if value="${use_gazebo}">
+                    <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+                </xacro:if>
+                <xacro:unless value="${use_gazebo}">
+                    <plugin>unistackbot_hardware_mock/MockPiperHardware</plugin>
+                </xacro:unless>
                 <param name="device">/dev/piper_arm</param>
                 <param name="baudrate">2000000</param>
                 <param name="loop_rate">500</param>

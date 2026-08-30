@@ -3,11 +3,13 @@
 
     <xacro:macro name="piper_arm" params="parent:=base_link origin_xyz:='0 0 0' origin_rpy:='0 0 0'">
 
-        <joint name="world_to_base_link" type="fixed">
-            <parent link="${parent}"/>
-            <child link="base_link"/>
-            <origin xyz="${origin_xyz}" rpy="${origin_rpy}"/>
-        </joint>
+        <xacro:unless value="${parent == 'base_link'}">
+            <joint name="world_to_base_link" type="fixed">
+                <parent link="${parent}"/>
+                <child link="base_link"/>
+                <origin xyz="${origin_xyz}" rpy="${origin_rpy}"/>
+            </joint>
+        </xacro:unless>
 
         <link name="base_link">
             <inertial>
