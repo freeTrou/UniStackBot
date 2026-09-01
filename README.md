@@ -122,6 +122,19 @@ ros2 launch unistackbot_gazebo gazebo.launch.py          # Gazebo Classic 旧链
 ros2 run unistackbot_bringup piper_demo_motion.py
 ```
 
+## mock / Gazebo 切换
+
+两个环境共享同一套模型、控制器配置与上层工具（JTC、演示脚本、`/sim_control/*` 服务），**切换只需换一条 launch 命令**：
+
+| 环境 | 启动命令 | 特点 |
+| --- | --- | --- |
+| mock（运动学） | `ros2 launch unistackbot_bringup piper_control.launch.py` | 启动快、完全确定、支持 `set_joint_state` 瞬移，适合算法开发与回归测试 |
+| Gazebo（动力学） | `ros2 launch unistackbot_gazebo piper_ign.launch.py` | 真实物理（重力/碰撞/惯性），只支持 pause/resume/step，适合动力学验证 |
+
+切换纪律：**一次只跑一套，切换前先执行 `gz_clean.sh` 清残留**——两套环境的控制器同名（`/controller_manager`），残留进程会污染下一次启动（报 `Controller already loaded`）。
+
+推荐工作流：算法在 mock 上快速迭代，每个版本在 Gazebo 上回归一次，两边都绿才算通过。
+
 ## 常见问题
 
 - **报 `Controller already loaded` / 机械臂不动**：多为残留进程冲突，执行 `ros2 run unistackbot_gazebo gz_clean.sh` 后重新启动。
