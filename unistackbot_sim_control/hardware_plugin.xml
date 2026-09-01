@@ -1,0 +1,7 @@
+<library path="sim_control_hardware">
+  <class name="unistackbot_sim_control/SimControlHardware"
+         type="unistackbot_sim_control::SimControlHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>统一仿真控制层硬件插件: 对 ros2_control 提供统一接口, 对内按后端分类 (kinematic/...)</description>
+  </class>
+</library>

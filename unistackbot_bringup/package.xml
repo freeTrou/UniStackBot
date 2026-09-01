@@ -22,7 +22,7 @@
   <exec_depend>unistackbot_controller</exec_depend>
   <exec_depend>unistackbot_description</exec_depend>
   <exec_depend>unistackbot_hardware</exec_depend>
-  <exec_depend>unistackbot_hardware_mock</exec_depend>
+  <exec_depend>unistackbot_sim_control</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

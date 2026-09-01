@@ -31,7 +31,7 @@ unistackbot/
 ├── unistackbot_controller/     # 运动控制层
 ├── unistackbot_description/    # 机器人模型描述
 ├── unistackbot_hardware/       # 硬件抽象层
-├── unistackbot_hardware_mock/  # 仿真硬件插件
+├── unistackbot_sim_control/    # 统一仿真控制层
 ├── unistackbot_gazebo/         # Gazebo 仿真集成
 ├── README.md
 ├── LICENSE
@@ -49,7 +49,7 @@ unistackbot/
 │         unistackbot_controller              │  运动控制 / 运动学解算
 ├─────────────────────────────────────────────┤
 │          unistackbot_hardware               │  硬件抽象 / 驱动通信
-│   ├─ unistackbot_hardware_mock              │  仿真/mock 硬件插件
+│   ├─ unistackbot_sim_control                │  统一仿真控制层
 │   └─ unistackbot_gazebo                     │  Gazebo 仿真集成
 ├─────────────────────────────────────────────┤
 │             物理硬件 / 仿真器                │
@@ -78,9 +78,9 @@ unistackbot/
 
 硬件抽象层。负责与底层驱动（底盘电机、关节电机、编码器、IMU、力矩传感器等）通信，向上以 `hardware_interface` 插件或统一话题/服务形式暴露执行器与传感器接口，屏蔽具体硬件差异，使上层控制器与设备解耦，便于跨平台与跨本体复用。
 
-### unistackbot_hardware_mock
+### unistackbot_sim_control
 
-仿真硬件层。提供与 `unistackbot_hardware` 接口一致的 `hardware_interface` 插件（`MockPiperHardware`），在无真实硬件时按关节限位与最大角速度模拟执行器响应，用于打通控制链路验证。
+统一仿真控制层。**对外**对 ros2_control 提供统一硬件插件接口（`SimControlHardware`），**对内**按后端分类处理（`backend=kinematic` 运动学仿真已内置，MuJoCo/Isaac 等可按同一后端接口扩展），并预留新仿真平台接入。同时提供 `/sim_control/*` 仿真控制服务（reset / set_joint_state / pause / resume / step），上层与测试脚本只依赖这一套契约。回归入口：`bash test/smoke_sim_control.sh`。
 
 ### unistackbot_gazebo
 

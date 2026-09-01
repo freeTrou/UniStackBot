@@ -15,7 +15,8 @@
                     <plugin>gazebo_ros2_control/GazeboSystem</plugin>
                 </xacro:if>
                 <xacro:unless value="${use_gazebo in ['ign', True, 'true', 'classic']}">
-                    <plugin>unistackbot_hardware_mock/MockPiperHardware</plugin>
+                    <plugin>unistackbot_sim_control/SimControlHardware</plugin>
+                    <param name="backend">kinematic</param>
                 </xacro:unless>
                 <param name="device">/dev/piper_arm</param>
                 <param name="baudrate">2000000</param>
@@ -29,6 +30,7 @@
                 <state_interface name="effort"/>
                 <param name="min">-2.6179938</param>
                 <param name="max">2.6179938</param>
+                    <param name="max_velocity">5.0</param>
             </joint>
 
             <joint name="joint2">
@@ -38,6 +40,7 @@
                 <state_interface name="effort"/>
                 <param name="min">0</param>
                 <param name="max">3.1415926</param>
+                    <param name="max_velocity">5.0</param>
             </joint>
 
             <joint name="joint3">
@@ -47,6 +50,7 @@
                 <state_interface name="effort"/>
                 <param name="min">-2.9670597</param>
                 <param name="max">0</param>
+                    <param name="max_velocity">5.0</param>
             </joint>
 
             <joint name="joint4">
@@ -56,6 +60,7 @@
                 <state_interface name="effort"/>
                 <param name="min">-1.7453292</param>
                 <param name="max">1.7453292</param>
+                    <param name="max_velocity">5.0</param>
             </joint>
 
             <joint name="joint5">
@@ -65,6 +70,7 @@
                 <state_interface name="effort"/>
                 <param name="min">-1.2217304</param>
                 <param name="max">1.2217304</param>
+                    <param name="max_velocity">5.0</param>
             </joint>
 
             <joint name="joint6">
@@ -74,6 +80,7 @@
                 <state_interface name="effort"/>
                 <param name="min">-2.0943951</param>
                 <param name="max">2.0943951</param>
+                    <param name="max_velocity">5.0</param>
             </joint>
 
             <xacro:if value="${use_gripper}">
@@ -83,6 +90,7 @@
                     <state_interface name="velocity"/>
                     <param name="min">0</param>
                     <param name="max">0.1</param>
+                    <param name="max_velocity">3.0</param>
                 </joint>
                 <!-- 两个 mimic 手指关节: URDF 侧已有 <mimic> 标签, 此处按 gazebo_ros2_control
                      要求补 mimic/multiplier 参数才能在仿真中受控跟随 gripper -->

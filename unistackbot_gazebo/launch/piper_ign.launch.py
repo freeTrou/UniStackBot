@@ -29,6 +29,7 @@ def _launch_setup(context):
         FindPackageShare('unistackbot_description'),
         'arms', 'piper', 'urdf', 'piper.urdf.xacro',
     ])
+    # 渲染 URDF
     robot_description_content = Command([
         FindExecutable(name='xacro'), ' ', xacro_path,
         ' use_gripper:=true',
@@ -97,6 +98,14 @@ def _launch_setup(context):
         output='screen',
     )
 
+    # 统一仿真控制层 gz 后端适配器: /sim_control/pause|resume|step -> ign 世界服务
+    sim_control_gz = Node(
+        package='unistackbot_sim_control',
+        executable='sim_control_gz_node',
+        parameters=[{'world': 'piper_world'}],
+        output='screen',
+    )
+
     spawners = [
         Node(
             package='controller_manager',
@@ -118,10 +127,11 @@ def _launch_setup(context):
         robot_state_publisher,
         gz_sim,
         clock_bridge,
+        sim_control_gz,
         spawn_entity,
     ] + spawners
 
-
+# 入口
 def generate_launch_description():
     return LaunchDescription([
         # DDS 跟随机器默认配置 (~/cyclonedds.xml, 本机统一配置 lo + 单播 peer),
@@ -129,5 +139,5 @@ def generate_launch_description():
         # 声明必须在 OpaqueFunction 之前: _launch_setup 会 perform 这些配置
         DeclareLaunchArgument('gui', default_value='true',
                               description='是否启动 Gazebo GUI 客户端'),
-        OpaqueFunction(function=_launch_setup),
+        OpaqueFunction(function=_launch_setup), # 启动py函数 
     ])

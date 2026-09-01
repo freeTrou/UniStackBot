@@ -1,0 +1,7 @@
+# 瞬移关节状态 (仅接受非 mimic 关节, velocities 空数组 = 速度清零)
+string[] joint_names
+float64[] positions
+float64[] velocities
+---
+bool success
+string message
