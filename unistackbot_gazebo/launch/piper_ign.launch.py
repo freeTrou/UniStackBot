@@ -18,6 +18,7 @@ from launch.substitutions import (
     PathJoinSubstitution,
 )
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -34,56 +35,65 @@ def _launch_setup(context):
         ' use_ros2_control:=true',
         # world 链接把基座固定在世界原点: 否则基座自由浮动, 机械臂会在重力下瘫倒
         ' use_world:=true',
-        ' use_gazebo:=true',
+        ' use_gazebo:=ign',
     ]).perform(context)
 
-    # gazebo_ros2_control 会把 URDF 以 `--param robot_description:=<urdf>` 规则
-    # 转发给 controller_manager 节点, 而 rcl 参数解析器不允许值中含换行,
-    # 多行 xacro 输出会让 CM 创建失败 (spawner 永远等不到 /controller_manager),
-    # 这里重新序列化压成单行。
+    # 压成单行: gz_ros2_control 同样把 URDF 以 --param 规则转发给 controller_manager,
+    # rcl 参数解析器不接受值中含换行
     robot_description_content = ET.tostring(
         ET.fromstring(robot_description_content), encoding='unicode')
 
-    # spawn_entity 用 -file 直接读 URDF, 不走 /robot_description 话题:
-    # TRANSIENT_LOCAL 迟到补发在 iceoryx 共享内存等 DDS 配置下不可靠,
-    # 走话题会让 spawn_entity 永远等不到模型描述。
-    urdf_path = os.path.join(tempfile.gettempdir(), 'unistackbot_piper_gazebo.urdf')
+    # create 用 -file 直接读 URDF, 不走 /robot_description 话题
+    urdf_path = os.path.join(tempfile.gettempdir(), 'unistackbot_piper_gz.urdf')
     with open(urdf_path, 'w') as f:
         f.write(robot_description_content)
+
+    # Fortress 靠 IGN_GAZEBO_RESOURCE_PATH 解析 model:// 资源: URDF->SDF 转换会把
+    # package:// 重写为 model://, 必须把包含包目录的 ament share 根目录加进去,
+    # 否则 GUI/服务端都找不到 mesh (Classic 由 gazebo_ros 自动完成, ign 没有)
+    ign_resource_root = os.path.dirname(
+        get_package_share_directory('unistackbot_description'))
+    ign_resource_path = os.pathsep.join(
+        p for p in [ign_resource_root, os.environ.get('IGN_GAZEBO_RESOURCE_PATH', '')] if p)
 
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        parameters=[{'robot_description': robot_description_content}],
+        # ParameterValue(str) 必须: launch_ros 会把裸字符串当 YAML 解析
+        parameters=[{'robot_description': ParameterValue(robot_description_content, value_type=str)}],
         output='screen',
     )
 
-    gazebo_ros_share = get_package_share_directory('gazebo_ros')
     world_path = os.path.join(
-        get_package_share_directory('unistackbot_gazebo'),
-        'worlds', 'empty.world',
-    )
+        get_package_share_directory('unistackbot_gazebo'), 'worlds', 'empty_ign.world')
 
-    gzserver = IncludeLaunchDescription(
+    # -r 启动即运行; gui:=false 时 -s 只起服务端
+    gz_args = f'-r {"-s " if not gui else ""}{world_path}'
+    gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(gazebo_ros_share, 'launch', 'gzserver.launch.py')
+            PathJoinSubstitution([
+                FindPackageShare('ros_gz_sim'), 'launch', 'gz_sim.launch.py',
+            ])
         ),
-        launch_arguments={'world': world_path}.items(),
-    )
-    gzclient = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(gazebo_ros_share, 'launch', 'gzclient.launch.py')
-        ),
+        launch_arguments={'gz_args': gz_args, 'on_exit_shutdown': 'true'}.items(),
     )
 
     spawn_entity = Node(
-        package='gazebo_ros',
-        executable='spawn_entity.py',
+        package='ros_gz_sim',
+        executable='create',
         arguments=[
             '-file', urdf_path,
-            '-entity', 'piper',
+            '-name', 'piper',
             '-x', '0', '-y', '0', '-z', '0',
         ],
+        output='screen',
+    )
+
+    # /clock 桥接: controller_manager 使用仿真时间
+    clock_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
         output='screen',
     )
 
@@ -102,20 +112,21 @@ def _launch_setup(context):
         ),
     ]
 
-    nodes = [robot_state_publisher, gzserver, spawn_entity] + spawners
-    if gui:
-        nodes.append(gzclient)
-    return nodes
+    # 资源路径放首位: 先设环境再拉起后续进程
+    return [
+        SetEnvironmentVariable('IGN_GAZEBO_RESOURCE_PATH', ign_resource_path),
+        robot_state_publisher,
+        gz_sim,
+        clock_bridge,
+        spawn_entity,
+    ] + spawners
 
 
 def generate_launch_description():
     return LaunchDescription([
-        # Gazebo 自动探测的公示地址可能指向不可达的虚拟网卡 (如 10.0.3.x 网桥),
-        # gzclient 会连黑洞导致界面冻结, 单机仿真固定公示 127.0.0.1
-        SetEnvironmentVariable('GAZEBO_IP', '127.0.0.1'),
-        # 跳过 models.gazebosim.org 在线模型库访问, 避免离线环境下启动阻塞
-        SetEnvironmentVariable('GAZEBO_MODEL_DATABASE_URI', ''),
-        # DDS 跟随机器默认配置 (~/cyclonedds.xml), launch 不再覆盖
+        # DDS 跟随机器默认配置 (~/cyclonedds.xml, 本机统一配置 lo + 单播 peer),
+        # launch 不再覆盖; 见 CLAUDE.md 的 DDS 说明
+        # 声明必须在 OpaqueFunction 之前: _launch_setup 会 perform 这些配置
         DeclareLaunchArgument('gui', default_value='true',
                               description='是否启动 Gazebo GUI 客户端'),
         OpaqueFunction(function=_launch_setup),

@@ -6,10 +6,15 @@
         <ros2_control name="piper_system" type="system">
 
             <hardware>
-                <xacro:if value="${use_gazebo}">
+                <!-- use_gazebo: 'ign'=Gazebo Sim(Fortress), 'true'/'classic'=Gazebo Classic, 其余=mock 插件.
+                     注意: $(arg) 传参时 xacro 会把 true/false 解析成 Python 布尔, 条件需同时匹配 True -->
+                <xacro:if value="${use_gazebo == 'ign'}">
+                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                </xacro:if>
+                <xacro:if value="${use_gazebo in [True, 'true', 'classic']}">
                     <plugin>gazebo_ros2_control/GazeboSystem</plugin>
                 </xacro:if>
-                <xacro:unless value="${use_gazebo}">
+                <xacro:unless value="${use_gazebo in ['ign', True, 'true', 'classic']}">
                     <plugin>unistackbot_hardware_mock/MockPiperHardware</plugin>
                 </xacro:unless>
                 <param name="device">/dev/piper_arm</param>
@@ -71,7 +76,7 @@
                 <param name="max">2.0943951</param>
             </joint>
 
-            <xacro:if value="$(arg use_gripper)">
+            <xacro:if value="${use_gripper}">
                 <joint name="gripper">
                     <command_interface name="position"/>
                     <state_interface name="position"/>
@@ -79,9 +84,45 @@
                     <param name="min">0</param>
                     <param name="max">0.1</param>
                 </joint>
+                <!-- 两个 mimic 手指关节: URDF 侧已有 <mimic> 标签, 此处按 gazebo_ros2_control
+                     要求补 mimic/multiplier 参数才能在仿真中受控跟随 gripper -->
+                <joint name="gripper_joint1">
+                    <command_interface name="position"/>
+                    <state_interface name="position"/>
+                    <state_interface name="velocity"/>
+                    <param name="mimic">gripper</param>
+                    <param name="multiplier">0.5</param>
+                    <param name="offset">0.0</param>
+                </joint>
+                <joint name="gripper_joint2">
+                    <command_interface name="position"/>
+                    <state_interface name="position"/>
+                    <state_interface name="velocity"/>
+                    <param name="mimic">gripper</param>
+                    <param name="multiplier">-0.5</param>
+                    <param name="offset">0.0</param>
+                </joint>
             </xacro:if>
 
         </ros2_control>
+
+        <!-- Gazebo 侧系统插件: 与上方 use_gazebo 模式对应, 控制器配置共用 bringup 的 yaml -->
+        <xacro:if value="${use_gazebo in [True, 'true', 'classic']}">
+            <gazebo>
+                <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
+                    <parameters>$(find unistackbot_bringup)/config/piper_controllers.yaml</parameters>
+                </plugin>
+            </gazebo>
+        </xacro:if>
+        <xacro:if value="${use_gazebo == 'ign'}">
+            <gazebo>
+                <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+                    <robot_param>robot_description</robot_param>
+                    <robot_param_node>robot_state_publisher</robot_param_node>
+                    <parameters>$(find unistackbot_bringup)/config/piper_controllers.yaml</parameters>
+                </plugin>
+            </gazebo>
+        </xacro:if>
 
     </xacro:macro>
 

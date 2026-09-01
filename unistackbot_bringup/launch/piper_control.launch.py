@@ -5,6 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -25,7 +26,9 @@ def _launch_setup(context):
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        parameters=[{'robot_description': robot_description_content}],
+        # ParameterValue(str) 必须: launch_ros 会把裸字符串当 YAML 解析,
+        # 多行 URDF 会直接让 launch 报错
+        parameters=[{'robot_description': ParameterValue(robot_description_content, value_type=str)}],
         output='screen',
     )
 
@@ -36,7 +39,11 @@ def _launch_setup(context):
     ros2_control_node = Node(
         package='controller_manager',
         executable='ros2_control_node',
-        parameters=[{'robot_description': robot_description_content}, controllers_yaml],
+        # 同上: 裸字符串会被 launch_ros 当 YAML 解析, 必须 ParameterValue(str)
+        parameters=[
+            {'robot_description': ParameterValue(robot_description_content, value_type=str)},
+            controllers_yaml,
+        ],
         output='screen',
     )
 
@@ -74,6 +81,7 @@ def _launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
+        # DDS 跟随机器默认配置 (~/cyclonedds.xml), launch 不再覆盖
         DeclareLaunchArgument('use_rviz', default_value='false',
                               description='是否启动 RViz2'),
         OpaqueFunction(function=_launch_setup),

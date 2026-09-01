@@ -26,12 +26,4 @@
         <xacro:piper_ros2_control use_gripper="$(arg use_gripper)" use_gazebo="$(arg use_gazebo)"/>
     </xacro:if>
 
-    <xacro:if value="$(arg use_gazebo)">
-        <gazebo>
-            <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
-                <parameters>$(find unistackbot_bringup)/config/piper_controllers.yaml</parameters>
-            </plugin>
-        </gazebo>
-    </xacro:if>
-
 </robot>

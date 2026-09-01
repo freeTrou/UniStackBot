@@ -1,6 +1,6 @@
 # UniStackBot
 
-一个面向通用机器人的实时控制框架。基于 ROS 2 Humble 构建，采用分层架构将硬件抽象、运动控制、模型描述与系统启动解耦，覆盖从固定基座机械臂到双足人形在内的多种机器人本体形态，并在保证实时性的前提下提供可扩展的软件栈。
+一个面向通用机器人的实时控制框架。基于 ROS 2 Humble 构建，采用分层架构将硬件抽象、运动控制、模型描述与系统启动解耦，覆盖从固定基座机械臂到双足人形在内的多种机器人本体形态，并在保证实时性的前提下提供可扩展的软件栈。当前参考本体为 **Piper 机械臂**（6 关节 + 夹爪）。
 
 ## 设计目标
 
@@ -31,6 +31,8 @@ unistackbot/
 ├── unistackbot_controller/     # 运动控制层
 ├── unistackbot_description/    # 机器人模型描述
 ├── unistackbot_hardware/       # 硬件抽象层
+├── unistackbot_hardware_mock/  # 仿真硬件插件
+├── unistackbot_gazebo/         # Gazebo 仿真集成
 ├── README.md
 ├── LICENSE
 └── .gitignore
@@ -47,6 +49,8 @@ unistackbot/
 │         unistackbot_controller              │  运动控制 / 运动学解算
 ├─────────────────────────────────────────────┤
 │          unistackbot_hardware               │  硬件抽象 / 驱动通信
+│   ├─ unistackbot_hardware_mock              │  仿真/mock 硬件插件
+│   └─ unistackbot_gazebo                     │  Gazebo 仿真集成
 ├─────────────────────────────────────────────┤
 │             物理硬件 / 仿真器                │
 └─────────────────────────────────────────────┘
@@ -60,7 +64,7 @@ unistackbot/
 
 ### unistackbot_bringup
 
-顶层启动包，负责拉起整机各节点并加载运行参数。提供统一入口的 launch 文件和默认配置，支持一键启动完整系统或其中的子模块（仅底盘、仅可视化、仅硬件等），并管理真机与仿真两种运行模式之间的切换。
+顶层启动包，负责拉起整机各节点并加载运行参数。提供统一入口的 launch 文件和默认配置（控制器配置位于 `config/`），管理真机、mock 与仿真三种运行模式之间的切换。
 
 ### unistackbot_controller
 
@@ -74,6 +78,14 @@ unistackbot/
 
 硬件抽象层。负责与底层驱动（底盘电机、关节电机、编码器、IMU、力矩传感器等）通信，向上以 `hardware_interface` 插件或统一话题/服务形式暴露执行器与传感器接口，屏蔽具体硬件差异，使上层控制器与设备解耦，便于跨平台与跨本体复用。
 
+### unistackbot_hardware_mock
+
+仿真硬件层。提供与 `unistackbot_hardware` 接口一致的 `hardware_interface` 插件（`MockPiperHardware`），在无真实硬件时按关节限位与最大角速度模拟执行器响应，用于打通控制链路验证。
+
+### unistackbot_gazebo
+
+Gazebo 仿真集成。主链路基于 **Gazebo Sim (Fortress)**：`ros_gz_sim` 启动仿真、`gz_ros2_control` 在仿真器内运行控制器、`ros_gz_bridge` 桥接仿真时钟；另保留 Gazebo Classic 旧链路作对照。与 mock 链路共用同一套控制器配置，并内置残留进程清理脚本。
+
 ## 构建
 
 ```bash
@@ -85,9 +97,33 @@ source install/setup.bash
 ## 运行
 
 ```bash
-# 启动完整系统（占位示例，待 bringup 实现）
-ros2 launch unistackbot_bringup unistackbot.launch.py
+# 模型可视化（RViz）
+ros2 launch unistackbot_description display.launch.py
+
+# mock 控制链路（controller_manager + mock 硬件插件，无需仿真器）
+ros2 launch unistackbot_bringup piper_control.launch.py
+
+# Gazebo 仿真（Gazebo Sim / Fortress）
+ros2 launch unistackbot_gazebo piper_ign.launch.py
+
+# Gazebo 仿真（Gazebo Classic 旧链路，作对照）
+ros2 launch unistackbot_gazebo gazebo.launch.py
 ```
+
+启动仿真后，等日志出现两行 `Configured and activated`，即可执行演示轨迹：
+
+```bash
+ros2 run unistackbot_bringup piper_demo_motion.py
+```
+
+## 常见问题
+
+```bash
+# 启动前清理残留进程（ign 服务进程常在 launch 退出后残留，会污染下次启动）
+ros2 run unistackbot_gazebo gz_clean.sh
+```
+
+本机 DDS 使用统一配置 `~/cyclonedds.xml`（`.bashrc` 中 `export CYCLONEDDS_URI`）。
 
 ## 许可证
 

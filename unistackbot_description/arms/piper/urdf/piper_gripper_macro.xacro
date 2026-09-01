@@ -53,7 +53,15 @@
             <child link="gripper_base"/>
         </joint>
 
-        <link name="gripper_link"/>
+        <!-- gripper_link 必须带惯性: 空 link 会被 Gazebo 丢弃, 导致 gripper 关节
+             在仿真中不存在, JTC 因缺关节无法激活 -->
+        <link name="gripper_link">
+            <inertial>
+                <origin xyz="0 0 0.01" rpy="0 0 0"/>
+                <mass value="0.01"/>
+                <inertia ixx="1e-06" ixy="0.0" ixz="0.0" iyy="1e-06" iyz="0.0" izz="1e-06"/>
+            </inertial>
+        </link>
         <joint name="gripper" type="prismatic">
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <parent link="gripper_base"/>
