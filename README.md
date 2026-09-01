@@ -64,7 +64,7 @@ unistackbot/
 
 ### unistackbot_bringup
 
-顶层启动包，负责拉起整机各节点并加载运行参数。提供统一入口的 launch 文件和默认配置（控制器配置位于 `config/`），管理真机、mock 与仿真三种运行模式之间的切换。
+顶层启动包，负责拉起整机各节点并加载运行参数。提供统一入口的 launch 文件和默认配置（控制器配置位于 `config/`），管理真机、mock 与仿真三种运行模式之间的切换，内置演示轨迹脚本。
 
 ### unistackbot_controller
 
@@ -96,21 +96,27 @@ source install/setup.bash
 
 ## 运行
 
+### 1. 启动仿真
+
 ```bash
-# 模型可视化（RViz）
-ros2 launch unistackbot_description display.launch.py
+# 先清理残留进程（仿真进程可能在上次退出后残留，污染下次启动）
+ros2 run unistackbot_gazebo gz_clean.sh
 
-# mock 控制链路（controller_manager + mock 硬件插件，无需仿真器）
-ros2 launch unistackbot_bringup piper_control.launch.py
-
-# Gazebo 仿真（Gazebo Sim / Fortress）
+# 启动 Gazebo 仿真（Gazebo Sim / Fortress）
 ros2 launch unistackbot_gazebo piper_ign.launch.py
-
-# Gazebo 仿真（Gazebo Classic 旧链路，作对照）
-ros2 launch unistackbot_gazebo gazebo.launch.py
 ```
 
-启动仿真后，等日志出现两行 `Configured and activated`，即可执行演示轨迹：
+其他入口：
+
+```bash
+ros2 launch unistackbot_description display.launch.py    # 模型可视化（RViz）
+ros2 launch unistackbot_bringup piper_control.launch.py  # mock 控制链路（无需仿真器）
+ros2 launch unistackbot_gazebo gazebo.launch.py          # Gazebo Classic 旧链路（对照用）
+```
+
+### 2. 运行机械臂
+
+等日志出现两行 `Configured and activated`，然后执行演示轨迹（抬臂 → 转向 → 夹爪开合 → 回零，约 12 秒）：
 
 ```bash
 ros2 run unistackbot_bringup piper_demo_motion.py
@@ -118,12 +124,8 @@ ros2 run unistackbot_bringup piper_demo_motion.py
 
 ## 常见问题
 
-```bash
-# 启动前清理残留进程（ign 服务进程常在 launch 退出后残留，会污染下次启动）
-ros2 run unistackbot_gazebo gz_clean.sh
-```
-
-本机 DDS 使用统一配置 `~/cyclonedds.xml`（`.bashrc` 中 `export CYCLONEDDS_URI`）。
+- **报 `Controller already loaded` / 机械臂不动**：多为残留进程冲突，执行 `ros2 run unistackbot_gazebo gz_clean.sh` 后重新启动。
+- **DDS 配置**：本机统一使用 `~/cyclonedds.xml`（在 `.bashrc` 中 `export CYCLONEDDS_URI=file://$HOME/cyclonedds.xml`），所有终端共享同一 DDS 域，无需额外前缀。
 
 ## 许可证
 
