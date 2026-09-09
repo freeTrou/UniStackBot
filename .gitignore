@@ -13,3 +13,10 @@ log/
 *.o
 *.so
 *.a
+unistackbot_common/**/test_asan
+unistackbot_common/**/test_tsan
+unistackbot_common/**/test_mpsc_ring
+unistackbot_common/**/test_sp_latest
+unistackbot_common/**/test_sp_ring
+unistackbot_common/**/test_ulog
+unistackbot_common/**/bench_ulog
