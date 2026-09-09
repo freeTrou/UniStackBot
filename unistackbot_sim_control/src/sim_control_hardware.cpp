@@ -8,13 +8,13 @@
 #include <unordered_map>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "ulog/ulog.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "unistackbot_sim_control/sim_backend_factory.hpp"
 
 namespace unistackbot_sim_control
 {
 
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("SimControlHardware");
 
 namespace
 {
@@ -40,12 +40,12 @@ constexpr double kDefaultMaxVelocity = 5.0;   // 未声明 max_velocity 时的�
 // 装配期转储: 全量打印 CM 解析进来的 HardwareInfo (仅 on_init 调用, 非 RT 路径, 允许分配)
 void dumpHardwareInfo(const hardware_interface::HardwareInfo & info)
 {
-	RCLCPP_INFO(LOGGER, "===== HardwareInfo dump: name=%s type=%s =====", info.name.c_str(), info.type.c_str());
+	ULOG_INFO("===== HardwareInfo dump: name=%s type=%s =====", info.name.c_str(), info.type.c_str());
 	for (const auto & param : info.hardware_parameters)
 	{
-		RCLCPP_INFO(LOGGER, "[hardware] %s = %s", param.first.c_str(), param.second.c_str());
+		ULOG_INFO("[hardware] %s = %s", param.first.c_str(), param.second.c_str());
 	}
-	RCLCPP_INFO(LOGGER, "[counts] joints=%zu, sensors=%zu, gpios=%zu", info.joints.size(), info.sensors.size(), info.gpios.size());
+	ULOG_INFO("[counts] joints=%zu, sensors=%zu, gpios=%zu", info.joints.size(), info.sensors.size(), info.gpios.size());
 	for (const auto & joint : info.joints)
 	{
 		std::string cmd_names;
@@ -58,13 +58,13 @@ void dumpHardwareInfo(const hardware_interface::HardwareInfo & info)
 		{
 			state_names += si.name + ", ";
 		}
-		RCLCPP_INFO(LOGGER, "[joint] %s | cmd: %s| state: %s", joint.name.c_str(), cmd_names.c_str(), state_names.c_str());
+		ULOG_INFO("[joint] %s | cmd: %s| state: %s", joint.name.c_str(), cmd_names.c_str(), state_names.c_str());
 		for (const auto & param : joint.parameters)
 		{
-			RCLCPP_INFO(LOGGER, "[joint %s] %s = %s", joint.name.c_str(), param.first.c_str(), param.second.c_str());
+			ULOG_INFO("[joint %s] %s = %s", joint.name.c_str(), param.first.c_str(), param.second.c_str());
 		}
 	}
-	RCLCPP_INFO(LOGGER, "===== HardwareInfo dump end =====");
+	ULOG_INFO("===== HardwareInfo dump end =====");
 }
 
 }  // namespace
@@ -77,13 +77,22 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 
-	RCLCPP_INFO(LOGGER, "SimControlHardware on_init: %zu joints", info_.joints.size());
+	// ulog 接入: 终端 sink (launch 捕获 stdout); 可选文件 sink 经 <param name="ulog_file">
+	unistackbot_common::ulog_config ulog_cfg;
+	ulog_cfg.console = true;
+	if (info_.hardware_parameters.count("ulog_file"))
+	{
+		ulog_cfg.file_path = info_.hardware_parameters.at("ulog_file").c_str();
+	}
+	unistackbot_common::ulog_init(ulog_cfg);
+
+	ULOG_INFO("SimControlHardware on_init: %zu joints", info_.joints.size());
 	dumpHardwareInfo(info_); // 打印所有的信息
 
 	const size_t joint_count = info_.joints.size();
 	if (joint_count > kMaxJoints) // 检查长度是否小于上限
 	{
-		RCLCPP_ERROR(LOGGER, "joint_count %zu > kMaxJoints=%u", joint_count, kMaxJoints);
+		ULOG_ERROR("joint_count %zu > kMaxJoints=%u", joint_count, kMaxJoints);
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 
@@ -106,25 +115,25 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 		joints_[i].max = 0.0;
 		if (joint.parameters.count("min") && !toDouble(joint.parameters.at("min"), joints_[i].min))
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s': invalid double '%s' for param 'min'", joint.name.c_str(), joint.parameters.at("min").c_str());
+			ULOG_ERROR("Joint '%s': invalid double '%s' for param 'min'", joint.name.c_str(), joint.parameters.at("min").c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 		if (joint.parameters.count("max") && !toDouble(joint.parameters.at("max"), joints_[i].max))
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s': invalid double '%s' for param 'max'", joint.name.c_str(), joint.parameters.at("max").c_str());
+			ULOG_ERROR("Joint '%s': invalid double '%s' for param 'max'", joint.name.c_str(), joint.parameters.at("max").c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 		joints_[i].max_velocity = kDefaultMaxVelocity;
 		if (joint.parameters.count("max_velocity") && !toDouble(joint.parameters.at("max_velocity"), joints_[i].max_velocity))
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s': invalid double '%s' for param 'max_velocity'", joint.name.c_str(), joint.parameters.at("max_velocity").c_str());
+			ULOG_ERROR("Joint '%s': invalid double '%s' for param 'max_velocity'", joint.name.c_str(), joint.parameters.at("max_velocity").c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 
 		// 命令接口契约: 恰好一个 position
 		if (joint.command_interfaces.size() != 1 || joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION)
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s' must declare exactly one position command interface", joint.name.c_str());
+			ULOG_ERROR("Joint '%s' must declare exactly one position command interface", joint.name.c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 
@@ -138,13 +147,13 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 			}
 			else if (si.name != hardware_interface::HW_IF_VELOCITY && si.name != hardware_interface::HW_IF_EFFORT)
 			{
-				RCLCPP_ERROR(LOGGER, "Joint '%s' declares unsupported state interface '%s'", joint.name.c_str(), si.name.c_str());
+				ULOG_ERROR("Joint '%s' declares unsupported state interface '%s'", joint.name.c_str(), si.name.c_str());
 				return hardware_interface::CallbackReturn::ERROR;
 			}
 		}
 		if (!has_position)
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s' must declare a position state interface", joint.name.c_str());
+			ULOG_ERROR("Joint '%s' must declare a position state interface", joint.name.c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 	}
@@ -161,7 +170,7 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 		auto src_it = joint_index.find(mimic_it->second);
 		if (src_it == joint_index.end())
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s' mimics unknown joint '%s'", info_.joints[i].name.c_str(), mimic_it->second.c_str());
+			ULOG_ERROR("Joint '%s' mimics unknown joint '%s'", info_.joints[i].name.c_str(), mimic_it->second.c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 		joints_[i].mimic_source = static_cast<int>(src_it->second);
@@ -169,15 +178,15 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 		joints_[i].mimic_offset = 0.0;
 		if (params.count("multiplier") && !toDouble(params.at("multiplier"), joints_[i].mimic_multiplier))
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s': invalid double '%s' for mimic param 'multiplier'", joints_[i].name.c_str(), params.at("multiplier").c_str());
+			ULOG_ERROR("Joint '%s': invalid double '%s' for mimic param 'multiplier'", joints_[i].name.c_str(), params.at("multiplier").c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 		if (params.count("offset") && !toDouble(params.at("offset"), joints_[i].mimic_offset))
 		{
-			RCLCPP_ERROR(LOGGER, "Joint '%s': invalid double '%s' for mimic param 'offset'", joints_[i].name.c_str(), params.at("offset").c_str());
+			ULOG_ERROR("Joint '%s': invalid double '%s' for mimic param 'offset'", joints_[i].name.c_str(), params.at("offset").c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
-		RCLCPP_INFO(LOGGER, "Joint '%s' mimics '%s' (multiplier %.3f, offset %.3f)",
+		ULOG_INFO("Joint '%s' mimics '%s' (multiplier %.3f, offset %.3f)",
 			joints_[i].name.c_str(), mimic_it->second.c_str(),
 			joints_[i].mimic_multiplier, joints_[i].mimic_offset);
 	}
@@ -192,15 +201,15 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 	backend_ = createBackend(backend_name, message);
 	if (!backend_)
 	{
-		RCLCPP_ERROR(LOGGER, "%s", message.c_str());
+		ULOG_ERROR("%s", message.c_str());
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 	if (!backend_->init(joints_, message))
 	{
-		RCLCPP_ERROR(LOGGER, "Backend '%s' init failed: %s", backend_name.c_str(), message.c_str());
+		ULOG_ERROR("Backend '%s' init failed: %s", backend_name.c_str(), message.c_str());
 		return hardware_interface::CallbackReturn::ERROR;
 	}
-	RCLCPP_INFO(LOGGER, "Backend '%s' ready (%s)", backend_name.c_str(), message.c_str());
+	ULOG_INFO("Backend '%s' ready (%s)", backend_name.c_str(), message.c_str());
 
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -270,7 +279,7 @@ hardware_interface::CallbackReturn SimControlHardware::on_configure(const rclcpp
 		}
 	});
 
-	RCLCPP_INFO(LOGGER, "/sim_control services started");
+	ULOG_INFO("/sim_control services started");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -297,11 +306,11 @@ hardware_interface::CallbackReturn SimControlHardware::on_activate(const rclcpp_
 	// 后端生命周期转发: 异步后端在此起 plant, 失败则不开 RT 循环
 	if (!activateBackend())
 	{
-		RCLCPP_ERROR(LOGGER, "Backend '%s' failed to activate", backend_->name().c_str());
+		ULOG_ERROR("Backend '%s' failed to activate", backend_->name().c_str());
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 	// 默认语义: mock 无需首拍同步 (cmd/state 同从 0 起); 真机驱动重写此处时先 read 再 cmd=state
-	RCLCPP_INFO(LOGGER, "SimControlHardware activated (INACTIVE -> ACTIVE), RT loop starting");
+	ULOG_INFO("SimControlHardware activated (INACTIVE -> ACTIVE), RT loop starting");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -310,21 +319,21 @@ hardware_interface::CallbackReturn SimControlHardware::on_deactivate(const rclcp
 	// 后端生命周期转发: 异步后端在此停 plant (有界 join)
 	deactivateBackend();
 	// 默认语义: 停用后接口收回、RT 循环停止, 命令数组保持最后值 (无人再消化)
-	RCLCPP_INFO(LOGGER, "SimControlHardware deactivated (ACTIVE -> INACTIVE), RT loop stopped");
+	ULOG_INFO("SimControlHardware deactivated (ACTIVE -> INACTIVE), RT loop stopped");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
 hardware_interface::CallbackReturn SimControlHardware::on_cleanup(const rclcpp_lifecycle::State &)
 {
 	stopServices();
-	RCLCPP_INFO(LOGGER, "/sim_control services stopped (cleanup)");
+	ULOG_INFO("/sim_control services stopped (cleanup)");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
 hardware_interface::CallbackReturn SimControlHardware::on_shutdown(const rclcpp_lifecycle::State &)
 {
 	stopServices();
-	RCLCPP_INFO(LOGGER, "/sim_control services stopped (shutdown)");
+	ULOG_INFO("/sim_control services stopped (shutdown)");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 

@@ -357,7 +357,7 @@ inline uint64_t ulog_written()
 		{                                                                                                   \
 			unistackbot_common::ulog_detail::emit(lv, fmt, ##__VA_ARGS__);                                  \
 		}                                                                                                   \
-		else if (!unistackbot_common::ulog_detail::active.load(std::memory_order_relaxed))                  \
+		else                                                                                                \
 		{                                                                                                   \
 			unistackbot_common::ulog_detail::noop_dropped.fetch_add(1, std::memory_order_relaxed);          \
 		}                                                                                                   \

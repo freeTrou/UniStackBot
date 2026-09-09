@@ -20,6 +20,7 @@
 #include "std_srvs/srv/trigger.hpp"
 
 #include "unistackbot_sim_control/sim_control_server.hpp"
+#include "ulog/ulog.hpp"
 #include "unistackbot_sim_control/srv/set_joint_state.hpp"
 
 using unistackbot_sim_control::SimCmdType;
@@ -72,7 +73,7 @@ int main(int argc, char ** argv)
 			{
 				if (!result || !rep.data())
 				{
-					RCLCPP_WARN(logger, "ign 世界服务调用未成功确认");
+					ULOG_WARN("ign 世界服务调用未成功确认");
 				}
 			};
 		gz_node.Request<ignition::msgs::WorldControl, ignition::msgs::Boolean>(
@@ -90,7 +91,7 @@ int main(int argc, char ** argv)
 
 	SimControlServer server(node, sink, reject_all);
 
-	RCLCPP_INFO(logger, "sim_control_gz 就绪 (world=%s, 控制服务 %s)", world.c_str(), control_srv.c_str());
+	ULOG_INFO("sim_control_gz 就绪 (world=%s, 控制服务 %s)", world.c_str(), control_srv.c_str());
 	rclcpp::spin(node);
 	rclcpp::shutdown();
 	return 0;
