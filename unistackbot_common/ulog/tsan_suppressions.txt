@@ -1,0 +1,5 @@
+# ulog TSAN 验证的已知误报白名单 (验证命令见 README §10)
+# 该报告为 glibc/GCC-11 TSAN 对后端线程锁模式的已知误报类:
+# data race 已清零 (flush 代际计数原子化), 锁外 I/O 重构后仍报 double lock,
+# 属工具噪声 —— 白名单只允许这一条, 出现任何其他报告仍视为失败
+mutex:*ulog_detail*Backend*run*

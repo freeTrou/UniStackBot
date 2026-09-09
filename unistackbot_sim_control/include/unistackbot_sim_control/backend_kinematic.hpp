@@ -4,29 +4,30 @@
 #include <string>
 #include <vector>
 
-#include "unistackbot_sim_control/backend.hpp"
+#include "unistackbot_sim_control/sim_backend.hpp"
 
 namespace unistackbot_sim_control
 {
 
-/// 运动学后端 (原 mock 逻辑): 理想执行器模型。
-/// 独立关节 = 速度受限一阶逼近 (限位 clamp + 最大角速度饱和);
-/// mimic 关节 = 源关节按 multiplier/offset 推导 (无积分)。
+/*
+ * 运动学后端 (原 mock 逻辑): 理想执行器模型。
+ * 独立关节 = 速度受限一阶逼近 (限位 clamp + 最大角速度饱和);
+ * mimic 关节 = 源关节按 multiplier/offset 推导 (无积分)。
+ */
 class BackendKinematic : public unistackbot_sim_control::SimBackend
 {
 public:
-	bool init(const std::vector<unistackbot_sim_control::JointMeta> & joints,
-		std::string & message) override;
+	[[nodiscard]] bool init(const std::vector<unistackbot_sim_control::JointMeta> & joints, std::string & message) override;
 
 	const std::string & name() const override;
 
-	void step(const std::vector<double> & cmd_position,
-		std::vector<double> & state_position,
-		std::vector<double> & state_velocity,
-		double dt, bool integrate) override;
+	void step(const std::vector<double> & cmd_position, std::vector<double> & state_position,
+		std::vector<double> & state_velocity, double dt, bool integrate) override;
+
+	void transmit(const std::vector<double> & cmd_position) override;
 
 private:
-	std::vector<unistackbot_sim_control::JointMeta> joints_;
+	std::vector<unistackbot_sim_control::JointMeta> joints_;   // 元数据副本 (限位/速度饱和的执行依据)
 };
 
 }  // namespace unistackbot_sim_control

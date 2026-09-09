@@ -26,18 +26,21 @@ void BackendKinematic::step(
 	double dt, bool integrate)
 {
 	const size_t n = state_position.size();
-	for (size_t i = 0; i < n; ++i) {
+	for (size_t i = 0; i < n; ++i)
+	{
 		const JointMeta & joint = joints_[i];
 
 		// mimic 关节: 源关节按 multiplier/offset 推导, 无积分
-		if (joint.is_mimic()) {
+		if (joint.is_mimic())
+		{
 			const size_t src = static_cast<size_t>(joint.mimic_source);
 			state_position[i] = joint.mimic_multiplier * state_position[src] + joint.mimic_offset;
 			state_velocity[i] = joint.mimic_multiplier * state_velocity[src];
 			continue;
 		}
 
-		if (!integrate) {
+		if (!integrate)   // 冻结 (pause): 独立关节保持不动, mimic 已在上方按源推导
+		{
 			continue;
 		}
 
@@ -45,12 +48,16 @@ void BackendKinematic::step(
 		const double target = std::clamp(cmd_position[i], joint.min, joint.max);
 		const double error = target - state_position[i];
 		const double max_step = joint.max_velocity * dt;
-		const double step_delta =
-			(std::abs(error) <= max_step) ? error : std::copysign(max_step, error);
+		const double step_delta = (std::abs(error) <= max_step) ? error : std::copysign(max_step, error);
 
 		state_position[i] = std::clamp(state_position[i] + step_delta, joint.min, joint.max);
-		state_velocity[i] = (dt > 0.0) ? step_delta / dt : 0.0;
+		state_velocity[i] = (dt > 0.0) ? step_delta / dt : 0.0;   // dt=0 (瞬移/首拍) 防除零
 	}
+}
+
+void BackendKinematic::transmit(const std::vector<double> & /*cmd_position*/)
+{
+	// 同步后端: 命令已在 step() 中消化, 无外发动作
 }
 
 }  // namespace unistackbot_sim_control

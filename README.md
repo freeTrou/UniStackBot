@@ -2,6 +2,8 @@
 
 一个面向通用机器人的实时控制框架。基于 ROS 2 Humble 构建，采用分层架构将硬件抽象、运动控制、模型描述与系统启动解耦，覆盖从固定基座机械臂到双足人形在内的多种机器人本体形态，并在保证实时性的前提下提供可扩展的软件栈。当前参考本体为 **Piper 机械臂**（6 关节 + 夹爪）。
 
+**一句话定位**：对上是 VLA / RL / 传统控制等算法的**可靠接入底座**（不可信命令源经校验+OTG 进门）；对下是**总线与电机协议的实时主站**（CAN / EtherCAT，驱动器自带看门狗为安全终点）；**机器人描述（URDF+契约）是贯穿全框架的配置轴**；框架核心对形态与算法保持"形态盲、流派盲"——扩展只发生在插件与配置，核心零改动（验收 = 每次接入新机器人后框架包 git diff 为零）。
+
 ## 设计目标
 
 - **通用性**：硬件层与控制层解耦，通过配置与插件适配不同本体，无需改动上层逻辑。
@@ -23,6 +25,8 @@
 
 不同形态之间共享同一套硬件抽象与启动框架，差异主要集中在 `description` 的模型文件、`hardware` 的驱动插件，以及 `controller` 的运动学/平衡算法上。
 
+> 形态与算法的完整边界分析（含命令模式正交、五形态控制栈对比、扩展性三机制）见 `docs/hardware_framework_design.md` §14。
+
 ## 目录结构
 
 ```
@@ -32,7 +36,9 @@ unistackbot/
 ├── unistackbot_description/    # 机器人模型描述
 ├── unistackbot_hardware/       # 硬件抽象层
 ├── unistackbot_sim_control/    # 统一仿真控制层
+├── unistackbot_common/         # 组件库（自研通用组件 + 外部库；非 ROS 包：sp_latest/sp_ring/mpsc_ring 交换原语 + ulog 日志）
 ├── unistackbot_gazebo/         # Gazebo 仿真集成
+├── unistackbot_interface/      # 公共接口定义（msg/srv，跨包/跨仓库共享）
 ├── README.md
 ├── LICENSE
 └── .gitignore
@@ -82,6 +88,17 @@ unistackbot/
 
 统一仿真控制层。**对外**对 ros2_control 提供统一硬件插件接口（`SimControlHardware`），**对内**按后端分类处理（`backend=kinematic` 运动学仿真已内置，MuJoCo/Isaac 等可按同一后端接口扩展），并预留新仿真平台接入。同时提供 `/sim_control/*` 仿真控制服务（reset / set_joint_state / pause / resume / step），上层与测试脚本只依赖这一套契约。回归入口：`bash test/smoke_sim_control.sh`。
 
+### unistackbot_common
+
+组件库，**不是 ROS 包**（无 package.xml/CMakeLists，colcon 自动忽略）：纯代码存放层，自研通用组件与第三方外部库均在此，保持可在非 ROS 环境（RT 主站线程/单元测试/ARM 交叉编译）中直接复用。每个组件独立子文件夹 = 文档 + 实现 + 测试三件套：
+
+| 组件 | 语义 | 状态 |
+| --- | --- | --- |
+| `sp_latest/` | 最新 1 个（值通道，双缓冲 seqlock） | 已交付（外部评审 7 轮） |
+| `sp_ring/` | SPSC 逐条必达（事件通道） | 已交付 |
+| `mpsc_ring/` | 多写单读丢旧保新（日志通道） | 已交付（外部评审 6 轮，TSAN 零竞争） |
+| `ulog/` | 异步日志组件（终端+文件双 sink，29 项断言 + 三 sanitizer） | 已交付 |
+
 ### unistackbot_gazebo
 
 Gazebo 仿真集成。主链路基于 **Gazebo Sim (Fortress)**：`ros_gz_sim` 启动仿真、`gz_ros2_control` 在仿真器内运行控制器、`ros_gz_bridge` 桥接仿真时钟；另保留 Gazebo Classic 旧链路作对照。与 mock 链路共用同一套控制器配置，并内置残留进程清理脚本。
@@ -120,6 +137,23 @@ ros2 launch unistackbot_gazebo gazebo.launch.py          # Gazebo Classic 旧链
 
 ```bash
 ros2 run unistackbot_bringup piper_demo_motion.py
+```
+
+需要可视化时手动启动 RViz（Fixed Frame 设为 `world`，Add → RobotModel）：
+
+```bash
+rviz2
+```
+
+### 3. 检查与清理
+
+```bash
+ros2 topic hz /joint_states         # ≈500 Hz = 链路健康
+ros2 control list_controllers       # 控制器应为 active
+
+# 报 Controller already loaded / spawner 失败时清残留（mock 链）
+pkill -9 -f ros2_control_node; pkill -9 -f robot_state_publisher
+# Gazebo 链用: ros2 run unistackbot_gazebo gz_clean.sh
 ```
 
 ## mock / Gazebo 切换

@@ -35,11 +35,13 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 add_library(sim_control_hardware SHARED
 	src/sim_control_hardware.cpp
 	src/backend_kinematic.cpp
+	src/backend_threaded.cpp
 	src/sim_control_server.cpp
 )
 target_compile_features(sim_control_hardware PUBLIC cxx_std_17)
 target_include_directories(sim_control_hardware PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>   # 交换原语/契约头 (monorepo 内直引)
 	$<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(sim_control_hardware
@@ -57,6 +59,7 @@ if(HAVE_GZ_ADAPTER)
 	target_compile_features(sim_control_gz_node PUBLIC cxx_std_17)
 	target_include_directories(sim_control_gz_node PRIVATE
 		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
 	)
 	ament_target_dependencies(sim_control_gz_node rclcpp std_srvs)
 	target_link_libraries(sim_control_gz_node
