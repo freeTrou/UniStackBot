@@ -24,6 +24,14 @@ colcon test --packages-select <package>
 colcon test-result --verbose
 ```
 
+`unistackbot_common` 组件**不进 colcon**——在组件目录下用 g++ 直接编译运行测试（规范命令见 `unistackbot_common/ulog/README.md`，其余组件同型）:
+```bash
+cd unistackbot_common/ulog
+g++ -std=c++17 -O2 -pthread -Wall -Wextra -Wconversion -I.. test_ulog.cpp -o test_ulog && ./test_ulog
+# TSAN 变体: -fsanitize=thread，且 TSAN_OPTIONS="suppressions=tsan_suppressions.txt" setarch $(uname -m) -R ./test_tsan
+```
+测试二进制（test_ulog/bench_ulog 等）已在 .gitignore，勿提交。
+
 Three launch entry points, all currently Piper-specific:
 
 ```bash
@@ -68,15 +76,16 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
   - `SimControlHardware` (`SystemInterface`): URDF `<hardware>` 里固定写 `<plugin>unistackbot_sim_control/SimControlHardware</plugin>` + `<param name="backend">kinematic</param>`。接口按 URDF 声明镜像导出（effort 恒 0）；关节动态数量 ≤16，限位/`max_velocity`/mimic 全部来自 `<ros2_control>` 的 `<param>`。
   - 后端 `kinematic`（`BackendKinematic`）: 理想执行器 —— 限位 clamp + 每关节 `max_velocity` 饱和的一阶逼近；mimic 关节按 multiplier/offset 从源关节推导。
   - `/sim_control/*` 服务（reset / set_joint_state / pause / resume / step）: 插件进程内自建（`on_configure` 启动、`on_cleanup` 销毁），命令经 SPSC 无锁队列交给实时循环。`set_joint_state` 用同包 rosidl 生成的 `unistackbot_sim_control/srv/SetJointState`；应答 `success=true` 只代表命令已被接受（入队/ign 请求已发出），不代表执行完成。注意：JTC 激活时其保持命令每周期都会覆盖瞬移，**set_joint_state/reset 需在 pause 下使用**。
+  - 日志走 ulog 宏（`ULOG_INFO`/`ULOG_ERROR`，非 RCLCPP）: `on_init` 里 `ulog_init` —— 终端 sink 恒开（launch 捕获 stdout），URDF `<ros2_control>` 块加 `<param name="ulog_file">` 可选开文件 sink；`on_shutdown` 里 `ulog_shutdown` 排空落盘。
   - `sim_control_gz_node`（Gazebo 适配器，可选编译）: gz 链路的 ros2_control 插件是 `GazeboSimSystem` 而非 SimControlHardware，`/sim_control/*` 改由此独立节点承载 —— pause/resume/step 翻译成 ign 世界服务 `/world/<world>/control`，`reset`/`set_joint_state` 在 Fortress 无原生等价、直接拒绝（Garden+ 才有）。CMake 用 `QUIET` 探测 `ignition-transport11`/`ignition-msgs8`，找不到就跳过、不影响插件本体；由 `piper_ign.launch.py` 启动，`world` 参数（`piper_world`）须与 `empty_ign.world` 里的 `<world name>` 一致。
-  - 回归测试: `bash test/smoke_sim_control.sh`（自包含，10 项断言）。
-- **unistackbot_interface** — 公共接口定义包（ROS msg/srv/action + 纯 C++ 共享契约头）：跨包/跨仓库共享的类型放在这里（单一事实源，供算法团队外部仓库依赖）。触发场景：master.hpp 的 RobotStateSnapshot/JointCmd、RL ingress 命令 schema、state 出口消息。
+  - 回归测试: 仓库根 `test/smoke_sim_control.sh`（自包含 10 项断言；需先 colcon build + source，脚本自行定位工作区并套用 `~/cyclonedds.xml`）。
+- **unistackbot_interface** — 公共接口定义包（ROS msg/srv/action + 纯 C++ 共享契约头）：跨包/跨仓库共享的类型放在这里（单一事实源，供算法团队外部仓库依赖）。触发场景：master.hpp 的 RobotStateSnapshot/JointCmd、RL ingress 命令 schema、state 出口消息。目前是空骨架：msg/srv/action/include 目录已建、尚无任何类型落地。
 - **unistackbot_common** — 组件库，**不是 ROS 包**（无 package.xml/CMakeLists，colcon 自动忽略）：纯代码存放层，保持可在非 ROS 环境（RT 主站线程/单元测试/ARM 交叉编译）中直接复用。现有组件（每个独立子文件夹 = 文档 + 实现 + 测试三件套）：
   - `sp_latest/` — 双缓冲覆盖写/取最新原语（最新 **1** 个，"值通道"，seqlock 宣告式，seq 位宽自适应 64/32 位）；sim_control 的 `threaded` 后端三通道用它
   - `sp_ring/` — SPSC 无锁环形队列（**逐条必达**，"事件通道"，满拒新 push 语义）；sim_control 的 `sim_command_queue.hpp` 经 using-declaration 引用 `SpscRing`，域类型留在 sim_control
   - `mpsc_ring/` — 多写单读覆盖式无锁环（**丢旧保新**：日志缓冲/滑动窗口/音视频环；Vyukov 每槽 seq 2g/2g+1 编码 + 逐出 CAS；六轮外部评审定稿，载荷原子字节存储零 UB，seq_cst 全屏障，TSAN 零竞争）
   - `ulog/` — 高性能异步日志组件（前端宏：级别过滤→snprintf 定长 POD→无锁入队；后端单线程双 sink 终端+文件、error 强刷、100ms 周期 flush、10MB×5 轮转；emit 零 malloc、WCET ~µs；TSAN 白名单一条已知工具误报见 tsan_suppressions.txt）
-  - sim_control 的 CMake 以 `$<BUILD_INTERFACE:...>/../unistackbot_common` 直引 sp_ring 头（monorepo 内，未 install——对外发布前需调整）
+  - sim_control 的 CMake 以 `$<BUILD_INTERFACE:...>/../unistackbot_common` 直引组件库整个目录（sp_ring 队列 + ulog 日志；monorepo 内，未 install——对外发布前需调整）
 - **unistackbot_gazebo** — Gazebo integration, two chains: `piper_ign.launch.py` (Gazebo Sim/Fortress via `ros_gz_sim` + `empty_ign.world` + `/clock` bridge + `sim_control_gz_node` — the current chain) and `gazebo.launch.py` (Gazebo Classic, EOL, kept for reference). In both, the controller manager lives inside the sim's ros2_control plugin — no standalone `ros2_control_node`. Constraints baked into the launches, each fixes a hard failure observed on dev machines:
   - URDF is re-serialized to a **single line** before use: the plugin forwards it to the CM as a `--param robot_description:=<urdf>` rule and rcl's parser rejects newlines → CM never starts.
   - The sim gets the URDF via a temp file (`-file` for spawn_entity / `create`), not the `/robot_description` topic: TRANSIENT_LOCAL latched re-delivery is unreliable under iceoryx/SHM CycloneDDS configs.

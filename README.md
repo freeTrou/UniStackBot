@@ -27,23 +27,6 @@
 
 > 形态与算法的完整边界分析（含命令模式正交、五形态控制栈对比、扩展性三机制）见 `docs/hardware_framework_design.md` §14。
 
-## 目录结构
-
-```
-unistackbot/
-├── unistackbot_bringup/        # 顶层启动包
-├── unistackbot_controller/     # 运动控制层
-├── unistackbot_description/    # 机器人模型描述
-├── unistackbot_hardware/       # 硬件抽象层
-├── unistackbot_sim_control/    # 统一仿真控制层
-├── unistackbot_common/         # 组件库（自研通用组件 + 外部库；非 ROS 包：sp_latest/sp_ring/mpsc_ring 交换原语 + ulog 日志）
-├── unistackbot_gazebo/         # Gazebo 仿真集成
-├── unistackbot_interface/      # 公共接口定义（msg/srv，跨包/跨仓库共享）
-├── README.md
-├── LICENSE
-└── .gitignore
-```
-
 ## 架构
 
 框架自底向上分为三层，由 bringup 统一编排启动：
@@ -66,42 +49,20 @@ unistackbot/
    unistackbot_description（模型描述，贯穿各层）
 ```
 
-## 功能包说明
+## 功能包一览
 
-### unistackbot_bringup
-
-顶层启动包，负责拉起整机各节点并加载运行参数。提供统一入口的 launch 文件和默认配置（控制器配置位于 `config/`），管理真机、mock 与仿真三种运行模式之间的切换，内置演示轨迹脚本。
-
-### unistackbot_controller
-
-运动控制层。在固定控制周期内完成本体相关的运动学/动力学解算与控制律计算，将上层指令转换为底层关节命令。针对不同形态提供差异化策略：机械臂的关节空间与笛卡尔空间轨迹跟踪，轮式底盘的运动学解算与速度平滑，四足/人形的步态生成、质心轨迹与平衡控制（ZMP/全身控制）。向上对接导航、规划与遥操作，向下通过硬件接口读写执行器状态。
-
-### unistackbot_description
-
-机器人模型描述包。存放 URDF/Xacro 文件、可视化配置（RViz）以及 `robot_state_publisher` / `joint_state_publisher` 的启动文件，用于描述连杆、关节、惯量与传感器外参，为仿真、可视化、TF 树与运动学解算提供统一的模型来源。
-
-### unistackbot_hardware
-
-硬件抽象层。负责与底层驱动（底盘电机、关节电机、编码器、IMU、力矩传感器等）通信，向上以 `hardware_interface` 插件或统一话题/服务形式暴露执行器与传感器接口，屏蔽具体硬件差异，使上层控制器与设备解耦，便于跨平台与跨本体复用。
-
-### unistackbot_sim_control
-
-统一仿真控制层。**对外**对 ros2_control 提供统一硬件插件接口（`SimControlHardware`），**对内**按后端分类处理（`backend=kinematic` 运动学仿真已内置，MuJoCo/Isaac 等可按同一后端接口扩展），并预留新仿真平台接入。同时提供 `/sim_control/*` 仿真控制服务（reset / set_joint_state / pause / resume / step），上层与测试脚本只依赖这一套契约。回归入口：`bash test/smoke_sim_control.sh`。
-
-### unistackbot_common
-
-组件库，**不是 ROS 包**（无 package.xml/CMakeLists，colcon 自动忽略）：纯代码存放层，自研通用组件与第三方外部库均在此，保持可在非 ROS 环境（RT 主站线程/单元测试/ARM 交叉编译）中直接复用。每个组件独立子文件夹 = 文档 + 实现 + 测试三件套：
-
-| 组件 | 语义 | 状态 |
+| 包 | 职责 | 说明 |
 | --- | --- | --- |
-| `sp_latest/` | 最新 1 个（值通道，双缓冲 seqlock） | 已交付（外部评审 7 轮） |
-| `sp_ring/` | SPSC 逐条必达（事件通道） | 已交付 |
-| `mpsc_ring/` | 多写单读丢旧保新（日志通道） | 已交付（外部评审 6 轮，TSAN 零竞争） |
-| `ulog/` | 异步日志组件（终端+文件双 sink，29 项断言 + 三 sanitizer） | 已交付 |
+| `unistackbot_bringup` | 顶层启动 / 参数编排 | [README](unistackbot_bringup/README.md) |
+| `unistackbot_controller` | 运动控制 / 运动学解算（空骨架，范围已裁决） | [README](unistackbot_controller/README.md) |
+| `unistackbot_description` | URDF/Xacro 模型 + mesh + RViz（横切层） | [README](unistackbot_description/README.md) |
+| `unistackbot_hardware` | 真机驱动 / 总线主站（空骨架，设计先行） | [README](unistackbot_hardware/README.md) |
+| `unistackbot_sim_control` | 统一仿真控制层（插件 + 后端 + `/sim_control/*`） | [README](unistackbot_sim_control/README.md) |
+| `unistackbot_gazebo` | Gazebo 集成（Fortress 主链 + Classic 对照） | [README](unistackbot_gazebo/README.md) |
+| `unistackbot_interface` | 公共接口定义，跨仓库单一事实源（空骨架） | [README](unistackbot_interface/README.md) |
+| `unistackbot_common` | 组件库，**非 ROS 包**（交换原语 + ulog 日志） | [README](unistackbot_common/README.md) |
 
-### unistackbot_gazebo
-
-Gazebo 仿真集成。主链路基于 **Gazebo Sim (Fortress)**：`ros_gz_sim` 启动仿真、`gz_ros2_control` 在仿真器内运行控制器、`ros_gz_bridge` 桥接仿真时钟；另保留 Gazebo Classic 旧链路作对照。与 mock 链路共用同一套控制器配置，并内置残留进程清理脚本。
+细节看各包 README；自研组件的交付状态与评审记录见 `unistackbot_common/README.md`。
 
 ## 构建
 

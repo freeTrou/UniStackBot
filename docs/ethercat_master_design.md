@@ -2,7 +2,7 @@
 
 > 配套:`docs/hardware_framework_design.md`(§4 多主站矩阵 / master.hpp 五要素 / v3 语义 / 协议层)、`docs/linux_rt_guide.md`(§2.1 线程模板、§2.5 SpLatest)、`docs/socketcan_master_design.md`(CAN FD 分支,结构平行)。
 > 定位:master.hpp 接口的 EC 后端;IgH ecrt 用户态 API,主站线程内跑总线循环,1kHz + DC。
-> 状态:错误处理(§1–§3)为完整定稿;DC/预算/验收为设计要点,随实测回填。
+> 状态:错误处理(§1–§3)为完整定稿;DC/预算/验收为设计要点,随实测回填;§8 坑点清单为调研定稿(出处随附)。
 
 ## 0. 总判断:错误可见性是协议原生的
 
@@ -111,7 +111,7 @@ IgH 统计的 tx 错误/丢帧、NIC ring 溢出、`ecrt_master_receive` 异常�
 
 ## 4. DC 与循环要点
 
-- DC:循环内每拍 `application_time` + `sync_slave_clocks`;偏差进遥测;
+- DC:循环内每拍 `application_time` + `sync_slave_clocks`;**`application_time` 必须喂 CLOCK_MONOTONIC 衍生值**(喂墙钟会被 NTP 回跳打乱 DC 补偿基准,发作呈周期性、极难排查,见 §8.2);`sync_slave_clocks` 按 1.6 文档推荐模式调用;偏差进遥测;
 - 负载:帧时间确定(调度制),预算表按从站数×过程数据量算,余量策略同 CAN §3;
 - 循环 overrun 率 = 第一验收指标(同 CAN);
 - SM watchdog 窗口:略大于主站周期的合理倍数(如 100ms),与驱动器侧保护构成从站安全终点。
@@ -141,3 +141,59 @@ IgH 统计的 tx 错误/丢帧、NIC ring 溢出、`ecrt_master_receive` 异常�
 ## 7. 与 CAN FD 分支的共享件
 
 master.hpp 契约、SpLatest 通道、快照契约、协议层(形态盲)、看门狗链语义、急停旗、事件/慢/轮询三通道结构、错误面测绘方法论——**两后端的差异只在内芯**(帧层 API、错误分类学、能力声明),骨架零重复实现。
+
+## 8. IgH 使用已知坑点与规避(外部经验,2026-09 调研定稿)
+
+来源:IgH 官方文档 1.6、etherlab-users 邮件列表、Intel/TI 论坛装机案例、stable-1.6 NEWS(出处见 §8.7)。覆盖状态标注:✅ 已结构性规避 / ⚠️ 需注意(有残余动作) / 🔧 设计输入(实现 EC 后端时落实)。
+
+### 8.1 帧调度类(最高频,几乎人人踩过)
+
+| 坑 | 机制与症状 | 规避 | 状态 |
+|---|---|---|---|
+| "Datagram SKIPPED n times" 刷屏 | 上一拍的帧还没发出,本拍 send 又到 → 数据报标记跳过、该拍命令作废。根因:RT 调度缺失 / cycle 过快吃满周期 / 负载尖峰 | Form B(专用 RT 线程 + FIFO 90 + 隔离核)从源头压 jitter;负载尖峰期残余的偶发 SKIPPED 是**健康信号不是 bug** → 记日志(ulog)不告警 | ✅ + ⚠️ 记账 |
+| receive→process→send 顺序错/漏调 | 顺序乱 → WKC 异常/数据陈旧;漏 receive → WKC 陈旧;漏 send → 从站看门狗触发。每拍必须恰好一次三连 | master.hpp 把三步封装为原子序列(骨架件),调用方无法拆散 | ✅ |
+| "Datagram UNMATCHED" | 帧回来了但主站已不再期待该数据报——cycle 与帧回程竞速;常伴负载升高,多数为噪声但指向调度问题 | 同 SKIPPED:压 jitter + 记账 | ✅ + ⚠️ 记账 |
+
+### 8.2 DC 时钟类(第二高频,且症状隐蔽)
+
+| 坑 | 机制与症状 | 规避 | 状态 |
+|---|---|---|---|
+| `application_time` 喂墙钟 | CLOCK_REALTIME 被 NTP 回跳 → DC 补偿基准跳变 → 从站采样时刻跳 → CSP 控制质量退化,**且随对时周期性发作**(查不到的"周期性怪病") | 必须喂 CLOCK_MONOTONIC 衍生值——RT 手册 MONOTONIC 规则在 EC 后端的直接落点,已并入 §4 | 🔧 |
+| `sync_slave_clocks` 调用模式错 | 每拍 vs 周期调、漏调 → 从站时钟漂移 | 按 1.6 文档推荐模式调用;DC 偏差进遥测(§1.6 验收线) | 🔧 |
+
+### 8.3 驱动/NIC 类(装机期最常见)
+
+| 坑 | 机制与症状 | 规避 | 状态 |
+|---|---|---|---|
+| native 驱动与内核网卡驱动冲突 | 内核驱动仍占 NIC → master 卡 "waiting for devices" / 起来后无帧;blacklist 因 early-load 顺序有时不够,须显式 rmmod | bringup 装机脚本:rmmod + blacklist 双管;启动失败第一查此项 | ⚠️ 脚本待补 |
+| generic 模式性能上限 | 多一跳内核栈拷贝,jitter 特征不同 | 起步用 generic(已定),预算不达标再换 native | ✅ 已定 |
+
+### 8.4 RT 循环禁忌类
+
+mailbox SDO 进 RT 循环(阻塞)、循环内 malloc/printf——本架构 RT 手册禁令清单 + ulog 替代 + 慢通道独立非 RT 上下文,已全覆盖 ✅。RTDM 扩展有已知死锁(Vectioneer 出过非官方补丁)——不用 RTDM 即不涉及,记录在案。
+
+### 8.5 生命周期类
+
+| 坑 | 机制 | 状态 |
+|---|---|---|
+| ORPHANED 从站 | 主站释放/卸载时从站还在 OP → 从站成"孤儿"留在 OP,直到自身 watchdog 触发 | ✅ 设计已定:进程死 → fd 关 → 帧停 → SM watchdog + 驱动器保护兜底(§1.5) |
+| slave config 泄漏 | 长跑进程 `ecrt_slave_config` 不释放 → 内存增长 | ✅ 每硬件组件固定配置一次,无泄漏面 |
+
+### 8.6 版本/平台类
+
+- EEPROM/SII 读取在部分嵌入式平台失败(AM335x 先例)→ 装机自检(§2 错误面测绘)覆盖。
+- 1.5.2 卡 "waiting for devices" → 即 §8.3 驱动冲突,同解。
+- 选版本核对 stable-1.6 NEWS(数据报重排序保护等修复)。
+
+### 8.7 结论与出处
+
+**坑点分布规律**:运行期坑(帧调度/DC)被 Form B + MONOTONIC 规则结构性规避大半;装机期坑(驱动冲突)一条 rmmod/blacklist 脚本闭环;真正剩下的**实现期设计输入只有两个**——`application_time` 喂单调钟衍生值、`sync_slave_clocks` 正确调用模式(均已并入 §4)。
+
+出处:
+
+- [IgH EtherCAT Master 1.6 文档](https://docs.etherlab.org/ethercat/1.6/pdf/ethercat_doc.pdf)(DC/application_time/sync 官方口径)
+- [etherlab-users 2019 "Random Datagram Unmatched" 线程](https://lists.etherlab.org/pipermail/etherlab-users/2019-May/011166.html)(SKIPPED/UNMATCHED 与负载关系)
+- [TI E2E AM335x "SKIPPED" 帖](https://e2e.ti.com/support/processors-group/processors/f/processors-forum/541398/am335x-icev2-issue-with-igh-ethercat-master-for-linux)(嵌入式平台 SKIPPED + SII 读取失败)
+- [Intel 社区 "Stuck in waiting for devices" (1.5.2)](https://community.intel.com/t5/Intel-Edge-Software-Hub/Stuck-in-quot-waiting-for-device-s-quot-v1-5-2-IgH-EtheCAT/m-p/1617825)(驱动冲突,rmmod+blacklist)
+- [stable-1.6 NEWS](https://gitlab.com/etherlab.org/ethercat/-/blob/stable-1.6/NEWS.md)(版本修复清单)
+- [Vectioneer RTDM 补丁集](https://git.vectioneer.com/pub/etherlab/-/tree/48f32505b1066ae471a4c0a83e3b1d8612cdc77c/patches-default-33b922/0001-unoffical-patchset-20190904)(RTDM 死锁)
