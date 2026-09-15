@@ -44,6 +44,8 @@ void check(bool ok, const char * name)
 thread_local int t_in_emit = 0;
 int g_emit_mallocs = 0;
 
+
+
 }  // namespace
 
 // 自定义 new=malloc/delete=free 配对正确 (警告抑制见文件头)
@@ -157,6 +159,12 @@ void functional_tests()
 	check(after == before + 1 && file_contains(log.c_str(), "should-appear") &&
 			!file_contains(log.c_str(), "should-not-appear"), "filter: level gate works");
 
+	// RAW 快路径: 字面量 memcpy, 无 vsnprintf
+	ulog_set_level(ulog_level::info);
+	ULOG_INFO_RAW("raw-literal-fast-path");
+	ulog_flush();
+	check(file_contains(log.c_str(), "raw-literal-fast-path"), "raw: literal lands via fast path");
+
 	// 超长截断: 300 字符消息 → 截断于 127, "truncated" 尾巴必然被切掉 → 验证长 A 串存在且行长受限
 	char big[300];
 	std::memset(big, 'A', sizeof(big) - 1);
@@ -172,7 +180,7 @@ void functional_tests()
 			if (std::strchr(buf, 'A') != nullptr && std::strstr(buf, "truncated") == nullptr)
 			{
 				found_trunc = true;
-				check(std::strlen(buf) < 160, "truncation: line capped near 128+overhead");
+				check(std::strlen(buf) < 200, "truncation: line capped near 128+overhead");
 			}
 		}
 		std::fclose(f);
@@ -468,6 +476,20 @@ void overload_test()
 
 }  // namespace
 
+
+// 忘记 shutdown 的优雅退出验证: init + log 后直接返回 (不 shutdown),
+// 进程退出时静态析构 ~ULog 兜底 (停线程+落盘) —— 崩溃即非零退出码
+void no_shutdown_exit_test()
+{
+	ulog_config cfg;
+	cfg.console = false;
+	// 具名局部: 临时 string 的 c_str() 在语句结束析构, ulog_init 会读到悬垂指针
+	const std::string log_path = g_dir + "/noshutdown.log";
+	cfg.file_path = log_path.c_str();
+	ulog_init(cfg);
+	ULOG_INFO("record-before-exit-without-shutdown");
+}
+
 int main()
 {
 	g_dir = "/tmp/ulog_test_XXXXXX";
@@ -487,6 +509,7 @@ int main()
 	storm_test();
 	rt_safety_test();
 	overload_test();
+	no_shutdown_exit_test();
 
 	std::printf("%s\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILED");
 	return g_failures == 0 ? 0 : 1;

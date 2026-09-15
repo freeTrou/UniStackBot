@@ -1,6 +1,6 @@
 # ulog · 高性能异步日志组件
 
-> 状态:**已实现, 全测试通过** (29 项断言 + 三 sanitizer + 吞吐基准)。定位: `unistackbot_common` 第三个组件, 多工程通用
+> 状态:**已实现, 全测试通过** (31 项断言 + 三 sanitizer + 吞吐基准)。定位: `unistackbot_common` 第三个组件, 多工程通用
 > (纯 C++17 + POSIX, 零 ROS 零第三方依赖, 自包含可整体拷贝复用)。
 > 接口形状继承 LUMOSUMI `FileLogger` (生命周期/宏/运行期调级/flush 确认),
 > 内核升级: string 条目 → 定长 POD, mutex 入队 → 每线程无锁环, 单文件 → 终端+文件双 sink。
@@ -132,7 +132,7 @@ g++ -std=c++17 -O1 -g -pthread -fsanitize=thread -I.. test_ulog.cpp -o test_tsan
 g++ -std=c++17 -O2 -pthread -I.. bench_ulog.cpp -o bench_ulog && ./bench_ulog
 ```
 
-实测 (x86_64): 29 项断言全过 (功能 10 + **级别专项 10** + 轮转 1 + 风暴 4 + RT 2 + 过载 3 减汇总);
+实测 (x86_64): 31 项断言全过 (功能 12 含 RAW 快路径与无 shutdown 优雅退出 + **级别专项 10** + 轮转 1 + 风暴 4 + 过载 3 + 汇总);
 emit WCET max 2-6µs / avg ~170ns; **emit 路径零 malloc**;
 后端饱和点 ≥200 千行/s (bench_ulog 阶梯, 5~200kHz 全档零丢失);
 并发风暴 8×12500 与过载 8×50000 账目守恒 (written + dropped == emitted);

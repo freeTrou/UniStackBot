@@ -7,6 +7,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <mutex>
 #include <string>
@@ -42,8 +43,8 @@ struct ulog_config
 {
 	bool console = true;             // 终端 sink 开关
 	const char * file_path = nullptr;   // 文件 sink 路径; nullptr = 不写文件
-	ulog_level level = ulog_level::info;
-	size_t max_bytes = 10 * 1024 * 1024;   // 单文件上限 (轮转触发)
+	ulog_level level = ulog_level::info; // 默认日志等级 
+	size_t max_bytes = 10 * 1024 * 1024;   // 单文件上限 (轮转触发) 10MB
 	int backups = 5;                     // 轮转保留份数 (log.1 .. log.N)
 };
 
@@ -102,10 +103,27 @@ __attribute__((format(printf, 2, 3))) inline void emit(ulog_level level, const c
 	ring().push(rec);
 }
 
+// 无格式快路径: 纯字面量 memcpy, 连 vsnprintf 都不走 (字面量日志的主流形态)
+inline void emit_raw(ulog_level level, const char * msg) noexcept
+{
+	ULogRecord rec;
+	rec.ts_ns = now_ns();
+	rec.level = static_cast<uint32_t>(level);
+	rec.tid = cached_tid();
+	const size_t len = std::strlen(msg);
+	rec.msg_len = static_cast<uint8_t>(len > sizeof(rec.msg) ? sizeof(rec.msg) : len);
+	for (size_t i = 0; i < rec.msg_len; ++i)
+	{
+		rec.msg[i] = msg[i];
+	}
+	ring().push(rec);
+}
+
 // ---- 后端 (单线程, 承担全部 I/O; 后端可分配可休眠) ----
 
-struct Backend
+class ULog
 {
+public:
 	std::thread thread;
 	std::atomic<bool> running{false};
 	FILE * file = nullptr;
@@ -125,6 +143,25 @@ struct Backend
 	std::atomic<uint64_t> flush_req_gen{0};
 	std::atomic<uint64_t> flush_done_gen{0};
 
+	// 析构兜底 (踩坑记录: 该析构曾在 Backend→LogWriter→ULog 两轮改名中丢失 ——
+	// 使用方漏调 ulog_shutdown 时, 静态析构阶段 joinable 线程析构 → std::terminate)。
+	// 析构 = 停线程+排空+落盘+关闭, 使"忘记 shutdown"从退出崩溃变为优雅收尾
+	~ULog()
+	{
+		running.store(false, std::memory_order_relaxed);
+		if (thread.joinable())
+		{
+			thread.join();   // 后端循环 ~1ms 一拍, join 有界
+		}
+		flush_sinks();
+		if (file != nullptr)
+		{
+			std::fclose(file);
+			file = nullptr;
+		}
+	}
+
+private:
 	void rotate()
 	{
 		std::fclose(file);
@@ -193,6 +230,7 @@ struct Backend
 		}
 	}
 
+	public:
 	void run()
 	{
 		prctl(PR_SET_NAME, "ulog", 0, 0, 0);
@@ -241,10 +279,10 @@ struct Backend
 	}
 };
 
-inline Backend & backend()
+inline ULog & writer()
 {
-	static Backend b;
-	return b;
+	static ULog instance;
+	return instance;
 }
 
 }  // namespace ulog_detail
@@ -255,7 +293,7 @@ inline bool ulog_init(const ulog_config & cfg)
 {
 	static std::mutex init_mutex;
 	std::lock_guard<std::mutex> lk(init_mutex);
-	auto & b = ulog_detail::backend();
+	auto & b = ulog_detail::writer();
 	if (b.running.load(std::memory_order_relaxed))
 	{
 		return true;   // 幂等
@@ -292,7 +330,7 @@ inline bool ulog_init(const ulog_config & cfg)
 inline void ulog_shutdown()
 {
 	ulog_detail::active.store(false, std::memory_order_relaxed);
-	auto & b = ulog_detail::backend();
+	auto & b = ulog_detail::writer();
 	if (!b.running.exchange(false, std::memory_order_relaxed))
 	{
 		return;
@@ -311,7 +349,7 @@ inline void ulog_shutdown()
 // flush 精确语义 (设计 §6): 排空当前环内全部记录并落盘, cv 确认, 超时保护
 inline void ulog_flush()
 {
-	auto & b = ulog_detail::backend();
+	auto & b = ulog_detail::writer();
 	if (!b.running.load(std::memory_order_relaxed))
 	{
 		return;
@@ -330,7 +368,7 @@ inline void ulog_set_level(ulog_level level)
 inline uint64_t ulog_dropped()
 {
 	const uint64_t ev = ulog_detail::ring().evicted();
-	const uint64_t base = ulog_detail::backend().evicted_base;
+	const uint64_t base = ulog_detail::writer().evicted_base;
 	return (ev > base ? ev - base : 0) + ulog_detail::noop_dropped.load(std::memory_order_relaxed);
 }
 
@@ -342,24 +380,25 @@ inline size_t ulog_pending()
 // 已写出行数 (账目观测: written + evicted == 发出)
 inline uint64_t ulog_written()
 {
-	return ulog_detail::backend().written.load(std::memory_order_relaxed);
+	return ulog_detail::writer().written.load(std::memory_order_relaxed);
 }
 
 }  // namespace unistackbot_common
 
 // ---- 调用侧宏: 级别过滤第一句 (级别外零开销), 编译期 printf 格式检查 ----
+// 丢弃计数语义 (裁定): 仅"未激活短路"计数 (未 init/已 shutdown);
+// 级别过滤是有意为之, 不计入丢弃 —— 混计会让 dropped 失去健康指标意义
 
-#define ULOG_DETAIL_LOG(lv, fmt, ...)                                                                       \
+#define ULOG_DETAIL_LOG(lv, ...)                                                                            \
 	do                                                                                                      \
 	{                                                                                                       \
-		if (unistackbot_common::ulog_detail::active.load(std::memory_order_relaxed) &&                      \
-			static_cast<int>(lv) >= unistackbot_common::ulog_detail::min_level.load(std::memory_order_relaxed)) \
-		{                                                                                                   \
-			unistackbot_common::ulog_detail::emit(lv, fmt, ##__VA_ARGS__);                                  \
-		}                                                                                                   \
-		else                                                                                                \
+		if (!unistackbot_common::ulog_detail::active.load(std::memory_order_relaxed))                       \
 		{                                                                                                   \
 			unistackbot_common::ulog_detail::noop_dropped.fetch_add(1, std::memory_order_relaxed);          \
+		}                                                                                                   \
+		else if (static_cast<int>(lv) >= unistackbot_common::ulog_detail::min_level.load(std::memory_order_relaxed)) \
+		{                                                                                                   \
+			unistackbot_common::ulog_detail::emit(lv, ##__VA_ARGS__);                                       \
 		}                                                                                                   \
 	} while (0)
 
@@ -367,5 +406,8 @@ inline uint64_t ulog_written()
 #define ULOG_INFO(...) ULOG_DETAIL_LOG(unistackbot_common::ulog_level::info, __VA_ARGS__)
 #define ULOG_WARN(...) ULOG_DETAIL_LOG(unistackbot_common::ulog_level::warn, __VA_ARGS__)
 #define ULOG_ERROR(...) ULOG_DETAIL_LOG(unistackbot_common::ulog_level::error, __VA_ARGS__)
+
+// 无格式快路径: 字面量纯 memcpy, 连 vsnprintf 都不走
+#define ULOG_INFO_RAW(msg) unistackbot_common::ulog_detail::emit_raw(unistackbot_common::ulog_level::info, msg)
 
 #endif  // UNISTACKBOT_COMMON__ULOG_HPP_

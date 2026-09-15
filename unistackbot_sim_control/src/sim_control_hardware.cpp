@@ -79,7 +79,8 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 
 	// ulog 接入: 终端 sink (launch 捕获 stdout); 可选文件 sink 经 <param name="ulog_file">
 	unistackbot_common::ulog_config ulog_cfg;
-	ulog_cfg.console = true;
+	ulog_cfg.console = true; // 终端 sink 开关
+	ulog_cfg.level = unistackbot_common::ulog_level::info; // 默认日志等级
 	if (info_.hardware_parameters.count("ulog_file"))
 	{
 		ulog_cfg.file_path = info_.hardware_parameters.at("ulog_file").c_str();
@@ -333,6 +334,8 @@ hardware_interface::CallbackReturn SimControlHardware::on_cleanup(const rclcpp_l
 hardware_interface::CallbackReturn SimControlHardware::on_shutdown(const rclcpp_lifecycle::State &)
 {
 	stopServices();
+	// ulog 对接: on_init 时开启的日志系统在此关停 (排空+落盘+关文件)
+	unistackbot_common::ulog_shutdown();
 	ULOG_INFO("/sim_control services stopped (shutdown)");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
