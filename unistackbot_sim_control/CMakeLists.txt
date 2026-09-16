@@ -14,9 +14,14 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
 )
 
 find_package(ament_cmake REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
 	find_package(${Dependency} REQUIRED)
 endforeach()
+rosidl_generate_interfaces(${PROJECT_NAME}
+	"srv/SetJointState.srv"
+)
+
 add_library(sim_control_hardware SHARED
 	src/sim_control_hardware.cpp
 	src/backend_kinematic.cpp
@@ -33,6 +38,10 @@ ament_target_dependencies(sim_control_hardware
 	${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
+
+# 同包 srv 类型支持 (intra-package 规范写法)
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
+target_link_libraries(sim_control_hardware "${cpp_typesupport_target}")
 
 pluginlib_export_plugin_description_file(hardware_interface hardware_plugin.xml)
 

@@ -13,10 +13,12 @@ find_package(rosidl_default_generators REQUIRED)
 #   action/ (预留)
 # 纯 C++ 共享头 (非 rosidl) 放 include/unistackbot_interface/, 由消费方加 include 路径直引
 set(INTERFACE_FILES
-	srv/SetJointState.srv
+	# msg/ 待第一批跨进程类型 (RL ingress / state 出口) 出现
 )
-rosidl_generate_interfaces(${PROJECT_NAME} ${INTERFACE_FILES})
-ament_export_dependencies(rosidl_default_runtime)
+if(INTERFACE_FILES)
+	rosidl_generate_interfaces(${PROJECT_NAME} ${INTERFACE_FILES})
+	ament_export_dependencies(rosidl_default_runtime)
+endif()
 
 install(DIRECTORY include/
 	DESTINATION include

@@ -19,7 +19,7 @@
 
 #include "unistackbot_sim_control/sim_backend.hpp"
 #include "unistackbot_sim_control/sim_command_queue.hpp"
-#include "unistackbot_interface/sim_control_contract.hpp"
+#include "unistackbot_sim_control/sim_control_contract.hpp"
 
 namespace unistackbot_sim_control
 {

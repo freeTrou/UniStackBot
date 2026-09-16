@@ -24,12 +24,12 @@
 
 #include "ros_gz_interfaces/srv/control_world.hpp"
 #include "ulog/ulog.hpp"
-#include "unistackbot_interface/sim_control_contract.hpp"
+#include "unistackbot_sim_control/sim_control_contract.hpp"
 
 using ControlWorld = ros_gz_interfaces::srv::ControlWorld;
-using unistackbot_interface::SimCmdType;
-using unistackbot_interface::SimCommand;
-using unistackbot_interface::SimControlServer;
+using unistackbot_sim_control::SimCmdType;
+using unistackbot_sim_control::SimCommand;
+using unistackbot_sim_control::SimControlServer;
 
 int main(int argc, char ** argv)
 {

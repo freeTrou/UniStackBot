@@ -1,5 +1,5 @@
-#ifndef UNISTACKBOT_INTERFACE__SIM_CONTROL_CONTRACT_HPP_
-#define UNISTACKBOT_INTERFACE__SIM_CONTROL_CONTRACT_HPP_
+#ifndef UNISTACKBOT_SIM_CONTROL__SIM_CONTROL_CONTRACT_HPP_
+#define UNISTACKBOT_SIM_CONTROL__SIM_CONTROL_CONTRACT_HPP_
 
 #include <array>
 #include <cstddef>
@@ -12,20 +12,23 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
-#include "unistackbot_interface/srv/set_joint_state.hpp"
+#include "unistackbot_interface/joint_capacity.hpp"
+#include "unistackbot_sim_control/srv/set_joint_state.hpp"
 
-namespace unistackbot_interface
+namespace unistackbot_sim_control
 {
 
+// 容量常量住在 unistackbot_interface (与反馈/指令帧共用); 本命名空间内直接使用
+using unistackbot_interface::kMaxJoints;
+
 /*
- * /sim_control 统一仿真控制契约 (跨链单一事实源)。
- * 实现方: unistackbot_sim_control 插件 (mock 链, 命令入队交 RT 循环)、
- *         unistackbot_gazebo 的 sim_control_gz_node (gz 链, 翻译成 ign 世界服务)。
- * 两者只依赖本头与 srv 类型, 互不依赖。
+ * /sim_control 统一仿真控制契约 —— 归属统一仿真控制层本包 (2026-09-17 回迁:
+ * gz 适配器纯 ROS 化后 ign 依赖消失, 契约与两个后端同包; interface 只留机器人级契约)。
+ * 实现方: 本包插件 (mock 链, 命令入队交 RT 循环)、本包 sim_control_gz_node
+ *         (gz 链, 经桥接的 ControlWorld 服务下发)。
  */
 
-// 命令帧容量上限: 命令帧/状态帧共用 (实现方的队列与状态数组都引用此唯一定义)
-inline constexpr uint32_t kMaxJoints = 64;
+// 命令帧容量上限 kMaxJoints 已上收至 joint_capacity.hpp (反馈帧/指令帧共用同一常量)
 
 enum class SimCmdType : uint8_t
 {
@@ -132,5 +135,5 @@ private:
 	std::vector<rclcpp::ServiceBase::SharedPtr> services_;   // 服务句柄 (成员保活, 析构即下线)
 };
 
-}  // namespace unistackbot_interface
-#endif  // UNISTACKBOT_INTERFACE__SIM_CONTROL_CONTRACT_HPP_
+}  // namespace unistackbot_sim_control
+#endif  // UNISTACKBOT_SIM_CONTROL__SIM_CONTROL_CONTRACT_HPP_

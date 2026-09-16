@@ -3,17 +3,17 @@
 <package format="3">
   <name>unistackbot_gazebo</name>
   <version>0.1.0</version>
-  <description>Gazebo 集成层: world + Fortress 链 launch + /sim_control gz 适配器(纯 ROS)。</description>
+  <description>Gazebo 集成层: world + Fortress 链 launch, 纯集成胶水零 C++; gz 适配器(sim_control_gz_node)由本包 launch 拉起、实现在 unistackbot_sim_control。</description>
   <maintainer email="todo@todo.todo">UniStackBot</maintainer>
   <license>TODO: Declaration of license</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- gz 后端适配器 (本包编译): /sim_control 契约 + 类型包 -->
   <depend>rclcpp</depend>
   <depend>std_srvs</depend>
-  <!-- /sim_control 契约 (srv + SimCommand + SimControlServer) 所在包 -->
   <depend>unistackbot_interface</depend>
-  <!-- 世界控制服务类型 (适配器经 ros_gz_bridge 桥接的 ControlWorld, 纯 ROS 无 ign 编译依赖) -->
+  <depend>unistackbot_sim_control</depend>
   <depend>ros_gz_interfaces</depend>
 
   <exec_depend>ros_gz_sim</exec_depend>

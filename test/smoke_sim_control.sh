@@ -19,7 +19,7 @@ set -u
 [ -f "$HOME/cyclonedds.xml" ] && export CYCLONEDDS_URI="file://$HOME/cyclonedds.xml"
 
 SVC="ros2 service call"
-SETSTATE_SRV="unistackbot_interface/srv/SetJointState"
+SETSTATE_SRV="unistackbot_sim_control/srv/SetJointState"
 LOG=/tmp/smoke_sim_control.log
 PASS=0
 FAIL=0

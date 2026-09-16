@@ -114,9 +114,8 @@ def _launch_setup(context):
         output='screen',
     )
 
-    # 统一仿真控制层 gz 后端适配器: /sim_control/pause|resume|step -> ign 世界服务
-    # 注意: world 参数须与 empty_ign.world 里的 <world name> 一致 —— 它是共享 world
-    # 文件的名字, 与机型无关, 换机型不改这里
+    # 统一仿真控制层的 gz 后端适配器 (/sim_control 契约的 gz 实现, 编译在本包;
+    # 契约住 sim_control 包). world 参数与 empty_ign.world 的 <world name> 及桥接服务名一致
     sim_control_gz = Node(
         package='unistackbot_gazebo',
         executable='sim_control_gz_node',
