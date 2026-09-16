@@ -109,6 +109,13 @@ bool UrdfFk::init(
 		return false;
 	}
 
+	// 链长上界: 相邻段原点距离累加 (IK 几何预检用, 保守粗上界非精确工作空间)
+	max_reach_ = 0.0;
+	for (unsigned int i = 0; i < chain_.getNrOfSegments(); ++i)
+	{
+		max_reach_ += chain_.getSegment(i).getFrameToTip().p.Norm();
+	}
+
 	fk_solver_ = std::make_unique<KDL::ChainFkSolverPos_recursive>(chain_);
 	jac_solver_ = std::make_unique<KDL::ChainJntToJacSolver>(chain_);
 

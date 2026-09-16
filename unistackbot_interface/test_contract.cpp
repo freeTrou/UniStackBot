@@ -66,7 +66,7 @@ int main()
 
 	// ---- IK 结果: 码值互异 + 每码有非空信息 ----
 	CHECK(IkResult::OK != IkResult::UNREACHABLE);
-	for (uint8_t v = 0; v <= 4; ++v)
+	for (uint8_t v = 0; v <= 6; ++v)
 	{
 		CHECK(ik_result_message(static_cast<IkResult>(v)) != nullptr);
 	}

@@ -18,6 +18,8 @@ enum class IkResult : uint8_t
 	NEAR_SINGULAR = 2,    // 目标邻近奇异, 解不连续或关节速度超限
 	ITERATION_LIMIT = 3,  // 迭代上限内未收敛 (种子过远或无解)
 	LIMIT_CONFLICT = 4,   // 目标与关节限位冲突 (含冗余锁定值越限)
+	NOT_READY = 5,        // 求解器未就绪或调用维度不符 (契约违例)
+	UNSUPPORTED = 6,      // 请求的冗余偏好本求解器不支持 (如偏置构型的 ARM_ANGLE)
 };
 
 // 每码对应的标准信息 (单一事实源, 日志侧调用)
@@ -44,6 +46,14 @@ enum class IkResult : uint8_t
 		case IkResult::LIMIT_CONFLICT:
 		{
 			return "目标与关节限位冲突 (含冗余锁定值越限)";
+		}
+		case IkResult::NOT_READY:
+		{
+			return "求解器未就绪或调用维度不符";
+		}
+		case IkResult::UNSUPPORTED:
+		{
+			return "请求的冗余偏好本求解器不支持";
 		}
 	}
 	return "未知 IkResult";

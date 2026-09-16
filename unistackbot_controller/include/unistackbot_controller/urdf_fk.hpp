@@ -48,6 +48,10 @@ public:
 
 	// 链上活动关节数 (init 成功后有效)
 	[[nodiscard]] unsigned int jointCount() const {return static_cast<unsigned int>(q_min_.size());}
+	// init 是否成功过 (装配态查询; 供下游求解器做前置检查)
+	[[nodiscard]] bool ready() const {return ready_;}
+	// 粗可达半径上界 [m]: 链上相邻段原点距离之和 (几何预检用, 非精确工作空间)
+	[[nodiscard]] double maxReach() const {return max_reach_;}
 
 	// FK: 关节角 (长度 = jointCount) -> 末端位姿。init 未成功返回 false。
 	[[nodiscard]] bool fk(const std::vector<double> & q, CartesianPose & out) const;
@@ -68,6 +72,7 @@ private:
 	std::vector<double> q_min_, q_max_;   // 链序限位 (init 时自 URDF 提取)
 	std::vector<std::string> joint_names_;   // 链序关节名
 	bool ready_{false};
+	double max_reach_{0.0};   // 链长上界 (init 时累计)
 };
 
 }  // namespace unistackbot_controller

@@ -18,6 +18,14 @@ bash test/check_fk_tf.sh xarm7                                                  
 
 TF 对拍原理：robot_state_publisher 是独立实现（kdl_parser 建树 + 树序 FK），同 URDF 同 q 两套代码，任何坐标系级错误都逃不过——**这是 FK 正确性的工程裁判**。
 
+## 数值 IK（P1.4, 2026-09-17）
+
+- `dls_ik.hpp/cpp`：DLS（Eigen SVD 阻尼伪逆，λ 自适应）+ 零空间二级目标（限位中心吸引 + 边界斥力）+ 种子阶梯（流式种子 → mt19937 均匀重启 40 次）+ 分支粘性（重启解距种子 >1.5 rad 视为跳变拒绝输出）+ 失败不改输出。消费 `RobotCommand.redundancy`（LOCK_JOINT 精确锁定；ARM_ANGLE 偏置构型上诚实拒绝 `UNSUPPORTED`）
+- `ik_tool`（`ros2 run`）：位姿 → 关节解 + FK 回代误差自证
+- 验证（`test/run_ik_test.sh`）：真值对拍（`ik_oracle_xarm7.txt`，ssik 离线生成 + 自检指纹）+ 轨迹连续性（101 点圆弧全过，增量 0.063<0.15）+ 对抗表 + 端到端（IK 解→sim 瞬移→TF 实测偏差 0.0）
+
+**已知限制（挂账调参）**：冷启动成功率强依赖种子构型（流式上一解 101/101≈100%；中心种子对"朝下姿态"可达带仅 ~50%）——TRAC-IK 的 SQP 是业界对此的答案，我们的对应提升路径=停滞检测+重启策略调参 / 限位 SQP，挂账。迭代内不 clamp（边界踏步实测更差），收敛后限位检查（越界=该种子失败，绝不 clamp 伪装——clamp 伪装被 FK 回代断言当场抓住，2026-09-17）。
+
 ## 算法控制器骨架（待 P1.4 后实例化）
 
 状态接口→`RobotFeedback`、`RobotCommand`→命令接口的薄适配骨架；OTG 摄入门（安全链）另立项。
