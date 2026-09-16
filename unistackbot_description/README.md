@@ -9,7 +9,7 @@ arms/<robot>/urdf/     模型文件
 arms/<robot>/meshes/   visual/ + collision/ 两套网格
 ```
 
-mesh 路径一律用 `package://unistackbot_description/...` 前缀，保证 `--symlink-install` 后可解析。**新机器人照 Piper 的模式抄。**
+mesh 路径一律用 `package://unistackbot_description/...` 前缀，保证 `--symlink-install` 后可解析。**新机器人照 Piper 的模式抄**；外部参考机型的 vendor 模式见 `arms/xarm7/`（上游来源/改动/许可记录在其 README）。
 
 ## Piper（参考模型）
 
@@ -33,4 +33,5 @@ ros2 launch unistackbot_description display.launch.py
 
 - `use_gazebo` 是三态：`false` → SimControlHardware；`true`/`classic` → Gazebo Classic；`ign` → Gazebo Sim (Fortress)。
 - `gripper_link` 虽近乎空载也必须保留 `<inertial>` —— Gazebo 会丢弃无惯量 link，连带删掉 JTC 依赖的 `gripper` 关节。
-- 关节 / 接口改动时，同步 `piper_ros2_control.xacro`（限位、`max_velocity`、mimic 参数）与 bringup 的 `piper_controllers.yaml`，三处是同一契约。
+- 关节 / 接口改动时，同步 `<robot>_ros2_control.xacro`（限位、`max_velocity`、mimic 参数）与 bringup 的 `<robot>_controllers.yaml`，三处是同一契约。
+- 现有机型：`piper`（6 关节+夹爪，参考模型）、`xarm7`（7 关节，构型判定与 IK 裁决见 `arms/xarm7/ik_decision_card.md`）。

@@ -13,17 +13,17 @@ find_package(rosidl_default_generators REQUIRED)
 #   action/ (预留)
 # 纯 C++ 共享头 (非 rosidl) 放 include/unistackbot_interface/, 由消费方加 include 路径直引
 set(INTERFACE_FILES
-	# msg/RobotStateSnapshot.msg
-	# msg/JointCmd.msg
-	# srv/...
+	srv/SetJointState.srv
 )
-if(INTERFACE_FILES)
-	rosidl_generate_interfaces(${PROJECT_NAME} ${INTERFACE_FILES})
-endif()
+rosidl_generate_interfaces(${PROJECT_NAME} ${INTERFACE_FILES})
+ament_export_dependencies(rosidl_default_runtime)
 
 install(DIRECTORY include/
 	DESTINATION include
 )
+# 契约头对消费方可见 (rosidl 生成头由 rosidl 管道导出, 纯 C++ 头需显式导出)
+ament_export_include_directories(include)
+ament_export_dependencies(rclcpp std_srvs)
 
 if(BUILD_TESTING)
 	find_package(ament_lint_auto REQUIRED)

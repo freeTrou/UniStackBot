@@ -9,6 +9,16 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <depend>rclcpp</depend>
+  <depend>std_srvs</depend>
+  <!-- /sim_control 契约 (srv + SimCommand + SimControlServer) 所在包 -->
+  <depend>unistackbot_interface</depend>
+  <!-- ign 依赖为可选编译 (CMake QUIET 探测), 声明供 rosdep/发布用 -->
+  <build_depend>ignition-transport11</build_depend>
+  <build_depend>ignition-msgs8</build_depend>
+  <exec_depend>ignition-transport11</exec_depend>
+  <exec_depend>ignition-msgs8</exec_depend>
+
   <exec_depend>gazebo_ros</exec_depend>
   <exec_depend>gazebo_ros2_control</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>

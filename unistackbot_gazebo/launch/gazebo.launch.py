@@ -23,14 +23,20 @@ from launch_ros.substitutions import FindPackageShare
 
 def _launch_setup(context):
     gui = LaunchConfiguration('gui').perform(context) == 'true'
+    robot = LaunchConfiguration('robot').perform(context)
 
-    xacro_path = PathJoinSubstitution([
-        FindPackageShare('unistackbot_description'),
-        'arms', 'piper', 'urdf', 'piper.urdf.xacro',
-    ])
+    desc_share = get_package_share_directory('unistackbot_description')
+    xacro_path = os.path.join(desc_share, 'arms', robot, 'urdf', f'{robot}.urdf.xacro')
+
+    # 显式错误流: 机型不存在时报错并列出可用项
+    arms_root = os.path.join(desc_share, 'arms')
+    if not os.path.isfile(xacro_path):
+        available = sorted(d for d in os.listdir(arms_root)
+                           if os.path.isfile(os.path.join(arms_root, d, 'urdf', f'{d}.urdf.xacro')))
+        raise RuntimeError(f'未知机型 {robot!r}: 找不到 {xacro_path}. 可用机型: {available}')
+
     robot_description_content = Command([
         FindExecutable(name='xacro'), ' ', xacro_path,
-        ' use_gripper:=true',
         ' use_ros2_control:=true',
         # world 链接把基座固定在世界原点: 否则基座自由浮动, 机械臂会在重力下瘫倒
         ' use_world:=true',
@@ -47,7 +53,7 @@ def _launch_setup(context):
     # spawn_entity 用 -file 直接读 URDF, 不走 /robot_description 话题:
     # TRANSIENT_LOCAL 迟到补发在 iceoryx 共享内存等 DDS 配置下不可靠,
     # 走话题会让 spawn_entity 永远等不到模型描述。
-    urdf_path = os.path.join(tempfile.gettempdir(), 'unistackbot_piper_gazebo.urdf')
+    urdf_path = os.path.join(tempfile.gettempdir(), f'unistackbot_{robot}_gazebo.urdf')
     with open(urdf_path, 'w') as f:
         f.write(robot_description_content)
 
@@ -81,7 +87,7 @@ def _launch_setup(context):
         executable='spawn_entity.py',
         arguments=[
             '-file', urdf_path,
-            '-entity', 'piper',
+            '-entity', robot,
             '-x', '0', '-y', '0', '-z', '0',
         ],
         output='screen',
@@ -116,6 +122,8 @@ def generate_launch_description():
         # 跳过 models.gazebosim.org 在线模型库访问, 避免离线环境下启动阻塞
         SetEnvironmentVariable('GAZEBO_MODEL_DATABASE_URI', ''),
         # DDS 跟随机器默认配置 (~/cyclonedds.xml), launch 不再覆盖
+        DeclareLaunchArgument('robot',
+                              description='机型名(必填), 对应 unistackbot_description/arms/<robot>/'),
         DeclareLaunchArgument('gui', default_value='true',
                               description='是否启动 Gazebo GUI 客户端'),
         OpaqueFunction(function=_launch_setup),

@@ -40,16 +40,16 @@ ros2 launch unistackbot_description display.launch.py
 #    args: model:=<xacro> use_gripper use_ros2_control use_world gui rviz
 
 # 2. Mock control chain: standalone controller_manager + SimControlHardware (kinematic backend), no simulator
-ros2 launch unistackbot_bringup piper_control.launch.py     # use_rviz:=true|false
+ros2 launch unistackbot_bringup control.launch.py robot:=piper   # robot:=xarm7 等; use_rviz:=true|false
 
 # 3. Gazebo Sim / Fortress (current chain): controller manager inside gz_ros2_control
-ros2 launch unistackbot_gazebo piper_ign.launch.py          # gui:=true|false
+ros2 launch unistackbot_gazebo ign.launch.py robot:=piper        # gui:=true|false, use_rviz:=true 可选
 
 # 4. Gazebo Classic (EOL, kept for reference): controller manager inside gazebo_ros2_control
-ros2 launch unistackbot_gazebo gazebo.launch.py             # gui:=true|false
+ros2 launch unistackbot_gazebo gazebo.launch.py robot:=piper     # gui:=true|false
 ```
 
-Command the arm via the JTC action (`/joint_trajectory_controller/follow_joint_trajectory`) over joints `joint1`–`joint6` + `gripper`. Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo, both green = pass.
+All control/sim launches take a **required** `robot:=<机型>` argument (resolves `unistackbot_description/arms/<robot>/` + `unistackbot_bringup/config/<robot>_controllers.yaml`; unknown robots fail fast with the available list). Current robots: `piper` (6-DoF arm + gripper), `xarm7` (7-DoF arm, vendor: UFACTORY — see `arms/xarm7/README.md` + `arms/xarm7/ik_decision_card.md`). Command the arm via the JTC action (`/joint_trajectory_controller/follow_joint_trajectory`, type `control_msgs/action/FollowJointTrajectory`) over all the robot's joints. Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo, both green = pass.
 
 ## Architecture
 
@@ -68,30 +68,31 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 
 ### Package responsibilities
 
-- **unistackbot_bringup** — top-level launch + controller config. `piper_control.launch.py` starts `robot_state_publisher`, a standalone `ros2_control_node`, and spawners for `joint_state_broadcaster` + `joint_trajectory_controller`. `config/piper_controllers.yaml` is the single controller config (update_rate 500 Hz; JTC with position command interface over the 7 joints) and is shared by both the standalone node and Gazebo mode. `scripts/piper_demo_motion.py` (`ros2 run`) sends a canned round-trip trajectory — goals must list ALL 7 joints (JTC rejects subsets unless `allow_partial_joints_goal`).
+- **unistackbot_bringup** — top-level launch + controller config. `control.launch.py robot:=<机型>` starts `robot_state_publisher`, a standalone `ros2_control_node`, and spawners for `joint_state_broadcaster` + `joint_trajectory_controller`; `robot` is required and no robot name is hardcoded anywhere in the launch. Controller config is per-robot: `config/<robot>_controllers.yaml` (update_rate 500 Hz; JTC with position command interface), shared by both the standalone node and Gazebo mode. `scripts/demo_motion.py` (`ros2 run`) sends a round-trip demo trajectory for **any** robot — it reads the joint list from the controller's params, limits/max_velocity from `robot_description`, and generates waypoints as range-percentages (no robot is hardcoded). Goals must list ALL the robot's joints (JTC rejects subsets unless `allow_partial_joints_goal`).
 - **unistackbot_controller** — placeholder only; empty `placeholder.cpp` built as a SHARED library. Scope decision (2026-09-09): this package hosts **only generic infrastructure controllers** (OTG ingest gate for external commands — safety chain member — plus FK from URDF and a plugin template for algorithm controllers). Form-specific algorithms (gait/WBC/ZMP/wheel kinematics) live in algorithm teams' own repos and connect via two first-class paths: external process (ingress+OTG) or CM plugin (framework provides the template). Full boundary analysis: `docs/hardware_framework_design.md` §14.
 - **unistackbot_description** — URDF/Xacro, RViz config, `display.launch.py`.
 - **unistackbot_hardware** — real-driver plugin skeleton (empty `placeholder.cpp`); deps (`hardware_interface`, `pluginlib`) and the `device`/`baudrate`/`loop_rate` params in `piper_ros2_control.xacro` anticipate the real Piper CAN driver.
 - **unistackbot_sim_control** — 统一仿真控制层（ 对 ros2_control 提供统一插件接口，对内按后端分类）:
   - `SimControlHardware` (`SystemInterface`): URDF `<hardware>` 里固定写 `<plugin>unistackbot_sim_control/SimControlHardware</plugin>` + `<param name="backend">kinematic</param>`。接口按 URDF 声明镜像导出（effort 恒 0）；关节动态数量 ≤16，限位/`max_velocity`/mimic 全部来自 `<ros2_control>` 的 `<param>`。
   - 后端 `kinematic`（`BackendKinematic`）: 理想执行器 —— 限位 clamp + 每关节 `max_velocity` 饱和的一阶逼近；mimic 关节按 multiplier/offset 从源关节推导。
-  - `/sim_control/*` 服务（reset / set_joint_state / pause / resume / step）: 插件进程内自建（`on_configure` 启动、`on_cleanup` 销毁），命令经 SPSC 无锁队列交给实时循环。`set_joint_state` 用同包 rosidl 生成的 `unistackbot_sim_control/srv/SetJointState`；应答 `success=true` 只代表命令已被接受（入队/ign 请求已发出），不代表执行完成。注意：JTC 激活时其保持命令每周期都会覆盖瞬移，**set_joint_state/reset 需在 pause 下使用**。
+  - `/sim_control/*` 服务（reset / set_joint_state / pause / resume / step）: 插件进程内自建（`on_configure` 启动、`on_cleanup` 销毁），命令经 SPSC 无锁队列交给实时循环。`/sim_control` 契约（`unistackbot_interface/srv/SetJointState` + `sim_control_contract.hpp` 的 SimCommand/SimCmdType/SimControlServer）已上收至 `unistackbot_interface`（2026-09-16），本包经 `sim_command_queue.hpp` 的 using-alias 保持既有引用；应答 `success=true` 只代表命令已被接受（入队/ign 请求已发出），不代表执行完成。注意：JTC 激活时其保持命令每周期都会覆盖瞬移，**set_joint_state/reset 需在 pause 下使用**。
   - 日志走 ulog 宏（`ULOG_INFO`/`ULOG_ERROR`，非 RCLCPP）: `on_init` 里 `ulog_init` —— 终端 sink 恒开（launch 捕获 stdout），URDF `<ros2_control>` 块加 `<param name="ulog_file">` 可选开文件 sink；`on_shutdown` 里 `ulog_shutdown` 排空落盘。
-  - `sim_control_gz_node`（Gazebo 适配器，可选编译）: gz 链路的 ros2_control 插件是 `GazeboSimSystem` 而非 SimControlHardware，`/sim_control/*` 改由此独立节点承载 —— pause/resume/step 翻译成 ign 世界服务 `/world/<world>/control`，`reset`/`set_joint_state` 在 Fortress 无原生等价、直接拒绝（Garden+ 才有）。CMake 用 `QUIET` 探测 `ignition-transport11`/`ignition-msgs8`，找不到就跳过、不影响插件本体；由 `piper_ign.launch.py` 启动，`world` 参数（`piper_world`）须与 `empty_ign.world` 里的 `<world name>` 一致。
-  - 回归测试: 仓库根 `test/smoke_sim_control.sh`（自包含 10 项断言；需先 colcon build + source，脚本自行定位工作区并套用 `~/cyclonedds.xml`）。
-- **unistackbot_interface** — 公共接口定义包（ROS msg/srv/action + 纯 C++ 共享契约头）：跨包/跨仓库共享的类型放在这里（单一事实源，供算法团队外部仓库依赖）。触发场景：master.hpp 的 RobotStateSnapshot/JointCmd、RL ingress 命令 schema、state 出口消息。目前是空骨架：msg/srv/action/include 目录已建、尚无任何类型落地。
+  - gz 链路的 `/sim_control/*` 由 `unistackbot_gazebo` 包里的 `sim_control_gz_node` 承载（2026-09-16 迁出：gz 知识归集成层；契约在 `unistackbot_interface`，本包与 gz 包都只依赖它、互不依赖）——见 unistackbot_gazebo 条目。
+  - 回归测试: 仓库根 `test/verify_robot.sh <robot> [--with-gazebo]`（机型参数化链路验收: 静态 URDF + launch 错误路径 + mock/Fortress 链 JTC 到位，目标位置从 URDF 限位自动推算、不写死任何机型）；`test/smoke_sim_control.sh` 深测 `/sim_control` 服务语义（piper 关节表，断言含 mimic/限位拒绝/reset）。两者都自包含（需先 colcon build + source，脚本自行定位工作区并套用 `~/cyclonedds.xml`）。
+- **unistackbot_interface** — 公共接口定义包（ROS msg/srv/action + 纯 C++ 共享契约头）：跨包/跨仓库共享的类型放在这里（单一事实源，供算法团队外部仓库依赖）。触发场景：master.hpp 的 RobotStateSnapshot/JointCmd、RL ingress 命令 schema、state 出口消息。首批契约已落地（2026-09-16）：`/sim_control` 契约（`srv/SetJointState.srv` + `sim_control_contract.hpp` 的 SimCommand/SimCmdType/SimControlServer/kMaxJoints），消费方为 sim_control 插件（mock 链）与 gazebo 的 gz 适配器——两个实现互不依赖，都只依赖本包。
 - **unistackbot_common** — 组件库，**不是 ROS 包**（无 package.xml/CMakeLists，colcon 自动忽略）：纯代码存放层，保持可在非 ROS 环境（RT 主站线程/单元测试/ARM 交叉编译）中直接复用。现有组件（每个独立子文件夹 = 文档 + 实现 + 测试三件套）：
   - `sp_latest/` — 双缓冲覆盖写/取最新原语（最新 **1** 个，"值通道"，seqlock 宣告式，seq 位宽自适应 64/32 位）；sim_control 的 `threaded` 后端三通道用它
   - `sp_ring/` — SPSC 无锁环形队列（**逐条必达**，"事件通道"，满拒新 push 语义）；sim_control 的 `sim_command_queue.hpp` 经 using-declaration 引用 `SpscRing`，域类型留在 sim_control
   - `mpsc_ring/` — 多写单读覆盖式无锁环（**丢旧保新**：日志缓冲/滑动窗口/音视频环；Vyukov 每槽 seq 2g/2g+1 编码 + 逐出 CAS；六轮外部评审定稿，载荷原子字节存储零 UB，seq_cst 全屏障，TSAN 零竞争）
   - `ulog/` — 高性能异步日志组件（前端宏：级别过滤→snprintf 定长 POD→无锁入队；后端单线程双 sink 终端+文件、error 强刷、100ms 周期 flush、10MB×5 轮转；emit 零 malloc、WCET ~µs；TSAN 白名单一条已知工具误报见 tsan_suppressions.txt）
   - sim_control 的 CMake 以 `$<BUILD_INTERFACE:...>/../unistackbot_common` 直引组件库整个目录（sp_ring 队列 + ulog 日志；monorepo 内，未 install——对外发布前需调整）
-- **unistackbot_gazebo** — Gazebo integration, two chains: `piper_ign.launch.py` (Gazebo Sim/Fortress via `ros_gz_sim` + `empty_ign.world` + `/clock` bridge + `sim_control_gz_node` — the current chain) and `gazebo.launch.py` (Gazebo Classic, EOL, kept for reference). In both, the controller manager lives inside the sim's ros2_control plugin — no standalone `ros2_control_node`. Constraints baked into the launches, each fixes a hard failure observed on dev machines:
+- **unistackbot_gazebo** — Gazebo integration, two chains: `ign.launch.py` (Gazebo Sim/Fortress via `ros_gz_sim` + `empty_ign.world` + `/clock` bridge + `sim_control_gz_node` — the current chain) and `gazebo.launch.py` (Gazebo Classic, EOL, kept for reference). Both take a required `robot:=<机型>`; no robot name is hardcoded. In both, the controller manager lives inside the sim's ros2_control plugin — no standalone `ros2_control_node`. Constraints baked into the launches, each fixes a hard failure observed on dev machines:
   - URDF is re-serialized to a **single line** before use: the plugin forwards it to the CM as a `--param robot_description:=<urdf>` rule and rcl's parser rejects newlines → CM never starts.
   - The sim gets the URDF via a temp file (`-file` for spawn_entity / `create`), not the `/robot_description` topic: TRANSIENT_LOCAL latched re-delivery is unreliable under iceoryx/SHM CycloneDDS configs.
   - DDS comes from the machine-wide `~/cyclonedds.xml` (`CYCLONEDDS_URI` in `.bashrc`): binds `lo` + unicast `Peers 127.0.0.1`. This machine's `lo` lacks the MULTICAST flag, so unicast-only discovery intermittently dropped late joiners (services visible at startup, gone minutes later); the Peers bootstrap fixed it. The launches deliberately do NOT override `CYCLONEDDS_URI`. Run at most ONE launch stack at a time — leftover same-name nodes (robot_state_publisher / controller_manager) poison new runs ('Controller already loaded', stale robot_description).
   - The ign chain prepends the description package's ament share root to `IGN_GAZEBO_RESOURCE_PATH`: URDF→SDF conversion rewrites `package://` to `model://`, and Fortress resolves those only via that env var — without it the GUI/server can't find meshes (Classic's gazebo_ros did this automatically).
   - `scripts/gz_clean.sh` (`ros2 run unistackbot_gazebo gz_clean.sh`) kills the whole launch process family — ign servers routinely survive launch shutdown and poison the next run; run it before every launch.
+  - `src/sim_control_gz_node.cpp` — `/sim_control/*` 的 gz 适配器（编译进本包，可选：CMake `QUIET` 探测 `ignition-transport11`/`ignition-msgs8`，找不到就跳过）。gz 链路的 ros2_control 插件是 `GazeboSimSystem` 而非 SimControlHardware，故 `/sim_control/*` 由这个 side-car 独立节点承载：pause/resume/step 翻译成 ign 世界服务 `/world/<world>/control`；`reset`/`set_joint_state` 在 Fortress 无原生等价、直接拒绝（Garden+ 才有）。复用 `unistackbot_interface` 的契约（`sim_control_contract.hpp` + srv 类型；依赖方向：gazebo → interface，**与 sim_control 零依赖**）。由 `ign.launch.py` 启动，`world` 参数（`unistack_world`，共享 world 的名字、与机型无关）须与 `empty_ign.world` 里的 `<world name>` 一致。
 
 ## ros2_control wiring (cross-file contract)
 
@@ -101,7 +102,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 - `use_gazebo:=true`/`classic` → Gazebo Classic `gazebo_ros2_control/GazeboSystem` + `libgazebo_ros2_control.so`
 - `use_gazebo:=ign` → Gazebo Sim (Fortress) `gz_ros2_control/GazeboSimSystem` + `gz_ros2_control-system` — the current sim chain
 
-All `<gazebo>` plugin blocks live in `piper_ros2_control.xacro` and point at `$(find unistackbot_bringup)/config/piper_controllers.yaml` — the *description* package depends on bringup's installed config in both sim modes.
+All `<gazebo>` plugin blocks live in each robot's `<robot>_ros2_control.xacro` and point at `$(find unistackbot_bringup)/config/<robot>_controllers.yaml` — the *description* package depends on bringup's installed config in both sim modes.
 
 Contracts to keep in sync when changing joints or interfaces:
 

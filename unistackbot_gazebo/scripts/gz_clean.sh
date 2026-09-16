@@ -22,6 +22,9 @@ pkill -9 -f "rsp_params.yam[l]" 2>/dev/null
 pkill -9 -f "parameter_bridg[e]" 2>/dev/null
 pkill -9 -f "controller_manager/spawne[r]" 2>/dev/null
 pkill -9 -f "ros_gz_sim/creat[e]" 2>/dev/null
+# sim_control gz 适配器: launch 异常退出时经常残留, 每个残留都占一个 DDS 参与者,
+# 攒多了会让新进程报 "Failed to find a free participant index" (2026-09-16 实测踩中)
+pkill -9 -f "sim_control_gz_nod[e]" 2>/dev/null
 sleep 1
 
 LEFT=$(pgrep -af "ign[-]gazebo|gzserve[r]|ros2_control_nod[e]|robot_state_publishe[r]" | wc -l)

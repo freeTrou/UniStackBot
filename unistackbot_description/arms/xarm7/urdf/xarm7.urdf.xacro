@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="xarm7">
+
+    <xacro:arg name="use_ros2_control" default="false" />
+    <xacro:arg name="use_world" default="true" />
+    <xacro:arg name="use_gazebo" default="false" />
+
+    <!-- 全局属性: 上游 common 宏依赖(mesh 路径前缀/后缀, YAML 加载方式) -->
+    <xacro:property name="mesh_path" value="package://unistackbot_description/arms/xarm7/meshes" />
+    <xacro:property name="mesh_suffix" value="stl" />
+    <xacro:property name="use_xacro_load_yaml" value="true" />
+
+    <xacro:include filename="$(find unistackbot_description)/arms/xarm7/urdf/xarm7_macro.xacro"/>
+    <xacro:include filename="$(find unistackbot_description)/arms/xarm7/urdf/common/common.link.xacro"/>
+    <xacro:include filename="$(find unistackbot_description)/arms/xarm7/urdf/common/common.material.xacro"/>
+    <xacro:include filename="$(find unistackbot_description)/arms/xarm7/urdf/xarm7_ros2_control.xacro"/>
+
+    <xacro:common_material prefix=""/>
+
+    <!-- use_world=true: world 固定基座(RViz); false: link_base 为根(Gazebo spawn) -->
+    <xacro:if value="$(arg use_world)">
+        <link name="world"/>
+        <joint name="xarm7_to_world" type="fixed">
+            <parent link="world"/>
+            <child link="link_base"/>
+        </joint>
+    </xacro:if>
+
+    <xacro:xarm7_urdf prefix=""
+        kinematics_params_filename="$(find unistackbot_description)/arms/xarm7/config/kinematics/default/xarm7_default_kinematics.yaml"/>
+
+    <xacro:if value="$(arg use_ros2_control)">
+        <xacro:xarm7_ros2_control use_gazebo="$(arg use_gazebo)"/>
+    </xacro:if>
+
+</robot>

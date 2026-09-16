@@ -25,4 +25,7 @@
     <build_type>ament_cmake</build_type>
     <pluginlib plugin="hardware_plugin.xml" />
   </export>
+	<!-- /sim_control 契约 (srv + SimCommand + SimControlServer) 所在包 -->
+	<depend>unistackbot_interface</depend>
+
 </package>

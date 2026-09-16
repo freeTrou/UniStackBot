@@ -24,15 +24,22 @@ from launch_ros.substitutions import FindPackageShare
 
 def _launch_setup(context):
     gui = LaunchConfiguration('gui').perform(context) == 'true'
+    use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
+    robot = LaunchConfiguration('robot').perform(context)
 
-    xacro_path = PathJoinSubstitution([
-        FindPackageShare('unistackbot_description'),
-        'arms', 'piper', 'urdf', 'piper.urdf.xacro',
-    ])
+    desc_share = get_package_share_directory('unistackbot_description')
+    xacro_path = os.path.join(desc_share, 'arms', robot, 'urdf', f'{robot}.urdf.xacro')
+
+    # 显式错误流: 机型不存在时报错并列出可用项
+    arms_root = os.path.join(desc_share, 'arms')
+    if not os.path.isfile(xacro_path):
+        available = sorted(d for d in os.listdir(arms_root)
+                           if os.path.isfile(os.path.join(arms_root, d, 'urdf', f'{d}.urdf.xacro')))
+        raise RuntimeError(f'未知机型 {robot!r}: 找不到 {xacro_path}. 可用机型: {available}')
+
     # 渲染 URDF
     robot_description_content = Command([
         FindExecutable(name='xacro'), ' ', xacro_path,
-        ' use_gripper:=true',
         ' use_ros2_control:=true',
         # world 链接把基座固定在世界原点: 否则基座自由浮动, 机械臂会在重力下瘫倒
         ' use_world:=true',
@@ -45,7 +52,7 @@ def _launch_setup(context):
         ET.fromstring(robot_description_content), encoding='unicode')
 
     # create 用 -file 直接读 URDF, 不走 /robot_description 话题
-    urdf_path = os.path.join(tempfile.gettempdir(), 'unistackbot_piper_gz.urdf')
+    urdf_path = os.path.join(tempfile.gettempdir(), f'unistackbot_{robot}_gz.urdf')
     with open(urdf_path, 'w') as f:
         f.write(robot_description_content)
 
@@ -84,25 +91,30 @@ def _launch_setup(context):
         executable='create',
         arguments=[
             '-file', urdf_path,
-            '-name', 'piper',
+            '-name', robot,
             '-x', '0', '-y', '0', '-z', '0',
         ],
         output='screen',
     )
 
-    # /clock 桥接: controller_manager 使用仿真时间
-    clock_bridge = Node(
+    # 桥接: /clock 供 CM 仿真时间; /stats 供 RTF/暂停态监控 (sim 地基可观测性)
+    gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
-        arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
+        arguments=[
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
+            '/stats@ros_gz_interfaces/msg/WorldStatistics[gz.msgs.WorldStatistics',
+        ],
         output='screen',
     )
 
     # 统一仿真控制层 gz 后端适配器: /sim_control/pause|resume|step -> ign 世界服务
+    # 注意: world 参数须与 empty_ign.world 里的 <world name> 一致 —— 它是共享 world
+    # 文件的名字, 与机型无关, 换机型不改这里
     sim_control_gz = Node(
-        package='unistackbot_sim_control',
+        package='unistackbot_gazebo',
         executable='sim_control_gz_node',
-        parameters=[{'world': 'piper_world'}],
+        parameters=[{'world': 'unistack_world'}],
         output='screen',
     )
 
@@ -122,14 +134,28 @@ def _launch_setup(context):
     ]
 
     # 资源路径放首位: 先设环境再拉起后续进程
-    return [
+    nodes = [
         SetEnvironmentVariable('IGN_GAZEBO_RESOURCE_PATH', ign_resource_path),
         robot_state_publisher,
         gz_sim,
-        clock_bridge,
+        gz_bridge,
         sim_control_gz,
         spawn_entity,
     ] + spawners
+
+    # RViz 可选 (与 mock 链 control.launch.py 对齐; use_world:=true 时固定系为 world)
+    if use_rviz:
+        rviz_config = PathJoinSubstitution([
+            FindPackageShare('unistackbot_description'),
+            'config', 'rviz.rviz',
+        ])
+        nodes.append(Node(
+            package='rviz2',
+            executable='rviz2',
+            arguments=['-d', rviz_config],
+            output='screen',
+        ))
+    return nodes
 
 # 入口
 def generate_launch_description():
@@ -137,7 +163,11 @@ def generate_launch_description():
         # DDS 跟随机器默认配置 (~/cyclonedds.xml, 本机统一配置 lo + 单播 peer),
         # launch 不再覆盖; 见 CLAUDE.md 的 DDS 说明
         # 声明必须在 OpaqueFunction 之前: _launch_setup 会 perform 这些配置
+        DeclareLaunchArgument('robot',
+                              description='机型名(必填), 对应 unistackbot_description/arms/<robot>/'),
         DeclareLaunchArgument('gui', default_value='true',
                               description='是否启动 Gazebo GUI 客户端'),
+        DeclareLaunchArgument('use_rviz', default_value='false',
+                              description='是否启动 RViz2 (gui:=false 无头模式下也可用)'),
         OpaqueFunction(function=_launch_setup), # 启动py函数 
     ])

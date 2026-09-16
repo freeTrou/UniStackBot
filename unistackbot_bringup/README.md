@@ -6,10 +6,11 @@
 
 ```bash
 # mock 控制链路（无仿真器）：standalone controller_manager + SimControlHardware
-ros2 launch unistackbot_bringup piper_control.launch.py        # use_rviz:=true|false
+# robot 为必填机型名，对应 description/arms/<robot>/ + 本包 config/<robot>_controllers.yaml
+ros2 launch unistackbot_bringup control.launch.py robot:=piper   # robot:=xarm7 等; use_rviz:=true|false
 
-# 发一段演示往返轨迹（JTC action）
-ros2 run unistackbot_bringup piper_demo_motion.py
+# 发一段演示往返轨迹（JTC action, 当前仅 piper 关节表）
+ros2 run unistackbot_bringup demo_motion.py
 ```
 
 Gazebo 环境不用本包的 launch，改用 `unistackbot_gazebo` 的入口（见其 README）。
@@ -18,9 +19,9 @@ Gazebo 环境不用本包的 launch，改用 `unistackbot_gazebo` 的入口（�
 
 | 文件 | 说明 |
 |---|---|
-| `launch/piper_control.launch.py` | mock 链路入口：robot_state_publisher + ros2_control_node + 两个 spawner |
-| `config/piper_controllers.yaml` | **全工程唯一**控制器配置（500 Hz；JTC position 接口，7 关节），mock 与 Gazebo 共用 |
-| `scripts/piper_demo_motion.py` | 演示轨迹脚本（`ros2 run`） |
+| `launch/control.launch.py` | mock 链路入口：robot_state_publisher + ros2_control_node + 两个 spawner；`robot:=<机型>` **必填**，未知机型显式报错并列出可用项 |
+| `config/<robot>_controllers.yaml` | 按机型一份控制器配置（500 Hz；JTC position 接口），mock 与 Gazebo 共用（现有 `piper_controllers.yaml` / `xarm7_controllers.yaml`） |
+| `scripts/demo_motion.py` | 机型无关演示轨迹脚本：关节表读自控制器参数，限位读自 URDF，按区间百分比生成路径点 |
 
 ## 注意事项
 

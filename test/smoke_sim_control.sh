@@ -19,7 +19,7 @@ set -u
 [ -f "$HOME/cyclonedds.xml" ] && export CYCLONEDDS_URI="file://$HOME/cyclonedds.xml"
 
 SVC="ros2 service call"
-SETSTATE_SRV="unistackbot_sim_control/srv/SetJointState"
+SETSTATE_SRV="unistackbot_interface/srv/SetJointState"
 LOG=/tmp/smoke_sim_control.log
 PASS=0
 FAIL=0
@@ -46,7 +46,7 @@ say "清理残留进程"
 ros2 run unistackbot_gazebo gz_clean.sh >/dev/null 2>&1
 
 say "启动 mock 链路"
-ros2 launch unistackbot_bringup piper_control.launch.py > "$LOG" 2>&1 &
+ros2 launch unistackbot_bringup control.launch.py robot:=piper > "$LOG" 2>&1 &
 LAUNCH_PID=$!
 
 # 等控制器激活 (最多 40s)
@@ -99,7 +99,7 @@ P=$(joint_pos joint1); python3 -c "exit(0 if abs($P)<1e-6 else 1)" \
 
 # ---- 演示轨迹回归 ----
 say "演示轨迹回归 (约 12s)"
-DEMO=$(timeout 30 ros2 run unistackbot_bringup piper_demo_motion.py 2>&1)
+DEMO=$(timeout 30 ros2 run unistackbot_bringup demo_motion.py 2>&1)
 echo "$DEMO" | grep -q "状态码 4" && ok "演示轨迹执行成功" || bad "演示轨迹失败: $DEMO"
 
 # ---- 收尾 ----

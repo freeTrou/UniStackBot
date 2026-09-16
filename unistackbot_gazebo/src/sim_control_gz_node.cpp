@@ -5,7 +5,7 @@
  *   pause / resume / step  -> /world/<world>/control (WorldControl)  [支持]
  *   reset / set_joint_state -> Fortress 无原生等价                    [拒绝并说明]
  *
- * 参数: world (string, 默认 piper_world)
+ * 参数: world (string, 默认 unistack_world)
  */
 
 #include <functional>
@@ -19,20 +19,18 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
-#include "unistackbot_sim_control/sim_control_server.hpp"
 #include "ulog/ulog.hpp"
-#include "unistackbot_sim_control/srv/set_joint_state.hpp"
+#include "unistackbot_interface/sim_control_contract.hpp"
 
-using unistackbot_sim_control::SimCmdType;
-using unistackbot_sim_control::SimCommand;
-using unistackbot_sim_control::SimControlServer;
+using unistackbot_interface::SimCmdType;
+using unistackbot_interface::SimCommand;
+using unistackbot_interface::SimControlServer;
 
 int main(int argc, char ** argv)
 {
 	rclcpp::init(argc, argv);
 	auto node = rclcpp::Node::make_shared("sim_control_gz");
-	const std::string world =
-		node->declare_parameter<std::string>("world", "piper_world");
+	const std::string world = node->declare_parameter<std::string>("world", "unistack_world");
 	const std::string control_srv = "/world/" + world + "/control";
 
 	ignition::transport::Node gz_node;

@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version="1.9">
-  <world name="piper_world">
+  <world name="unistack_world">
 
     <physics name="1ms" type="ignored">
       <max_step_size>0.001</max_step_size>
