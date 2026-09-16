@@ -10,15 +10,8 @@ find_package(rclcpp REQUIRED)
 find_package(std_srvs REQUIRED)
 # /sim_control 契约 (srv + SimCommand + SimControlServer, header-only)
 find_package(unistackbot_interface REQUIRED)
-
-# Gazebo (Fortress) 适配器为可选组件: 找不到 ign 依赖时跳过 (不影响 world/launch 的安装)
-find_package(ignition-transport11 QUIET)
-find_package(ignition-msgs8 QUIET)
-if(ignition-transport11_FOUND AND ignition-msgs8_FOUND)
-	message(STATUS "sim_control gz 适配器: 启用")
-else()
-	message(STATUS "sim_control gz 适配器: 未找到 ign 依赖, 跳过")
-endif()
+# 世界控制服务类型: pause/resume/step 经 ros_gz_bridge 桥接的 ControlWorld
+find_package(ros_gz_interfaces REQUIRED)
 
 install(DIRECTORY launch worlds
   DESTINATION share/${PROJECT_NAME}
@@ -28,27 +21,24 @@ install(PROGRAMS scripts/gz_clean.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
-if(ignition-transport11_FOUND AND ignition-msgs8_FOUND)
-	add_executable(sim_control_gz_node src/sim_control_gz_node.cpp)
-	target_compile_features(sim_control_gz_node PUBLIC cxx_std_17)
-	target_include_directories(sim_control_gz_node PRIVATE
-		# ulog 公共组件头 + /sim_control 契约头 (monorepo 内直引, 与 sim_control 同型)
-		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
-		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
-	)
-	ament_target_dependencies(sim_control_gz_node
-		rclcpp
-		std_srvs
-		unistackbot_interface
-	)
-	target_link_libraries(sim_control_gz_node
-		ignition-transport11::ignition-transport11
-		ignition-msgs8::ignition-msgs8
-	)
-	install(TARGETS sim_control_gz_node
-		DESTINATION lib/${PROJECT_NAME}
-	)
-endif()
+# 纯 ROS 构建: 无 ign 编译依赖 (2026-09-16 重写, 世界控制走 launch 里
+# parameter_bridge 桥接的 /world/<world>/control ROS 服务)
+add_executable(sim_control_gz_node src/sim_control_gz_node.cpp)
+target_compile_features(sim_control_gz_node PUBLIC cxx_std_17)
+target_include_directories(sim_control_gz_node PRIVATE
+	# ulog 公共组件头 + /sim_control 契约头 (monorepo 内直引, 与 sim_control 同型)
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
+)
+ament_target_dependencies(sim_control_gz_node
+	rclcpp
+	std_srvs
+	unistackbot_interface
+	ros_gz_interfaces
+)
+install(TARGETS sim_control_gz_node
+	DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

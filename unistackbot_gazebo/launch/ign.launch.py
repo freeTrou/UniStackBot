@@ -97,13 +97,19 @@ def _launch_setup(context):
         output='screen',
     )
 
-    # 桥接: /clock 供 CM 仿真时间; /stats 供 RTF/暂停态监控 (sim 地基可观测性)
+    # 共享 world 名: launch 内单一事实源 (bridge 服务串与适配器参数同源),
+    # 仍须与 empty_ign.world 的 <world name> 一致 (SDF 侧)
+    world_name = 'unistack_world'
+
+    # 桥接: /clock 供 CM 仿真时间; /stats 供 RTF/暂停态监控; 世界控制服务供
+    # sim_control_gz 适配器调 pause/resume/step
     gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             '/stats@ros_gz_interfaces/msg/WorldStatistics[gz.msgs.WorldStatistics',
+            f'/world/{world_name}/control@ros_gz_interfaces/srv/ControlWorld',
         ],
         output='screen',
     )
@@ -114,7 +120,7 @@ def _launch_setup(context):
     sim_control_gz = Node(
         package='unistackbot_gazebo',
         executable='sim_control_gz_node',
-        parameters=[{'world': 'unistack_world'}],
+        parameters=[{'world': world_name}],
         output='screen',
     )
 

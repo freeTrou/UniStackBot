@@ -13,11 +13,8 @@
   <depend>std_srvs</depend>
   <!-- /sim_control 契约 (srv + SimCommand + SimControlServer) 所在包 -->
   <depend>unistackbot_interface</depend>
-  <!-- ign 依赖为可选编译 (CMake QUIET 探测), 声明供 rosdep/发布用 -->
-  <build_depend>ignition-transport11</build_depend>
-  <build_depend>ignition-msgs8</build_depend>
-  <exec_depend>ignition-transport11</exec_depend>
-  <exec_depend>ignition-msgs8</exec_depend>
+  <!-- 世界控制服务类型 (适配器经 ros_gz_bridge 桥接的 ControlWorld, 纯 ROS 无 ign 编译依赖) -->
+  <depend>ros_gz_interfaces</depend>
 
   <exec_depend>gazebo_ros</exec_depend>
   <exec_depend>gazebo_ros2_control</exec_depend>

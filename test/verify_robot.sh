@@ -159,6 +159,14 @@ print(f'{d[\"real_time_factor\"]:.3f} {d[\"paused\"]}' if d else 'NONE True')")"
 		&& ok "RTF 监控可用 (real_time_factor=$RTFV, 未暂停)" || bad "/stats 异常: rtf=$RTFV paused=$PAUSED"
 	SVCN=$(timeout 5 ros2 service list 2>/dev/null | grep -c "/sim_control/")
 	[ "$SVCN" -ge 5 ] && ok "/sim_control 服务在 gz 链由适配器承载 (${SVCN}个)" || bad "/sim_control 服务缺 ($SVCN/5+)"
+	# 端到端: /sim_control/pause -> 桥接 ControlWorld -> /stats 应真实翻转
+	timeout 8 ros2 service call /sim_control/pause std_srvs/srv/Trigger >/dev/null 2>&1
+	sleep 1
+	P1=$(timeout 6 ros2 topic echo /stats --once 2>/dev/null | grep -m1 "^paused:" | grep -io "true\|false" | head -1)
+	timeout 8 ros2 service call /sim_control/resume std_srvs/srv/Trigger >/dev/null 2>&1
+	sleep 1
+	P2=$(timeout 6 ros2 topic echo /stats --once 2>/dev/null | grep -m1 "^paused:" | grep -io "true\|false" | head -1)
+	[ "$P1" = "true" ] && [ "$P2" = "false" ] && ok "/sim_control pause/resume 经桥接真实生效 (true->false)" || bad "pause/resume 未生效: $P1 -> $P2"
 	run_goal_and_check 0.05
 	cleanup_launch "$LPID"
 fi
