@@ -1,11 +1,10 @@
 # unistackbot_gazebo
 
-Gazebo 集成层：world + launch。两条链路，controller_manager 都活在仿真器的 ros2_control 插件里（无独立 ros2_control_node）。
+Gazebo 集成层：world + launch + `/sim_control` gz 适配器。单链路（Fortress），controller_manager 活在仿真器的 ros2_control 插件里（无独立 ros2_control_node）。Classic 链已删（2026-09-17，EOL 死角，git 历史可回溯）。
 
 | 链路 | 入口 | 状态 |
 |---|---|---|
 | Gazebo Sim (Fortress) | `ros2 launch unistackbot_gazebo ign.launch.py robot:=<机型>`（`gui:=true\|false`，`use_rviz:=true` 可选） | **现行** |
-| Gazebo Classic | `ros2 launch unistackbot_gazebo gazebo.launch.py robot:=<机型>` | EOL，留作参考 |
 
 `robot` 为必填机型名（对应 `unistackbot_description/arms/<robot>/`），launch 内不写死任何型号。
 
@@ -52,4 +51,4 @@ ign server 常在 launch 关闭后存活并毒化下一次启动；**一次只�
 
 ## 关键文件
 
-`src/sim_control_gz_node.cpp`（`/sim_control/*` 的 gz 适配器，**纯 ROS 构建无 ign 编译依赖**——pause/resume/step 经 launch 里 parameter_bridge 桥接的 `ControlWorld` 服务下发，reset/set_joint_state 拒绝并说明）、`worlds/empty_ign.world`（`<world name>` 为 `unistack_world`——共享 world 的名字，与机型无关，须与 `sim_control_gz_node` 的 `world` 参数一致）、`worlds/empty.world`（Classic）、`scripts/gz_clean.sh`。
+`src/sim_control_gz_node.cpp`（`/sim_control/*` 的 gz 适配器，**纯 ROS 构建无 ign 编译依赖**——pause/resume/step 经 launch 里 parameter_bridge 桥接的 `ControlWorld` 服务下发，reset/set_joint_state 拒绝并说明）、`worlds/empty_ign.world`（`<world name>` 为 `unistack_world`——共享 world 的名字，与机型无关，须与 `sim_control_gz_node` 的 `world` 参数一致）、`scripts/gz_clean.sh`。

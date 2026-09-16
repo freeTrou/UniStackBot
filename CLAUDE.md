@@ -44,9 +44,6 @@ ros2 launch unistackbot_bringup control.launch.py robot:=piper   # robot:=xarm7 
 
 # 3. Gazebo Sim / Fortress (current chain): controller manager inside gz_ros2_control
 ros2 launch unistackbot_gazebo ign.launch.py robot:=piper        # gui:=true|false, use_rviz:=true 可选
-
-# 4. Gazebo Classic (EOL, kept for reference): controller manager inside gazebo_ros2_control
-ros2 launch unistackbot_gazebo gazebo.launch.py robot:=piper     # gui:=true|false
 ```
 
 All control/sim launches take a **required** `robot:=<机型>` argument (resolves `unistackbot_description/arms/<robot>/` + `unistackbot_bringup/config/<robot>_controllers.yaml`; unknown robots fail fast with the available list). Current robots: `piper` (6-DoF arm + gripper), `xarm7` (7-DoF arm, vendor: UFACTORY — see `arms/xarm7/README.md` + `arms/xarm7/ik_decision_card.md`). Command the arm via the JTC action (`/joint_trajectory_controller/follow_joint_trajectory`, type `control_msgs/action/FollowJointTrajectory`) over all the robot's joints. Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo, both green = pass.
@@ -86,7 +83,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
   - `mpsc_ring/` — 多写单读覆盖式无锁环（**丢旧保新**：日志缓冲/滑动窗口/音视频环；Vyukov 每槽 seq 2g/2g+1 编码 + 逐出 CAS；六轮外部评审定稿，载荷原子字节存储零 UB，seq_cst 全屏障，TSAN 零竞争）
   - `ulog/` — 高性能异步日志组件（前端宏：级别过滤→snprintf 定长 POD→无锁入队；后端单线程双 sink 终端+文件、error 强刷、100ms 周期 flush、10MB×5 轮转；emit 零 malloc、WCET ~µs；TSAN 白名单一条已知工具误报见 tsan_suppressions.txt）
   - sim_control 的 CMake 以 `$<BUILD_INTERFACE:...>/../unistackbot_common` 直引组件库整个目录（sp_ring 队列 + ulog 日志；monorepo 内，未 install——对外发布前需调整）
-- **unistackbot_gazebo** — Gazebo integration, two chains: `ign.launch.py` (Gazebo Sim/Fortress via `ros_gz_sim` + `empty_ign.world` + `/clock` bridge + `sim_control_gz_node` — the current chain) and `gazebo.launch.py` (Gazebo Classic, EOL, kept for reference). Both take a required `robot:=<机型>`; no robot name is hardcoded. In both, the controller manager lives inside the sim's ros2_control plugin — no standalone `ros2_control_node`. Constraints baked into the launches, each fixes a hard failure observed on dev machines:
+- **unistackbot_gazebo** — Gazebo integration, single chain: `ign.launch.py` (Gazebo Sim/Fortress via `ros_gz_sim` + `empty_ign.world` + bridges + `sim_control_gz_node`). The Gazebo Classic chain was removed 2026-09-17 (EOL, never verified here; recover from git history if ever needed). Both take a required `robot:=<机型>`; no robot name is hardcoded. In both, the controller manager lives inside the sim's ros2_control plugin — no standalone `ros2_control_node`. Constraints baked into the launches, each fixes a hard failure observed on dev machines:
   - URDF is re-serialized to a **single line** before use: the plugin forwards it to the CM as a `--param robot_description:=<urdf>` rule and rcl's parser rejects newlines → CM never starts.
   - The sim gets the URDF via a temp file (`-file` for spawn_entity / `create`), not the `/robot_description` topic: TRANSIENT_LOCAL latched re-delivery is unreliable under iceoryx/SHM CycloneDDS configs.
   - DDS comes from the machine-wide `~/cyclonedds.xml` (`CYCLONEDDS_URI` in `.bashrc`): binds `lo` + unicast `Peers 127.0.0.1`. This machine's `lo` lacks the MULTICAST flag, so unicast-only discovery intermittently dropped late joiners (services visible at startup, gone minutes later); the Peers bootstrap fixed it. The launches deliberately do NOT override `CYCLONEDDS_URI`. Run at most ONE launch stack at a time — leftover same-name nodes (robot_state_publisher / controller_manager) poison new runs ('Controller already loaded', stale robot_description).
@@ -99,7 +96,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 `piper.urdf.xacro` declares four args: `use_gripper`, `use_ros2_control`, `use_world`, `use_gazebo`. `use_gazebo` is three-way (xacro quirk: `$(arg …)` turns `true` into Python `True`, so comparisons must match both):
 
 - `use_gazebo:=false` → `unistackbot_sim_control/SimControlHardware` (backend=kinematic; bringup's standalone `ros2_control_node`)
-- `use_gazebo:=true`/`classic` → Gazebo Classic `gazebo_ros2_control/GazeboSystem` + `libgazebo_ros2_control.so`
+- `use_gazebo:=true`/`classic` → Gazebo Classic `gazebo_ros2_control/GazeboSystem`（**链已删**，仅 xacro 分支保留为惰性能力，无消费者）
 - `use_gazebo:=ign` → Gazebo Sim (Fortress) `gz_ros2_control/GazeboSimSystem` + `gz_ros2_control-system` — the current sim chain
 
 All `<gazebo>` plugin blocks live in each robot's `<robot>_ros2_control.xacro` and point at `$(find unistackbot_bringup)/config/<robot>_controllers.yaml` — the *description* package depends on bringup's installed config in both sim modes.

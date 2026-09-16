@@ -3,7 +3,7 @@
 <package format="3">
   <name>unistackbot_gazebo</name>
   <version>0.1.0</version>
-  <description>Gazebo 仿真集成,提供 world 文件与启动 launch,使用 gazebo_ros2_control/GazeboSystem 插件。</description>
+  <description>Gazebo 集成层: world + Fortress 链 launch + /sim_control gz 适配器(纯 ROS)。</description>
   <maintainer email="todo@todo.todo">UniStackBot</maintainer>
   <license>TODO: Declaration of license</license>
 
@@ -16,8 +16,6 @@
   <!-- 世界控制服务类型 (适配器经 ros_gz_bridge 桥接的 ControlWorld, 纯 ROS 无 ign 编译依赖) -->
   <depend>ros_gz_interfaces</depend>
 
-  <exec_depend>gazebo_ros</exec_depend>
-  <exec_depend>gazebo_ros2_control</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>gz_ros2_control</exec_depend>

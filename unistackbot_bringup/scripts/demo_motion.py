@@ -5,7 +5,7 @@
 限位/最大速度解析自 robot_state_publisher 的 robot_description (URDF <ros2_control> 块),
 路径点按限位区间百分比推算 —— 本脚本不含任何机型硬编码。
 
-前置: control.launch.py / ign.launch.py / gazebo.launch.py 任一已启动,
+前置: control.launch.py / ign.launch.py 任一已启动,
 且 joint_trajectory_controller 处于 active。
 
 用法: ros2 run unistackbot_bringup demo_motion.py

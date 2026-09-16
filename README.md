@@ -44,7 +44,7 @@
 | `unistackbot_description` | URDF/Xacro 模型 + mesh + RViz（横切层） | [README](unistackbot_description/README.md) |
 | `unistackbot_hardware` | 真机驱动 / 总线主站（空骨架，设计先行） | [README](unistackbot_hardware/README.md) |
 | `unistackbot_sim_control` | 统一仿真控制层（插件 + 后端 + `/sim_control/*`） | [README](unistackbot_sim_control/README.md) |
-| `unistackbot_gazebo` | Gazebo 集成（Fortress 主链 + Classic 对照） | [README](unistackbot_gazebo/README.md) |
+| `unistackbot_gazebo` | Gazebo 集成（Fortress 链） | [README](unistackbot_gazebo/README.md) |
 | `unistackbot_interface` | 公共接口定义，跨仓库单一事实源（`/sim_control` 契约已落地） | [README](unistackbot_interface/README.md) |
 | `unistackbot_common` | 组件库，**非 ROS 包**（交换原语 + ulog 日志） | [README](unistackbot_common/README.md) |
 
@@ -73,9 +73,6 @@ ros2 launch unistackbot_bringup control.launch.py robot:=xarm7 use_rviz:=true
 # 3) Gazebo Sim / Fortress（物理引擎链，CM 在 gz_ros2_control 内）
 ros2 run unistackbot_gazebo gz_clean.sh        # 单独执行！清残留
 ros2 launch unistackbot_gazebo ign.launch.py robot:=xarm7 gui:=false   # use_rviz:=true 可选
-
-# 4) Gazebo Classic（EOL，对照保留）
-ros2 launch unistackbot_gazebo gazebo.launch.py robot:=piper
 ```
 
 发一段演示轨迹（机型无关：关节表读自控制器，路径点按限位推算）：
