@@ -9,13 +9,32 @@ Gazebo 集成层：world + launch。两条链路，controller_manager 都活在�
 
 `robot` 为必填机型名（对应 `unistackbot_description/arms/<robot>/`），launch 内不写死任何型号。
 
-## 用法纪律
+## 启动示例
 
 ```bash
-ros2 run unistackbot_gazebo gz_clean.sh   # 每次启动前必跑：清残留进程
+# 终端 1 —— 启动（gz_clean 必须单独一条执行，与 launch 绝不同行！）
+cd <工作区根> && source install/setup.bash
+ros2 run unistackbot_gazebo gz_clean.sh
+ros2 launch unistackbot_gazebo ign.launch.py robot:=xarm7 gui:=false
+
+# 终端 2 —— 让机械臂动（等终端 1 出现两行 "Configured and activated"）
+source install/setup.bash
+ros2 run unistackbot_bringup demo_motion.py
 ```
 
-ign server 常在 launch 关闭后存活并毒化下一次启动；且**一次只跑一套栈**（同名 controller_manager / robot_state_publisher 会互相污染）。
+常用变体（只换参数）：`gui:=true` 开 Gazebo 图形界面；`use_rviz:=true` 无头仿真加 RViz；`robot:=piper` 换机型。
+
+```bash
+# 健康检查（可选）
+ros2 control list_controllers   # 两个控制器都应 active
+ros2 topic hz /joint_states     # ≈500 Hz = 链路健康
+
+# 收工：终端 1 Ctrl+C 后，再单独跑一次 gz_clean.sh（ign server 常在 launch 退出后残留）
+```
+
+## 用法纪律
+
+ign server 常在 launch 关闭后存活并毒化下一次启动；**一次只跑一套栈**（同名 controller_manager / robot_state_publisher 会互相污染）；`gz_clean.sh` 的 pkill 模式会击杀同一命令行里含 "ros2 launch" 字样的宿主，因此永远单独执行。
 
 ## 内置的坑规避（launch 里已写死，改动前先懂为什么）
 
@@ -27,7 +46,7 @@ ign server 常在 launch 关闭后存活并毒化下一次启动；且**一次�
 ## Gazebo 对外接口速查（2026-09-16 在本机实测枚举）
 
 - **ign-transport 原生**：话题 `/stats`（RTF/暂停态，已桥接为 `ros_gz_interfaces/WorldStatistics`）、`pose/info`、`scene/info` 等；服务 `control`（pause/resume/step，gz 适配器的落点）、`create`/`remove`/`set_pose`、`set_physics`、`enable/disable_collision`、`scene/graph` 等，全挂 `/world/unistack_world/` 下
-- **ROS 桥**（`parameter_bridge`）：`/clock`、`/stats`；传感器上线后按需加映射
+- **ROS 桥**（`parameter_bridge`）：`/clock`、`/stats`、`/world/unistack_world/control`（世界控制服务，gz 适配器的通道）；传感器上线后按需加映射
 - **进程内 System 插件**：`gz_ros2_control-system`（CM 宿主，主乘骑）；world 现挂 Physics/UserCommands/SceneBroadcaster——`Contact`（碰撞接触）与 `ForceTorque`（腕 FT）留待协作二期声明加载
 - **reset 实测有毒（2026-09-16）**：Fortress 的 `WorldControl.reset{all}` 返回 success=true 但世界随即进入 negative-timestep 错误态、仿真停摆——适配器拒绝并引用此实证。`remove`+`create` 合成 reset 同样否决（CM 活在模型实体插件里，remove 即杀 CM）。Fortress 时代关节复位 = JTC 归零轨迹；Garden+ 才有可用原生 reset
 
