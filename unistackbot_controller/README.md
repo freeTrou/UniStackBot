@@ -1,5 +1,28 @@
 # unistackbot_controller
 
+运动控制层：**形态盲运动学库**（URDF → KDL 链 → FK + 雅可比）+ 算法控制器骨架。库不含任何机型知识——机型只是 URDF 数据。
+
+## 能力（P1.3, 2026-09-17）
+
+- `urdf_fk.hpp/cpp`（纯 C++ 库，无 roscpp）：`init(urdf, base, tip)` 显式错误流 → `fk(q)→CartesianPose` / `jacobian(q)→6×n 行主序` / 限位与链序关节名查询。建链用 kdl_parser（与 RSP 同源，TF 对拍机器精度一致）；限位自 urdfdom 提取。RT 安全：fk/jacobian 零堆分配（计数器实证）
+- `fk_tool`（`ros2 run`）：FK 命令行工具，调试与 TF 对拍用
+- `test_urdf_fk.cpp`（g++ 直编）：零位手算真值（strict，xarm7）+ 雅可比 vs 有限差分（<1e-11）+ FK 幂等 + RT 零分配
+
+## 验证
+
+```bash
+bash unistackbot_controller/test/run_urdf_fk_test.sh xarm7 link7 link_base strict   # 单测 37 断言
+bash unistackbot_controller/test/run_urdf_fk_test.sh piper link6 base_link          # 机型无关性
+bash test/check_fk_tf.sh xarm7                                                      # sim 对拍: TF vs FK 10 位姿, 实测 ~4e-13
+```
+
+TF 对拍原理：robot_state_publisher 是独立实现（kdl_parser 建树 + 树序 FK），同 URDF 同 q 两套代码，任何坐标系级错误都逃不过——**这是 FK 正确性的工程裁判**。
+
+## 算法控制器骨架（待 P1.4 后实例化）
+
+状态接口→`RobotFeedback`、`RobotCommand`→命令接口的薄适配骨架；OTG 摄入门（安全链）另立项。
+
+
 运动控制 / 运动学解算层（rclcpp、geometry_msgs、nav_msgs、tf2）。
 
 ## 现状
