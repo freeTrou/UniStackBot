@@ -51,6 +51,21 @@ Visualization Manager:
       Show Arrows: true
       Show Axes: true
       Show Names: true
+    - Accept NaNs: true
+      Class: rviz_default_plugins/InteractiveMarkers
+      Enable Transparency: true
+      Enabled: true
+      Name: InteractiveMarkers
+      Show Axes: false
+      Show Descriptions: true
+      Show Visual Aids: false
+      Value: true
+      update topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ik_target/update
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

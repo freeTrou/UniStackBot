@@ -16,7 +16,7 @@ ORACLE="$PKG_ROOT/test/ik_oracle_${ROBOT}.txt"
 echo "== 编译 =="
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
 	-I"$PKG_ROOT/include" \
-	-I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser -I/opt/ros/humble/include -I"$REPO_ROOT/unistackbot_interface/include" \
+	-I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser -I/opt/ros/humble/include -I"$REPO_ROOT/unistackbot_interface/include" -I"$REPO_ROOT/unistackbot_common" \
 	"$PKG_ROOT/test_dls_ik.cpp" \
 	"$PKG_ROOT/src/dls_ik.cpp" \
 	"$PKG_ROOT/src/urdf_fk.cpp" \

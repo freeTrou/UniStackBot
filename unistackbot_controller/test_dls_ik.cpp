@@ -119,7 +119,8 @@ int main(int argc, char ** argv)
 		// j4 距下限仅 0.19 rad, 零位构型本身贴边界)
 		std::vector<double> q(n);
 		for (unsigned k = 0; k < n; ++k) {q[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
-		const IkResult r = ik.solve(e.pose, q, preserve, q);
+		const IkResult r = ik.solve(e.pose, q, preserve, q, nullptr,
+			unistackbot_controller::SolveMode::COLD_START);
 		if (e.reachable)
 		{
 			++reach_total;
@@ -171,7 +172,7 @@ int main(int argc, char ** argv)
 			}
 		}
 	}
-	std::printf("  可达冷启动求解 %d/%d (报告制, 已知限制: 冷启动是调参深水区, 挂账)\n",
+	std::printf("  可达冷启动求解 %d/%d (COLD_START: 分支代表种子+无粘性)\n",
 		reach_ok, reach_total);
 	std::printf("  不可达非OK %d/%d (几何预检拦截远距, 姿态级不可达=ITERATION_LIMIT 不出解)\n",
 		unreach_ok, unreach_total);
@@ -182,7 +183,7 @@ int main(int argc, char ** argv)
 			branch_dists.front(), branch_dists[branch_dists.size() / 2], branch_dists.back());
 	}
 	// 达标线: 成功的解必须全部 FK 闭合 (reach_ok 的统计口径已含 <1e-6) + 不可达必须不出解
-	CHECK(reach_total == 0 || reach_ok >= 1);
+	CHECK(reach_total == 0 || reach_ok * 100 / reach_total >= 95);   // 冷启动达标线 (2026-09-17 90/90 后转正式验收)
 	CHECK(unreach_total == 0 || unreach_ok * 100 / unreach_total >= 95);
 	// 真正的达标线在层3 (流式 = 主场景): 101/101 + 增量阈值
 	
@@ -214,7 +215,8 @@ int main(int argc, char ** argv)
 			{
 				q = prev_q;
 			}
-			const IkResult r = ik.solve(p, q, preserve, q);
+			const IkResult r = ik.solve(p, q, preserve, q, nullptr,
+				unistackbot_controller::SolveMode::STREAMING);
 			if (r != IkResult::OK)
 			{
 				++consec_fail;
@@ -295,7 +297,8 @@ int main(int argc, char ** argv)
 			if (!e.reachable) {continue;}
 			++total;
 			const auto t0 = std::chrono::steady_clock::now();
-			const IkResult r = ik.solve(e.pose, q, preserve, q);
+			const IkResult r = ik.solve(e.pose, q, preserve, q, nullptr,
+				unistackbot_controller::SolveMode::COLD_START);
 			const auto t1 = std::chrono::steady_clock::now();
 			if (r == IkResult::OK) {++ok;}
 			times.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());

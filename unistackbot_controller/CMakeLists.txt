@@ -13,6 +13,11 @@ find_package(urdf REQUIRED)
 find_package(urdfdom REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(unistackbot_interface REQUIRED)
+find_package(interactive_markers REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 find_package(kdl_parser REQUIRED)
 
 # 形态盲运动学库: URDF -> KDL 链 -> FK + 雅可比 (无机型知识, 机型只是数据)
@@ -23,6 +28,7 @@ add_library(${PROJECT_NAME} SHARED
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
   $<INSTALL_INTERFACE:include>
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
@@ -37,6 +43,16 @@ target_compile_features(fk_tool PUBLIC cxx_std_17)
 target_link_libraries(fk_tool ${PROJECT_NAME})
 ament_target_dependencies(fk_tool rclcpp)
 
+# IK 交互演示节点 (RViz 6D 拖动标记)
+add_executable(ik_demo_node src/ik_demo_node.cpp)
+target_compile_features(ik_demo_node PUBLIC cxx_std_17)
+target_link_libraries(ik_demo_node ${PROJECT_NAME})
+ament_target_dependencies(ik_demo_node rclcpp unistackbot_interface interactive_markers visualization_msgs rclcpp_action control_msgs trajectory_msgs)
+target_include_directories(ik_demo_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
+)
+
 # IK 命令行工具 (调试 + RViz 演示)
 add_executable(ik_tool src/ik_tool.cpp)
 target_compile_features(ik_tool PUBLIC cxx_std_17)
@@ -49,7 +65,7 @@ target_include_directories(ik_tool PRIVATE
 install(DIRECTORY include/
   DESTINATION include
 )
-install(TARGETS fk_tool ik_tool
+install(TARGETS fk_tool ik_tool ik_demo_node
   DESTINATION lib/${PROJECT_NAME}
 )
 install(TARGETS ${PROJECT_NAME}
