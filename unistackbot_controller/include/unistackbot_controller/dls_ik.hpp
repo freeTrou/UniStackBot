@@ -71,6 +71,12 @@ struct DlsIkConfig
 	                                 // 到时返回 ITERATION_LIMIT (失败不改输出), stats.timed_out=true。
 	                                 // 检查粒度 = 单次迭代 (~40µs @xarm7), 实际超界 ≤ 1 迭代。
 	                                 // RT 周期内调用时设为周期份额: 500Hz(2ms)→0.5~1ms, 200Hz(5ms)→1~2ms
+	double near_singular_sigma{0.05}; // 失败分类阈值: 最佳失败尝试的 σ_min 低于此值 → NEAR_SINGULAR
+	                                 // (2026-09-17 实测校准: 失败组 σ 全落 <0.02, 成功组 p25=0.067,
+	                                 //  (0.02,0.067) 为天然空档, 取 0.05。CM 分流 = 结果码 × timed_out
+	                                 //  组合: NEAR_SINGULAR+超时=奇异区被掐预算(worker 可救),
+	                                 //  NEAR_SINGULAR+非超时=真不可解; σ 永不 gate 成功。
+	                                 //  0=关闭分类; 分布账见 playbook §7)
 };
 
 /*
@@ -99,6 +105,10 @@ struct DlsIkStats
 	double final_err{0.0};   // 失败时的最终误差范数 (成功=0)
 	bool timed_out{false};   // 失败是否因 timeout_ns 预算耗尽 (与迭代上限/局部极小区分:
 	                        // 超时 ≠ 不可解 —— 放宽预算或换种子仍可解, CM 降级策略据此分流)
+	double min_sigma{-1.0};  // 奇异接近度遥测: 最佳配置点的雅可比最小奇异值。
+	                        // 成功=解处 (倒数第二次迭代的 σ, 末步在信任邻域内差异可忽略);
+	                        // 失败=加权误差最低的失败尝试处; 粘性拒绝=被拒解处。
+	                        // <0 = 本轮未进入迭代 (NOT_READY/UNREACHABLE 几何预检等)
 };
 
 class DlsIk
@@ -143,13 +153,16 @@ public:
 
 private:
 	// 单次 DLS 求解 (给定种子, 无重启); deadline = 墙钟预算终点 (max()=不限时),
-	// 每迭代首检查, 到时按迭代上限失败处理; iter_cap = 本种子的迭代上限
+	// 每迭代首检查, 到时按迭代上限失败处理; iter_cap = 本种子的迭代上限;
+	// sigma_out/err_out = 退出时的最新 σ_min / 加权误差 (可空; 调用方初始化为 -1)
 	IkResult solveOnce(
 		const CartesianPose & target, const std::vector<double> & seed,
 		const RedundancyPreference & red, std::vector<double> & out_q,
 		const std::chrono::steady_clock::time_point & deadline,
 		int iter_cap,
-		int * iterations_used = nullptr) const;
+		int * iterations_used = nullptr,
+		double * sigma_out = nullptr,
+		double * err_out = nullptr) const;
 
 	// 零空间目标梯度 ∇H (限位中心距 + 可操作度, 数值微分可操作度项)
 	void nullspaceGradient(

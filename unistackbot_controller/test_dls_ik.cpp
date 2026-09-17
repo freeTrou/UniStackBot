@@ -139,6 +139,7 @@ int main(int argc, char ** argv)
 	// ============ 层1+2: 真值对拍 ============
 	std::printf("== 层1/2: 真值对拍 ==\n");
 	int reach_ok = 0, reach_total = 0, unreach_ok = 0, unreach_total = 0, branch_total = 0;
+	int n_near_singular = 0;
 	std::vector<double> branch_dists;
 	for (const auto & e : entries)
 	{
@@ -146,13 +147,15 @@ int main(int argc, char ** argv)
 		// j4 距下限仅 0.19 rad, 零位构型本身贴边界)
 		std::vector<double> q(n);
 		for (unsigned k = 0; k < n; ++k) {q[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
-		const IkResult r = ik.solve(e.pose, q, preserve, q, nullptr,
+		DlsIkStats st;
+		const IkResult r = ik.solve(e.pose, q, preserve, q, &st,
 			unistackbot_controller::SolveMode::COLD_START);
 		if (e.reachable)
 		{
 			++reach_total;
 			if (r == IkResult::OK)
 			{
+				CHECK(st.min_sigma > 0.0);   // 遥测: 成功解必有 σ (中心种子不会 0 迭代收敛)
 				// FK 回代 (用测试独立 oracle FK)
 				CartesianPose back;
 				CHECK(fk.fk(q, back));
@@ -191,18 +194,23 @@ int main(int argc, char ** argv)
 		else
 		{
 			++unreach_total;
-			// 断言: 不可达位姿必须以非 OK 结束 (几何预检=UNREACHABLE, 难样本=ITERATION_LIMIT),
-			// 核心是不许输出解; UNREACHABLE 命中率单独统计 (几何预检覆盖远距样本)
+			// 断言: 不可达位姿必须以非 OK 结束 (几何预检=UNREACHABLE, 难样本=按 σ 分类
+			// NEAR_SINGULAR / ITERATION_LIMIT), 核心是不许输出解
 			if (r != IkResult::OK)
 			{
 				++unreach_ok;
+				if (r == IkResult::NEAR_SINGULAR)
+				{
+					++n_near_singular;
+					CHECK(st.min_sigma > 0.0 && st.min_sigma < 0.05);   // 分类与遥测自洽
+				}
 			}
 		}
 	}
 	std::printf("  可达冷启动求解 %d/%d (COLD_START: 分支代表种子+无粘性)\n",
 		reach_ok, reach_total);
-	std::printf("  不可达非OK %d/%d (几何预检拦截远距, 姿态级不可达=ITERATION_LIMIT 不出解)\n",
-		unreach_ok, unreach_total);
+	std::printf("  不可达非OK %d/%d (几何预检拦截远距; 姿态级失败按 σ_min 分类, NEAR_SINGULAR %d)\n",
+		unreach_ok, unreach_total, n_near_singular);
 	if (!branch_dists.empty())
 	{
 		std::sort(branch_dists.begin(), branch_dists.end());

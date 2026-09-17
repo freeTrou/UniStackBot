@@ -234,7 +234,9 @@ IkResult DlsIk::solveOnce(
 	const RedundancyPreference & red, std::vector<double> & out_q,
 	const std::chrono::steady_clock::time_point & deadline,
 	int iter_cap,
-	int * iterations_used) const
+	int * iterations_used,
+	double * sigma_out,
+	double * err_out) const
 {
 	const std::size_t n = fk_->jointCount();
 	if (!ready() || seed.size() != n)
@@ -279,22 +281,32 @@ IkResult DlsIk::solveOnce(
 		return e_out.norm();
 	};
 
+	// 遥测出口: 最新 σ_min / 加权误差 (调用方据此做奇异遥测与失败分类)
+	double last_sigma = -1.0, last_err = -1.0;
+	auto finish_once = [&](IkResult r)
+	{
+		if (sigma_out) {*sigma_out = last_sigma;}
+		if (err_out) {*err_out = (last_err >= 0.0) ? last_err : 0.0;}
+		return r;
+	};
+
 	for (int iter = 0; iter < iter_cap; ++iter)
 	{
 		// 预算门 (RT 周期安全): steady_clock 读取 ~20ns, 占单迭代 <0.5%;
 		// 到时按迭代上限失败处理 —— 失败不改输出, 上层据此停止烧重启
 		if (std::chrono::steady_clock::now() >= deadline)
 		{
-			return IkResult::ITERATION_LIMIT;
+			return finish_once(IkResult::ITERATION_LIMIT);
 		}
 		CartesianPose cur;
 		if (!fk_->fk(q, cur, fk_scratch))
 		{
-			return IkResult::ITERATION_LIMIT;
+			return finish_once(IkResult::ITERATION_LIMIT);
 		}
 		Eigen::Matrix<double, 6, 1> e;
 		double pos_err = 0.0, rot_err = 0.0;
 		const double err = weightedError(cur, e, pos_err, rot_err);
+		last_err = err;
 		if (pos_err < cfg_.pos_tolerance && rot_err < cfg_.rot_tolerance)
 		{
 			// 收敛后限位检查 (不 clamp!): clamp 会把界外解伪装成界内 (FK 回代即
@@ -306,16 +318,18 @@ IkResult DlsIk::solveOnce(
 			}
 			if (!in_lim)
 			{
-				return IkResult::LIMIT_CONFLICT;
+				return finish_once(IkResult::LIMIT_CONFLICT);
 			}
 			out_q = q;   // 收敛且限内
 			if (iterations_used) {*iterations_used = iter + 1;}
-			return IkResult::OK;
+			// σ 取上一次迭代值: 收敛退出发生在 SVD 之前, 末步在信任邻域内步长
+			// 极小, 前一迭代构型与解的差异可忽略 (迭代 0 直接收敛则保持 -1)
+			return finish_once(IkResult::OK);
 		}
 
 		if (!fk_->jacobian(q, jac_row, fk_scratch))
 		{
-			return IkResult::ITERATION_LIMIT;
+			return finish_once(IkResult::ITERATION_LIMIT);
 		}
 		for (int r = 0; r < 6; ++r)
 		{
@@ -330,6 +344,7 @@ IkResult DlsIk::solveOnce(
 		svd.compute(J, Eigen::ComputeThinU | Eigen::ComputeThinV);
 		const auto & sv = svd.singularValues();
 		const double smin = sv(sv.size() - 1);
+		last_sigma = smin;   // 奇异遥测: SVD 本来就算, 透传零成本
 		// λ 自适应 (Wampler 式, 2026-09-17 换标准公式): σ_min < 阈值时
 		// λ² = λ₀²(1−σ/σ_thr)², 否则 λ=λ₀ —— 阻尼随奇异接近度平滑增长
 		const double sigma_thr = 0.1;
@@ -406,7 +421,7 @@ IkResult DlsIk::solveOnce(
 			}
 			if (!finite)
 			{
-				return IkResult::ITERATION_LIMIT;   // isfinite 门: 绝不输出 NaN/inf
+				return finish_once(IkResult::ITERATION_LIMIT);   // isfinite 门: 绝不输出 NaN/inf
 			}
 			CartesianPose cur_try;
 			if (fk_->fk(q_try, cur_try, fk_scratch))
@@ -426,13 +441,13 @@ IkResult DlsIk::solveOnce(
 		{
 			if (++ls_fail_streak >= 3)
 			{
-				return IkResult::ITERATION_LIMIT;   // 连续 3 轮无下降: 局部极小, 交阶梯
+				return finish_once(IkResult::ITERATION_LIMIT);   // 连续 3 轮无下降: 局部极小, 交阶梯
 			}
 			continue;   // 本轮原地不动, 下轮重算方向 (零空间目标可能已变)
 		}
 		ls_fail_streak = 0;
 	}
-	return IkResult::ITERATION_LIMIT;
+	return finish_once(IkResult::ITERATION_LIMIT);
 }
 
 IkResult DlsIk::solve(
@@ -517,12 +532,22 @@ IkResult DlsIk::solve(
 	// 级 0: 调用方种子 (流式连续性根)
 	std::vector<double> sol;
 	int iters = 0;
-	IkResult r = solveOnce(target, seed, red, sol, deadline, cfg_.max_iterations, &iters);
+	// 失败归因跟踪 (遥测/分类): att_* = 本尝试退出值; best_fail_* = 加权误差最低的
+	// 失败尝试; sticky_* = 粘性拒绝的收敛解 (有解被拒 ≠ 不可解, 分类语义分开)
+	double att_sigma = -1.0, att_err = -1.0;
+	double best_fail_err = 1e9, best_fail_sigma = -1.0, sticky_sigma = -1.0;
+	IkResult r = solveOnce(target, seed, red, sol, deadline, cfg_.max_iterations, &iters,
+		&att_sigma, &att_err);
 	if (r == IkResult::OK)
 	{
-		if (stats) {stats->iterations = iters; stats->restarts_used = 0;}
+		if (stats) {stats->iterations = iters; stats->restarts_used = 0; stats->min_sigma = att_sigma;}
 		out_q = sol;
 		return finish(IkResult::OK);
+	}
+	if (att_err >= 0.0 && att_err < best_fail_err)
+	{
+		best_fail_err = att_err;
+		best_fail_sigma = att_sigma;
 	}
 
 	// 级 0.5: 种子库 (已加载且 COLD_START) —— 目标导向种子先于分支/随机。
@@ -556,15 +581,21 @@ IkResult DlsIk::solve(
 			branch_cnt[e.branch] += 1;
 			const int restart_cap_eff = (cfg_.restart_max_iterations > 0)
 				? cfg_.restart_max_iterations : cfg_.max_iterations;
-			r = solveOnce(target, e.q, red, sol, deadline, restart_cap_eff, &iters);
+			r = solveOnce(target, e.q, red, sol, deadline, restart_cap_eff, &iters,
+				&att_sigma, &att_err);
 			if (stats) {stats->restarts_used = static_cast<int>(picked) + 1;}
 			++picked;
 			if (r == IkResult::OK)
 			{
 				// COLD_START 无粘性检查 (与阶梯既有语义一致)
-				if (stats) {stats->iterations = iters;}
+				if (stats) {stats->iterations = iters; stats->min_sigma = att_sigma;}
 				out_q = sol;
 				return finish(IkResult::OK);
+			}
+			if (att_err >= 0.0 && att_err < best_fail_err)
+			{
+				best_fail_err = att_err;
+				best_fail_sigma = att_sigma;
 			}
 		}
 	}
@@ -622,7 +653,7 @@ IkResult DlsIk::solve(
 	{
 		if (budgetGone()) {break;}   // 每次重启前查预算 (级 0 耗尽在此短路)
 		const auto s = heuristic_seed(static_cast<std::size_t>(k));
-		r = solveOnce(target, s, red, sol, deadline, restart_cap, &iters);
+		r = solveOnce(target, s, red, sol, deadline, restart_cap, &iters, &att_sigma, &att_err);
 		if (stats) {stats->restarts_used = k + 1;}
 		if (r == IkResult::OK)
 		{
@@ -633,7 +664,7 @@ IkResult DlsIk::solve(
 			}
 			if (mode == SolveMode::COLD_START || dist <= cfg_.jump_threshold)
 			{
-				if (stats) {stats->iterations = iters;}
+				if (stats) {stats->iterations = iters; stats->min_sigma = att_sigma;}
 				out_q = sol;
 				return finish(IkResult::OK);
 			}
@@ -641,26 +672,55 @@ IkResult DlsIk::solve(
 			{
 				best_dist = dist;   // 记住最近的, 若全部超阈值则报跳变
 				best_sol = sol;
+				sticky_sigma = att_sigma;   // 被拒解的 σ (遥测: 常是近奇异解被粘性拦下)
 			}
+		}
+		else if (att_err >= 0.0 && att_err < best_fail_err)
+		{
+			best_fail_err = att_err;
+			best_fail_sigma = att_sigma;
 		}
 	}
 	budgetGone();   // 兜底: 最后一种子烧穿预算而阶梯走完的场合 (耗时>预算即如实标注)
-	// 全部重启解都超粘性阈值或全败: 拒绝输出 (调用方保持上一解)
-	// 失败时的最终误差 (诊断用): 以最近解的 FK 误差近似
-	if (stats && !best_sol.empty())
+	// 失败归因 (2026-09-17): ①粘性拒绝场合 = 有解被拒 (不可解≠被拒, 分类语义分开,
+	// 维持 ITERATION_LIMIT, σ 取被拒解); ②全部尝试失败场合 = 按 σ_min 分类
+	// NEAR_SINGULAR (奇异邻域, CM 警告保持不重试) / ITERATION_LIMIT (瞬态, 可重试)
+	if (!best_sol.empty())
 	{
-		CartesianPose back;
-		if (fk_->fk(best_sol, back))
+		if (stats)
 		{
-			const Eigen::Matrix<double, 6, 1> e = poseError(back, target);
-			best_final_err = e.head<3>().norm();
-			stats->final_err = best_final_err;
+			CartesianPose back;
+			if (fk_->fk(best_sol, back))
+			{
+				const Eigen::Matrix<double, 6, 1> e = poseError(back, target);
+				best_final_err = e.head<3>().norm();
+				stats->final_err = best_final_err;
+			}
+			stats->min_sigma = sticky_sigma;
 		}
+		ULOG_WARN("dls_ik 失败(粘性拒绝): 目标(%.3f,%.3f,%.3f) 重启%d次 最近解距种子%.2frad 位置残差%.4fm",
+			target.x, target.y, target.z,
+			stats ? stats->restarts_used : cfg_.restart_count,
+			best_dist < 1e8 ? best_dist : -1.0, best_final_err);
+		return finish(IkResult::ITERATION_LIMIT);
 	}
-	ULOG_WARN("dls_ik 失败%s: 目标(%.3f,%.3f,%.3f) 重启%d次 最近解距种子%.2frad 位置残差%.4fm",
-		timed_out ? "(超时)" : "", target.x, target.y, target.z,
+	if (stats && best_fail_sigma >= 0.0)
+	{
+		stats->final_err = best_fail_err;
+		stats->min_sigma = best_fail_sigma;
+	}
+	ULOG_WARN("dls_ik 失败%s%s: 目标(%.3f,%.3f,%.3f) 重启%d次 σ_min=%.3f 加权残差%.4f",
+		timed_out ? "(超时)" : "",
+		(cfg_.near_singular_sigma > 0.0 && best_fail_sigma >= 0.0 &&
+			best_fail_sigma < cfg_.near_singular_sigma) ? "(近奇异)" : "",
+		target.x, target.y, target.z,
 		stats ? stats->restarts_used : cfg_.restart_count,
-		best_dist < 1e8 ? best_dist : -1.0, best_final_err);
+		best_fail_sigma, best_fail_err < 1e8 ? best_fail_err : -1.0);
+	if (cfg_.near_singular_sigma > 0.0 && best_fail_sigma >= 0.0 &&
+		best_fail_sigma < cfg_.near_singular_sigma)
+	{
+		return finish(IkResult::NEAR_SINGULAR);
+	}
 	return finish(IkResult::ITERATION_LIMIT);
 }
 
