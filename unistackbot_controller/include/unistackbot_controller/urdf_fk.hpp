@@ -30,7 +30,11 @@ struct CartesianPose
  *
  * 用法契约:
  *   1. init(urdf_string, base_link, tip_link) 一次, 显式错误流 ([[nodiscard]] bool);
- *   2. 之后 fk()/jacobian() 只读, RT 安全 (无分配、无锁、无 IO);
+ *   2. 之后 fk()/jacobian() 只读调用; 无锁无 IO, 但每次调用构造 KDL 暂存对象
+ *      (有堆分配; RT 零分配化是 CM 接入的已知工作项)。
+ *      【实例不可跨线程共享】: KDL 雅可比求解器持有迭代暂存成员 (t_tmp/T_tmp),
+ *      并发调用互踩 —— 2026-09-17 实测 4 线程同一实例 57% 结果损坏。每线程
+ *      一实例 (init 一次 ~ms 级, 可承受)。
  *   3. 关节数 n = 链上活动关节数, 由 init 探明 (jointCount())。
  */
 class UrdfFk
@@ -58,6 +62,18 @@ public:
 
 	// 雅可比: 关节角 -> 6×n (上 3 行 = 线速度, 下 3 行 = 角速度), 行主序
 	[[nodiscard]] bool jacobian(const std::vector<double> & q, std::vector<double> & jac_rowmajor) const;
+
+	// 零分配暂存 (RT 热路径): 调用方持有、每线程一份; 首次调用按 n 定容, 之后复用。
+	// 上面两个无暂存重载 = 每次调用临时构造 (有分配), 供低频调用方使用。
+	struct Scratch
+	{
+		KDL::JntArray q;
+		KDL::Jacobian jac;
+	};
+	[[nodiscard]] bool fk(const std::vector<double> & q, CartesianPose & out, Scratch & scratch) const;
+	[[nodiscard]] bool jacobian(
+		const std::vector<double> & q, std::vector<double> & jac_rowmajor,
+		Scratch & scratch) const;
 
 	// 关节限位 (init 时自 URDF 提取; 长度 = jointCount)
 	[[nodiscard]] const std::vector<double> & qMin() const {return q_min_;}

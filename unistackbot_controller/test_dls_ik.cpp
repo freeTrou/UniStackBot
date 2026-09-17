@@ -1,5 +1,5 @@
 /*
- * dls_ik 五层验证 (P1.4, g++ 直编; 零 ssik 依赖——真值来自 ik_oracle_xarm7.txt)。
+ * dls_ik 六层验证 (P1.4, g++ 直编; 零 ssik 依赖——真值来自 ik_oracle_xarm7.txt)。
  * 编译运行: test/run_ik_test.sh
  *
  * 层1 点正确性:  R 行 -> 求解成功 + FK 回代闭合;  U 行 -> 必须 UNREACHABLE
@@ -7,6 +7,10 @@
  * 层3 轨迹连续性: 100 点圆弧, PRESERVE 种子, 增量 < 0.15 rad, 零失败
  * 层4 对抗表:    维度/垃圾种子/失败不改输出/锁越限/ARM_ANGLE/千次零泄漏
  * 层5 性能统计:  500 位姿 p50/p95/p99 耗时 + 收敛率 (报告制)
+ * 层6 超时预算:  timeout_ns 墙钟封顶 —— 退化预算立即超时/输出不变;
+ *               200Hz(5ms)/500Hz(2ms) 周期预算下边界恪守 + 成功率代价 +
+ *               迭代上限调配 (5ms 全局40 / 2ms 分层r40);
+ *               流式 500µs 预算下圆弧跟踪不劣化
  */
 #include <chrono>
 #include <cmath>
@@ -21,6 +25,7 @@
 using unistackbot_controller::CartesianPose;
 using unistackbot_controller::DlsIk;
 using unistackbot_controller::DlsIkConfig;
+using unistackbot_controller::DlsIkStats;
 using unistackbot_controller::IkResult;
 using unistackbot_controller::RedundancyPreference;
 using unistackbot_controller::RedundancyType;
@@ -71,6 +76,13 @@ int main(int argc, char ** argv)
 
 	DlsIk ik;
 	CHECK(ik.init(&fk, msg));
+
+	// 种子库 (可选 argv[4]): COLD_START 阶梯级0.5 的目标导向种子
+	if (argc >= 5)
+	{
+		CHECK(ik.loadSeedLibrary(argv[4], msg));
+		std::printf("[种子库] %zu 条 (%s)\n", ik.seedLibrarySize(), argv[4]);
+	}
 
 	// 解析 oracle
 	std::vector<OracleEntry> entries;
@@ -292,13 +304,15 @@ int main(int argc, char ** argv)
 		CHECK(ik.solve(p, q, aa, out) == IkResult::UNSUPPORTED);
 		// 6) 千次调用零内存增长
 		g_counting = true; g_allocs = 0;
-		for (int i = 0; i < 1000; ++i) {ik.solve(p, q, preserve, out);}
+		int ok_calls = 0;
+		for (int i = 0; i < 1000; ++i) {ok_calls += (ik.solve(p, q, preserve, out) == IkResult::OK);}
 		const std::size_t a1 = g_allocs; g_allocs = 0;
-		for (int i = 0; i < 1000; ++i) {ik.solve(p, q, preserve, out);}
+		for (int i = 0; i < 1000; ++i) {ok_calls += (ik.solve(p, q, preserve, out) == IkResult::OK);}
 		const std::size_t a2 = g_allocs;
 		g_counting = false;
 		std::printf("  千次调用分配: 前 1000=%zu 后 1000=%zu (要求相等=稳态零增长)\n", a1, a2);
 		CHECK(a1 == a2);
+		CHECK(ok_calls > 0);   // 同批调用的可解性 (消费 [[nodiscard]] 返回值)
 	}
 
 	// ============ 层5: 性能统计 ============
@@ -327,6 +341,147 @@ int main(int argc, char ** argv)
 			std::printf("  %zu 位姿: p50=%.2fms p95=%.2fms p99=%.2fms 收敛率 %.1f%% (参考 p99<5ms, ≥95%%)\n",
 				times.size(), p50, p95, p99, 100.0 * ok / std::max(total, 1));
 		}
+	}
+
+	// ============ 层6: 超时预算 (RT 周期安全; 200Hz/500Hz) ============
+	std::printf("== 层6: 超时预算 (timeout_ns) ==\n");
+	{
+		const DlsIkConfig cfg_def;   // 层1-5 的默认参数基底 (timeout_ns=0)
+
+		// 6-1 退化预算 1ns: 预算门首迭代即触发 —— 非 OK / timed_out / 输出不变 / 秒回
+		{
+			DlsIkConfig c = cfg_def;
+			c.timeout_ns = 1;
+			ik.setConfig(c);
+			CartesianPose p;
+			p.x = 0.35; p.y = 0.0; p.z = 0.45; p.qw = 0.0; p.qx = 1.0;
+			std::vector<double> seed(n);
+			for (unsigned k = 0; k < n; ++k) {seed[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
+			std::vector<double> sentinel(n, -7.0), out = sentinel;
+			DlsIkStats st;
+			const IkResult r = ik.solve(p, seed, preserve, out, &st,
+				unistackbot_controller::SolveMode::COLD_START);
+			CHECK(r != IkResult::OK);
+			CHECK(st.timed_out);
+			bool unchanged = true;
+			for (unsigned i = 0; i < n; ++i) {unchanged &= (out[i] == sentinel[i]);}
+			CHECK(unchanged);
+			CHECK(st.solve_us < 1000.0);   // 不烧重启, 立即返回
+		}
+
+		// 6-2 周期预算扫描: 冷启动全可达集, 预算 = 整周期 (最坏分配; CM 实际
+		//     COLD_START 走低优线程, 此处验证超时机制的边界恪守 + 成功率代价 +
+		//     迭代上限调配的水位)。2026-09-17 w_manip=0 跳过 H₂ 后单迭代 ~1/3
+		//     成本, 两档最优统一为全局 max_iterations=40 (2ms 95.5% / 5ms 97.9%)
+		struct BudgetCase {const char * label; uint64_t budget_ns; int max_iter; int restart_iter; int floor;};
+		std::vector<BudgetCase> cases = {
+			{"200Hz 整周期 默认上限",  5000000ull, 200, 0,  92},
+			{"500Hz 整周期 默认上限",  2000000ull, 200, 0,  85},
+			{"200Hz 全局40",           5000000ull, 40,  0,  95},
+			{"500Hz 全局40 (达标行)",  2000000ull, 40,  0,  93},
+			{"500Hz 分层r40",          2000000ull, 200, 40, 88},
+		};
+		// 1ms 目标行只在种子库就绪时有意义 (无库 90% 上下, 有库预期 >=95%)
+		if (argc >= 5)
+		{
+			cases.push_back({"1ms 全局30 (目标行)", 1000000ull, 30, 0, 92});
+		}
+		for (const auto & bc : cases)
+		{
+			DlsIkConfig c = cfg_def;
+			c.timeout_ns = bc.budget_ns;
+			c.max_iterations = bc.max_iter;
+			c.restart_max_iterations = bc.restart_iter;
+			const uint64_t budget_ns = bc.budget_ns;
+			ik.setConfig(c);
+			int ok = 0, total = 0, n_timeout = 0;
+			double max_us = 0.0;
+			std::vector<double> times;
+			for (const auto & e : entries)
+			{
+				if (!e.reachable) {continue;}
+				++total;
+				std::vector<double> seed(n);
+				for (unsigned k = 0; k < n; ++k) {seed[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
+				std::vector<double> q = seed;
+				DlsIkStats st;
+				const IkResult r = ik.solve(e.pose, seed, preserve, q, &st,
+					unistackbot_controller::SolveMode::COLD_START);
+				times.push_back(st.solve_us);
+				max_us = std::max(max_us, st.solve_us);
+				if (st.timed_out) {++n_timeout;}
+				if (r == IkResult::OK)
+				{
+					++ok;
+					CartesianPose back;   // 超时机制不得污染 OK 路径的解质量
+					CHECK(fk.fk(q, back));
+					const double dp = std::max({std::fabs(back.x - e.pose.x),
+						std::fabs(back.y - e.pose.y), std::fabs(back.z - e.pose.z)});
+					CHECK(dp < 1e-6);
+				}
+			}
+			std::sort(times.begin(), times.end());
+			const double p50 = times[times.size() / 2] / 1000.0;
+			const double p99 = times[times.size() * 99 / 100] / 1000.0;
+			std::printf("  %s: 成功 %d/%d (%.1f%%) 超时中断 %d  p50=%.2fms p99=%.2fms max=%.2fms\n",
+				bc.label, ok, total, 100.0 * ok / std::max(total, 1), n_timeout, p50, p99,
+				max_us / 1000.0);
+			// 恪守边界: 实际耗时 ≤ 预算 + 单次迭代粒度 (~40µs) + 调度抖动余量
+			CHECK(max_us <= static_cast<double>(budget_ns) / 1000.0 + 300.0);
+			// 成功率底线 (防回归线, 非验收线): 无预算基线 99.5%, 尾部难样本需要多轮
+			// 重启 —— 生产链路 COLD_START 走低优线程大预算, 此处是"调用线程内整周期"
+			// 的最坏分配水位
+			CHECK(ok * 100 / std::max(total, 1) >= bc.floor);
+		}
+
+		// 6-3 流式预算 0.5ms (500Hz 周期的 1/4 份额): 圆弧跟踪不得劣化 ——
+		//     流式种子=上一解, 常态几迭代收敛, 预算只拦异常长尾
+		{
+			DlsIkConfig c = cfg_def;
+			c.timeout_ns = 500000;
+			ik.setConfig(c);
+			std::vector<double> prev_q;
+			int ok_pts = 0;
+			double worst_step = 0.0, max_us = 0.0;
+			for (int i = 0; i <= 100; ++i)
+			{
+				const double th = 2 * M_PI * i / 100.0;
+				CartesianPose p;
+				p.x = 0.35 + 0.10 * std::cos(th);
+				p.y = 0.10 * std::sin(th);
+				p.z = 0.45;
+				p.qw = 0.0; p.qx = 1.0;   // 末端朝下
+				std::vector<double> q(n);
+				if (i == 0 || prev_q.empty())
+				{
+					for (unsigned k = 0; k < n; ++k) {q[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
+				}
+				else
+				{
+					q = prev_q;
+				}
+				DlsIkStats st;
+				const IkResult r = ik.solve(p, q, preserve, q, &st,
+					unistackbot_controller::SolveMode::STREAMING);
+				max_us = std::max(max_us, st.solve_us);
+				if (r != IkResult::OK) {continue;}
+				if (!prev_q.empty())
+				{
+					double step = 0;
+					for (unsigned k = 0; k < n; ++k) {step += std::fabs(q[k] - prev_q[k]);}
+					worst_step = std::max(worst_step, step);
+				}
+				prev_q = q;
+				++ok_pts;
+			}
+			std::printf("  流式预算 500µs: 圆弧 101 点成功 %d 最差增量 %.3frad max=%.0fµs\n",
+				ok_pts, worst_step, max_us);
+			CHECK(ok_pts >= 95);
+			CHECK(worst_step < 0.15);
+			CHECK(max_us <= 500.0 + 300.0);
+		}
+
+		ik.setConfig(cfg_def);   // 还原默认 (timeout_ns=0)
 	}
 
 	std::printf("结果: PASS=%d FAIL=%d\n", g_pass, g_fail);

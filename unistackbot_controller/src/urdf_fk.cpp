@@ -134,17 +134,26 @@ bool UrdfFk::init(
 
 bool UrdfFk::fk(const std::vector<double> & q, CartesianPose & out) const
 {
+	Scratch scratch;
+	return fk(q, out, scratch);
+}
+
+bool UrdfFk::fk(const std::vector<double> & q, CartesianPose & out, Scratch & scratch) const
+{
 	if (!ready_ || q.size() != jointCount())
 	{
 		return false;
 	}
-	KDL::JntArray q_in(static_cast<unsigned int>(q.size()));
+	if (static_cast<std::size_t>(scratch.q.rows()) != q.size())
+	{
+		scratch.q.resize(static_cast<unsigned int>(q.size()));
+	}
 	for (unsigned int i = 0; i < q.size(); ++i)
 	{
-		q_in(i) = q[i];
+		scratch.q(i) = q[i];
 	}
 	KDL::Frame f;
-	if (fk_solver_->JntToCart(q_in, f) != KDL::SolverI::E_NOERROR)
+	if (fk_solver_->JntToCart(scratch.q, f) != KDL::SolverI::E_NOERROR)
 	{
 		return false;
 	}
@@ -157,17 +166,30 @@ bool UrdfFk::fk(const std::vector<double> & q, CartesianPose & out) const
 
 bool UrdfFk::jacobian(const std::vector<double> & q, std::vector<double> & jac_rowmajor) const
 {
+	Scratch scratch;
+	return jacobian(q, jac_rowmajor, scratch);
+}
+
+bool UrdfFk::jacobian(
+	const std::vector<double> & q, std::vector<double> & jac_rowmajor, Scratch & scratch) const
+{
 	if (!ready_ || q.size() != jointCount())
 	{
 		return false;
 	}
-	KDL::JntArray q_in(static_cast<unsigned int>(q.size()));
+	if (static_cast<std::size_t>(scratch.q.rows()) != q.size())
+	{
+		scratch.q.resize(static_cast<unsigned int>(q.size()));
+	}
 	for (unsigned int i = 0; i < q.size(); ++i)
 	{
-		q_in(i) = q[i];
+		scratch.q(i) = q[i];
 	}
-	KDL::Jacobian J(static_cast<unsigned int>(q.size()));
-	if (jac_solver_->JntToJac(q_in, J) != KDL::SolverI::E_NOERROR)
+	if (static_cast<std::size_t>(scratch.jac.columns()) != q.size())
+	{
+		scratch.jac.resize(static_cast<unsigned int>(q.size()));
+	}
+	if (jac_solver_->JntToJac(scratch.q, scratch.jac) != KDL::SolverI::E_NOERROR)
 	{
 		return false;
 	}
@@ -176,7 +198,7 @@ bool UrdfFk::jacobian(const std::vector<double> & q, std::vector<double> & jac_r
 	{
 		for (unsigned int c = 0; c < q.size(); ++c)
 		{
-			jac_rowmajor[r * q.size() + c] = J(r, c);
+			jac_rowmajor[r * q.size() + c] = scratch.jac(r, c);
 		}
 	}
 	return true;

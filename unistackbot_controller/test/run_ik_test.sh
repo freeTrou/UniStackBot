@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dls_ik 五层验证跑批 (无 ssik 依赖——真值读入库文件)。
+# dls_ik 六层验证跑批 (无 ssik 依赖——真值读入库文件)。
 # 用法: bash test/run_ik_test.sh [robot]   (默认 xarm7; 需先展开 verify URDF)
 set -euo pipefail
 ROBOT="${1:-xarm7}"
@@ -26,4 +26,11 @@ g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
 echo "== 运行 ($ROBOT) =="
 TIP=link7
 [ "$ROBOT" = "piper" ] && TIP=link6
-/tmp/test_dls_ik "$URDF" "$ORACLE" "$TIP"
+LIB="$REPO_ROOT/unistackbot_description/arms/$ROBOT/ik/seed_lib_${ROBOT}.txt"
+if [ -f "$LIB" ]; then
+	echo "种子库: $LIB"
+	/tmp/test_dls_ik "$URDF" "$ORACLE" "$TIP" "$LIB"
+else
+	echo "种子库: 无 ($LIB) —— 走分支+随机阶梯"
+	/tmp/test_dls_ik "$URDF" "$ORACLE" "$TIP"
+fi

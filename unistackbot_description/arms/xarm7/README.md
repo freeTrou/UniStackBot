@@ -21,6 +21,7 @@
 | `meshes/end_tool/collision/end_tool.stl` | 同名 | 原样（link7 默认碰撞体引用） |
 | `config/link_inertial/xarm7_type7_HT_BR2.yaml` | 同名 | 原样（上游默认惯性参数） |
 | `config/kinematics/default/xarm7_default_kinematics.yaml` | 同名 | 原样（DH 标称参数） |
+| `ik/seed_lib_xarm7.txt` | — | **生成**（本仓库资产，非移植）：IK 种子库 v1.1（12000 条 = v1.0 8000 + 姿态感知增量 4000），`unistackbot_controller/test/gen_seed_library.py` 生成 + `test/seed_lib_incremental.py` 增量（指纹头在文件内）；消费方 `DlsIk::loadSeedLibrary`，换臂重生成 |
 
 **未移植**（保持体积与链路干净）：gripper/vacuum_gripper mesh（22MB+）、`xarm7_1305` 新版模型（11MB，`model_num>=1305` 时才用）、`xarm7.ros2_control/transmission/gazebo.xacro`（我们三条链自带插件体系，不引 `uf_robot_hardware`）、`xarm_device_macro.xacro`（全型号入口，由本包入口替代）。
 
