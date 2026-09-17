@@ -24,7 +24,7 @@ TF 对拍原理：robot_state_publisher 是独立实现（kdl_parser 建树 + �
 - `ik_tool`（`ros2 run`）：位姿 → 关节解 + FK 回代误差自证
 - 验证（`test/run_ik_test.sh`）：真值对拍（`ik_oracle_xarm7.txt`，ssik 离线生成 + 自检指纹）+ 轨迹连续性（101 点圆弧全过，增量 0.063<0.15）+ 对抗表 + 端到端（IK 解→sim 瞬移→TF 实测偏差 0.0）
 
-**已知限制（挂账调参）**：冷启动成功率强依赖种子构型（流式上一解 101/101≈100%；中心种子对"朝下姿态"可达带仅 ~50%）——TRAC-IK 的 SQP 是业界对此的答案，我们的对应提升路径=停滞检测+重启策略调参 / 限位 SQP，挂账。迭代内不 clamp（边界踏步实测更差），收敛后限位检查（越界=该种子失败，绝不 clamp 伪装——clamp 伪装被 FK 回代断言当场抓住，2026-09-17）。
+**C 项收官（2026-09-17）**：冷启动 99.5%（600 样本 v2 Oracle，关节正推全姿态）。关键修复链：SolveMode 接口解耦（STREAMING 粘性 1.5 / COLD_START 无粘性+四分支代表种子）、boxed DLS（迭代 clamp 进线搜索，2/90→59/90）、Wampler λ、收敛邻域信任步。完整方法论与换臂 SOP 见 `docs/ik_validation_playbook.md`。迭代内 clamp 与线搜索组合、收敛后限位检查（绝不 clamp 伪装——FK 回代断言当场抓住）。
 
 ## 算法控制器骨架（待 P1.4 后实例化）
 
