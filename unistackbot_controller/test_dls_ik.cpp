@@ -54,6 +54,7 @@ struct OracleEntry
 	CartesianPose pose;
 	bool reachable;
 	std::vector<std::vector<double>> sols;
+	int n_sols_header{0};   // 头部声明的解数 (v2; 用于一致性检查)
 };
 
 int main(int argc, char ** argv)
@@ -90,6 +91,20 @@ int main(int argc, char ** argv)
 					&e.pose.x, &e.pose.y, &e.pose.z, &e.pose.qw, &qx, &qy, &qz) == 7)
 				{
 					e.pose.qx = qx; e.pose.qy = qy; e.pose.qz = qz;
+					// v2 格式: "P ... | n_sols | meta" — 解数是第一个 | 后字段
+					int n_sols = 0;
+					if (e.reachable)
+					{
+						const auto bar1 = line.find('|');
+						const auto bar2 = line.find('|', bar1 + 1);
+						if (bar1 != std::string::npos)
+						{
+							// bar2 存在 = v2 (n | meta); 不存在 = v1 (n 结尾)
+							const auto n_end = (bar2 != std::string::npos) ? bar2 : line.size();
+							n_sols = std::atoi(line.substr(bar1 + 1, n_end - bar1 - 1).c_str());
+						}
+					}
+					e.n_sols_header = n_sols;
 					entries.push_back(e);
 				}
 			}

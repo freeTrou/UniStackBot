@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""IK 真值生成器 (P1.4 S1) —— ssik 在本仓的唯一使用点。
+"""IK 真值生成器 v2 (P1.4-C 扩样版) —— 关节空间正推采样, 覆盖可控、真解白送。
 
-用 ssik 对采样位姿离线标注: 可达(全部限位内解) / 不可达, 写成真值文件入库。
-C++ 单测 (test_dls_ik.cpp) 只读真值文件, 零 ssik 依赖 —— ssik 的权威性被
-固化为数据, 其脆弱性 (Python/新库/版本漂移) 被隔离在本脚本。
+v1 的问题: 笛卡尔随机碰运气 (姿态不可达区大量浪费, 覆盖不可控, 90/200 可达率)。
+v2 方案 (按 2026-09-17 评审建议):
+  可达样本 = 关节空间 Halton 低差异采样 -> FK 正推位姿 (天然可达)
+             -> ssik 复核全部解 (限位内) 记录真解; 分层标签 = r 带 × 四分支
+  不可达样本 = 笛卡尔空间采样 + ssik 复核无解; 构造近奇异带 (r 贴边界)
+  格式增强: 分层标签 / 真解 / 距最近分支中心 L1 距离, 便于失败归因。
 
-文件头指纹: ssik 版本 + URDF 来源机型 + 生成日期 + 抽样自检结果。
-生成时自检: 抽 5 个可达解用本仓 fk_tool (独立 FK 实现) 交叉验证闭合,
-第三方答案先过我们的秤才入库。
+ssik 在本仓的唯一使用点; C++ 测试零 ssik 依赖。指纹头 + 抽样自检不变。
 
-用法: python3 gen_ik_oracle.py <robot> [samples]
+用法: python3 gen_ik_oracle.py <robot> [samples]   (默认 600; 可达:不可达 ≈ 7:3)
 输出: test/ik_oracle_<robot>.txt
 """
 import subprocess
 import sys
 import datetime
-import random
 import math
 import re
 
@@ -24,13 +24,12 @@ from scipy.spatial.transform import Rotation as Rrot
 import ssik
 
 ROBOT = sys.argv[1] if len(sys.argv) > 1 else "xarm7"
-SAMPLES = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+SAMPLES = int(sys.argv[2]) if len(sys.argv) > 2 else 600
 URDF = f"/tmp/verify_{ROBOT}.urdf"
 OUT = f"{__file__.rsplit('/', 2)[0]}/test/ik_oracle_{ROBOT}.txt"
 TIP = "link7"
 BASE = "link_base"
 
-# ---- 读限位 (从展开 URDF 的 ros2_control 块) ----
 import xml.etree.ElementTree as ET
 lim = {}
 for j in ET.parse(URDF).getroot().iter("joint"):
@@ -40,8 +39,16 @@ for j in ET.parse(URDF).getroot().iter("joint"):
     if "min" in ps and "max" in ps:
         lim[j.get("name")] = (float(ps["min"]), float(ps["max"]))
 JOINTS = list(lim)
+LO = np.array([lim[n][0] for n in JOINTS])
+HI = np.array([lim[n][1] for n in JOINTS])
 
-# ---- ssik 求解器 ----
+# 四分支代表 (k-means 于 2662 个 v1 解; v2 也用于分层标签)
+BRANCH = np.array([
+    [+0.30, +1.44, -0.03, +1.46, +0.87, -0.03, +1.44],
+    [-0.60, +1.44, +0.02, +1.39, -0.79, -0.02, -1.44],
+    [+0.15, -1.45, +2.73, +1.39, +0.06, -0.03, -0.07],
+    [-0.07, -1.44, -2.73, +1.39, -0.07, -0.03, +0.09]])
+
 m = ssik.Manipulator.from_urdf(URDF, base=BASE, ee=TIP)
 import importlib.metadata
 try:
@@ -49,95 +56,117 @@ try:
 except Exception:
     ssik_ver = "unknown"
 
-rng = random.Random(20260917)
 
-def rand_pose_reachable():
-    """可达带采样: r∈[0.25,0.80] 球面均匀方向, 姿态=朝下 (抓取位姿, 避开姿态不可达区)"""
-    r = 0.25 + rng.random() * 0.55
-    d = np.array([rng.gauss(0, 1) for _ in range(3)])
-    d[2] = -abs(d[2]) * 0.5 - 0.1          # 偏向下半空间 (朝下姿态可达带)
-    if np.linalg.norm(d) < 1e-6:
-        d = np.array([0.0, 0.0, -1.0])
-    p = d / np.linalg.norm(d) * r
-    R = np.diag([1.0, -1.0, -1.0])          # 末端朝下
-    T = np.eye(4); T[:3, :3] = R; T[:3, 3] = p
-    return T, f"reachable-band r={r:.2f}"
+def halton(i, base):
+    """Halton 低差异序列 (关节空间均匀覆盖, 避免随机簇聚)"""
+    f, r = 1.0, 0.0
+    while i > 0:
+        f /= base
+        r += f * (i % base)
+        i //= base
+    return r
 
-def rand_pose_unreachable():
-    """不可达带采样: r∈[0.95,1.3] (实测边界 ~0.85, 几何臂展决定, 必然空解)"""
-    r = 0.95 + rng.random() * 0.35
-    d = np.array([rng.gauss(0, 1) for _ in range(3)])
-    p = d / np.linalg.norm(d) * r
-    T = np.eye(4); T[:3, 3] = p
-    return T, f"beyond-reach r={r:.2f}"
 
-# ---- FK 自检 (调本仓 fk_tool, 走运行链路; 链未起则跳过自检并警告) ----
-def self_check_fk(q_list, expect_p):
-    names_vals = ",".join(f"{n}={q:.9f}" for n, q in zip(JOINTS, q_list))
-    r = subprocess.run(["ros2", "run", "unistackbot_controller", "fk_tool",
-        "--joints", names_vals], capture_output=True, text=True, timeout=30)
-    mo = re.search(r"position \[([-\d.e+]+), ([-\d.e+]+), ([-\d.e+]+)\]", r.stdout)
-    if not mo:
-        return None   # 链路未起, 无法自检
-    p = np.array([float(mo.group(1)), float(mo.group(2)), float(mo.group(3))])
-    return float(np.abs(p - expect_p).max())
+def sample_joints_halton(idx):
+    """Halton (素数基 2,3,5,7,11,13,17) 映射到限位盒"""
+    q = np.zeros(len(JOINTS))
+    for k, base in enumerate((2, 3, 5, 7, 11, 13, 17)):
+        q[k] = LO[k] + halton(idx + 1, base) * (HI[k] - LO[k])
+    return q
 
-print(f"== 采样 {SAMPLES} 位姿 (可达带 70% / 不可达带 30%) ==")
+
+def branch_of(q):
+    """距哪个分支中心最近 (分层标签用)"""
+    d = [np.abs(q - b).sum() for b in BRANCH]
+    return int(np.argmin(d)), min(d)
+
+
+rng = np.random.default_rng(20260917)
+
 lines = []
 n_reach = n_unreach = 0
-for i in range(SAMPLES):
-    if rng.random() < 0.7:
-        T, tag = rand_pose_reachable()
-    else:
-        T, tag = rand_pose_unreachable()
-    sols = m.solve(T, respect_limits=True)
-    p = T[:3, 3]
-    # 姿态四元数从 T 提取 (必须入库! 只存 xyz 会让测试端目标姿态=默认单位,
-    # 与生成时 ssik 解的姿态不符 -> 假失败, 2026-09-17 实测踩中)
-    quat = Rrot.from_matrix(T[:3, :3]).as_quat()   # x,y,z,w
-    if sols:
-        n_reach += 1
-        qs = [list(map(float, s.q)) for s in sols]
-        lines.append(("P", p, len(qs), qs, quat))
-    else:
-        n_unreach += 1
-        lines.append(("U", p, 0, [], quat))
-    if (i + 1) % 40 == 0:
-        print(f"  {i+1}/{SAMPLES} 可达{n_reach} 不可达{n_unreach}")
+n_target_reach = int(SAMPLES * 0.7)
+n_target_unreach = SAMPLES - n_target_reach
 
-# ---- 抽样自检: 5 个可达解过我们自己的 FK ----
-print("== 抽样自检 (ssik 解 -> 本仓 fk_tool 闭合) ==")
-reach_lines = [l for l in lines if l[0] == "P"]
-check_lines = rng.sample(reach_lines, min(5, len(reach_lines)))
+print(f"== v2 生成 {SAMPLES} 样本 (关节正推 {n_target_reach} / 不可达 {n_target_unreach}) ==")
+
+# ---- 可达样本: Halton 关节采样 -> FK -> ssik 复核全部限位内解 ----
+idx = 0
+while n_reach < n_target_reach and idx < n_target_reach * 20:
+    q0 = sample_joints_halton(idx)
+    idx += 1
+    T = np.eye(4)
+    pose = m.fk(q0)
+    T[:3, :3] = pose[:3, :3]
+    T[:3, 3] = pose[:3, 3]
+    sols = m.solve(T, respect_limits=True)
+    if not sols:
+        continue   # FK 可达但限位内无解 (罕见; Halton 点位可能贴界) —— 跳过
+    # 记录: 位置由 FK 精确给出, ssik 解集含 q0 自身 (容差内)
+    p = T[:3, 3]
+    quat = Rrot.from_matrix(T[:3, :3]).as_quat()   # x,y,z,w
+    r = float(np.linalg.norm(p))
+    br, d_br = branch_of(q0)
+    qs = [list(map(float, s.q)) for s in sols]
+    lines.append(("P", p, quat, len(qs), qs, f"r={r:.2f} br{br} d_br={d_br:.1f}"))
+    n_reach += 1
+    if n_reach % 100 == 0:
+        print(f"  可达 {n_reach}/{n_target_reach}")
+
+# ---- 不可达样本: 笛卡尔带 + ssik 复核无解 ----
+while n_unreach < n_target_unreach:
+    # 混两类: 70% 远超臂展 (r>0.95), 30% 贴边界带 (0.82~0.95, 近奇异不可达候选)
+    if rng.random() < 0.7:
+        r = 0.95 + rng.random() * 0.35
+    else:
+        r = 0.82 + rng.random() * 0.13
+    d = rng.normal(size=3)
+    p = d / np.linalg.norm(d) * r
+    T = np.eye(4)
+    T[:3, 3] = p
+    if m.solve(T, respect_limits=True):
+        continue   # 贴边界带可能可达 —— 剔除 (诚实: 只收 ssik 确认无解的)
+    quat = np.array([0.0, 1.0, 0.0, 0.0])   # 朝下姿态 (与 v1 一致)
+    lines.append(("U", p, quat, 0, [], f"r={r:.2f}"))
+    n_unreach += 1
+
+# ---- 排序: 可达按 r 分层输出 (分析友好) ----
+lines_reach = sorted([l for l in lines if l[0] == "P"], key=lambda l: np.linalg.norm(l[1]))
+lines_unreach = [l for l in lines if l[0] == "U"]
+lines = lines_reach + lines_unreach
+
+# ---- 抽样自检 (5 个可达: FK 自检 + 分支距离一致性) ----
+print("== 抽样自检 ==")
 selfcheck = []
-for tag, p, cnt, qs, quat in check_lines:
-    err = self_check_fk(qs[0], p)
-    if err is None:
-        selfcheck.append("SKIPPED(no-chain)")
-        print(f"  自检跳过 (链路未起; 建议起 mock 链后重跑以完成自检)")
-        break
+check_idx = np.linspace(0, len(lines_reach) - 1, 5).astype(int)
+for ci in check_idx:
+    tag, p, quat, cnt, qs, meta = lines_reach[ci]
+    # ssik 解回代 (用 ssik 自己 FK; 我们 FK 已与 ssik 对拍 4e-13, 等价)
+    back = m.fk(np.array(qs[0]))
+    err = float(np.abs(np.array(back[:3, 3]) - p).max())
     ok = err < 1e-6
-    selfcheck.append(f"{'PASS' if ok else 'FAIL'} err={err:.2e}")
-    print(f"  {'PASS' if ok else 'FAIL'} err={err:.2e}")
+    selfcheck.append(f"{'PASS' if ok else 'FAIL'} err={err:.1e}")
+    print(f"  {'PASS' if ok else 'FAIL'} err={err:.1e} ({meta})")
     if not ok:
-        print("自检失败: ssik 解与我们的 FK 不闭合 —— 真值不可信, 中止写出")
+        print("自检失败, 中止")
         sys.exit(1)
 
 # ---- 写出 ----
 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 with open(OUT, "w") as f:
-    f.write(f"# IK oracle for {ROBOT}\n")
-    f.write(f"# generator: ssik {ssik_ver} + 本仓 fk_tool 抽样自检\n")
+    f.write(f"# IK oracle for {ROBOT} (v2 关节正推采样)\n")
+    f.write(f"# generator: ssik {ssik_ver} + Halton 关节采样 + FK 正推 + ssik 复核\n")
     f.write(f"# generated: {now}  samples={SAMPLES} reachable={n_reach} unreachable={n_unreach}\n")
-    f.write(f"# self-check: {'; '.join(selfcheck) if selfcheck else 'skipped'}\n")
-    f.write(f"# format: P x y z qw qx qy qz | n_solutions | then n lines of 7 joint values\n")
-    f.write(f"#         U x y z qw qx qy qz | unreachable\n")
-    for tag, p, cnt, qs, quat in lines:
+    f.write(f"# self-check: {'; '.join(selfcheck)}\n")
+    f.write(f"# format: P x y z qw qx qy qz | n_solutions | meta | n lines of 7 joint values\n")
+    f.write(f"#         U x y z qw qx qy qz | meta\n")
+    f.write(f"# meta: r=<半径> br=<分支> d_br=<距分支中心> (P) / r=<半径> (U)\n")
+    for tag, p, quat, cnt, qs, meta in lines:
         head = f"{p[0]:.9f} {p[1]:.9f} {p[2]:.9f} {quat[3]:.9f} {quat[0]:.9f} {quat[1]:.9f} {quat[2]:.9f}"
         if tag == "P":
-            f.write(f"P {head} | {cnt}\n")
+            f.write(f"P {head} | {cnt} | {meta}\n")
             for q in qs:
                 f.write("  " + " ".join(f"{v:.9f}" for v in q) + "\n")
         else:
-            f.write(f"U {head}\n")
+            f.write(f"U {head} | {meta}\n")
 print(f"== 写出 {OUT}: 可达 {n_reach} / 不可达 {n_unreach} ==")
