@@ -43,8 +43,13 @@ g++ -std=c++17 -O2 -pthread -Wall -Wextra -I include test_ruckig.cpp src/ruckig/
 # 库级: 单轴/7轴/率失配重定向/零malloc/计时 (12 断言)
 g++ -std=c++17 -O2 -pthread -Wall -Wextra -I include test_otg_stream.cpp src/ruckig/*.cpp -o /tmp/test_otg && /tmp/test_otg_stream
 # 封装级: NaN拒绝/跳变限幅/错误自愈/init校验/观测 (22 断言)
+g++ -std=c++17 -O2 -pthread -Wall -Wextra -I include test_ruckig_stress.cpp src/ruckig/*.cpp -o /tmp/test_stress && /tmp/test_stress
+# 压测: 攻击社区版已知数值失败模式 (2026-09-18, 12 断言)
 ```
 
-**测试教训 (防复发)**: ① 封装首版漏了"目标摄入"—— Ruckig 一直追旧目标、恒返 Ok 不动,
+**压测结论 (2026-09-18, 5 场景)**: S2 极端跳变 (限幅关闭放野输入) **实测触发 Ruckig 原生
+-110 (ErrorExecutionTimeCalculation)** —— 防御层捕获/保持/自愈全链路生效, 证明对"真错误"
+有效而非仅合成用例; S4 RL 野流 60s (30000 拍 ±40rad 随机) 零错误零越界 (跳变限幅生效);
+S1 零目标态/S3 大数边界/S5 每拍重定向输出恒有限。**测试教训 (防复发)**: ① 封装首版漏了"目标摄入"—— Ruckig 一直追旧目标、恒返 Ok 不动,
 被 T8 位置断言当场抓住 (返回码全对 ≠ 在追你的目标); ② 断言的时序裕量按时间最优时长给
 (拍数 = 时长/dt × 1.5)。
