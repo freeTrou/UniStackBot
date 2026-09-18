@@ -45,7 +45,11 @@ int main()
 			check(r == unistackbot_common::OtgStream<N>::UpdateResult::Hold, "T6 NaN 目标 → Hold");
 		}
 		check(otg.errorCount() == 5, "T6 NaN 错误计数 5");
-		check(otg.lastError() == 400, "T6 lastError=400");
+		check(otg.lastError() == unistackbot_common::OtgStream<N>::NonFiniteTarget, "T6 lastError=NonFiniteTarget");
+		// 修订契约: Hold 时输出恒有效 = 安全保持位 (调用方无条件写硬件即可)
+		bool held_valid = true;
+		for (std::size_t i = 0; i < N; ++i) {held_valid &= (std::fabs(out[i]) < 1e-12);}
+		check(held_valid, "T6 Hold 输出 = 安全保持位");
 		// 恢复正常目标 → Ok
 		for (std::size_t i = 0; i < N; ++i) {tgt[i] = 0.3 * (static_cast<double>(i) + 1) / 7;}
 		const auto r = otg.update(tgt, out);
@@ -134,6 +138,36 @@ int main()
 		for (int i = 0; i < 10; ++i) {otg.update(tgt, out);}
 		check(otg.updateCount() == u0 + 10, "T10 update 计数");
 		check(otg.errorCount() == 0, "T10 零错误");
+	}
+
+	// ===== T11 健康指标 (二轮评审): duration + 速度/加速度访问器 =====
+	{
+		unistackbot_common::OtgStream<N> otg;
+		check(otg.init(DT, lim, 0.1), "T11 init");
+		std::array<double, N> q0{};
+		otg.reset(q0);
+		std::array<double, N> tgt{};
+		tgt[0] = 0.5;
+		std::array<double, N> out{};
+		double dur_mid = -1.0;
+		// 全程 ~0.92s (初期目标爬移 + jerk 限速): 600 拍确保到位
+		bool all_ok = true;
+		for (int i = 0; i < 600; ++i)
+		{
+			if (otg.update(tgt, out) != unistackbot_common::OtgStream<N>::UpdateResult::Ok)
+			{
+				all_ok = false;
+			}
+			if (i == 75) {dur_mid = otg.lastDuration();}
+		}
+		check(all_ok, "T11 全程 Ok");
+		check(otg.lastDuration() < 0.05, "T11 到位后剩余时长趋零");
+		check(dur_mid > 0.0, "T11 行进中剩余时长为正");
+		const auto v = otg.lastVelocity();
+		const auto a = otg.lastAcceleration();
+		bool fin = true;
+		for (std::size_t i = 0; i < N; ++i) {fin &= std::isfinite(v[i]) && std::isfinite(a[i]);}
+		check(fin, "T11 速度/加速度访问器有限");
 	}
 
 	std::printf("%s\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILED");
