@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <chrono>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -74,6 +75,8 @@ private:
 		const CartesianPose & meas, bool meas_ok);
 	// 激活末尾预热: 触达全部首触路径 (缺页/惰性绑定/线程私有 syscall), 见设计 §3
 	void warmup();
+	// WCET 记账 (每拍; 停用时终报 p50/p99/max)
+	void recordWcet(const std::chrono::steady_clock::time_point & t0);
 	// IK 解走安全层 (NaN 门 → 限位 clamp → 步长饱和), 两条路径共用 (流式/冷启动回灌)
 	bool applySolution(const double * q);
 	// worker 线程体 (第 3 步, 防线2): 低优线程跑 COLD_START, 结果经值通道回灌 update
@@ -115,6 +118,12 @@ private:
 	bool last_timed_out_{false};
 	double last_min_sigma_{-1.0};
 	std::string warned_frame_;           // 非本帧目标的单次警告去重
+
+	// ---- WCET 统计 (会话级, 停用时终报; rdtsc 级成本, 每拍两次时钟读取) ----
+	std::chrono::steady_clock::time_point update_enter_{};
+	double wcet_sum_us_{0.0}, wcet_max_us_{0.0};
+	std::vector<double> wcet_samples_;   // 会话样本 (停用时算分位; 500Hz×60s=3万, ~240KB 可接受)
+	uint64_t update_count_{0};
 
 	// ---- worker 冷启动 (防线2): 请求/结果都是值通道 (SpLatest POD), 两侧 seq 对账 ----
 	// 流式连续失败 cold_after_fails_ 拍 → update 发请求 (目标+实测种子); worker 自建

@@ -348,6 +348,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 controller_interface::return_type CartesianMotionController::update(
 	const rclcpp::Time & time, const rclcpp::Duration & /*period*/)
 {
+	const auto wcet_t0 = std::chrono::steady_clock::now();
 	const std::size_t n = cmd_.size();
 
 	// ① 实测关节态 (接口序 → 链序); 误差基准 = 实测 FK
@@ -389,6 +390,7 @@ controller_interface::return_type CartesianMotionController::update(
 		{
 			command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
 		}
+		recordWcet(wcet_t0);
 		publishStatusRt(time, mode, meas, meas_ok);
 		return controller_interface::return_type::OK;
 	}
@@ -408,6 +410,7 @@ controller_interface::return_type CartesianMotionController::update(
 		{
 			command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
 		}
+		recordWcet(wcet_t0);
 		publishStatusRt(time, mode, meas, true);
 		return controller_interface::return_type::OK;
 	}
@@ -420,6 +423,7 @@ controller_interface::return_type CartesianMotionController::update(
 		{
 			command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
 		}
+		recordWcet(wcet_t0);
 		publishStatusRt(time, mode, meas, true);
 		return controller_interface::return_type::OK;
 	}
@@ -494,11 +498,12 @@ controller_interface::return_type CartesianMotionController::update(
 		}
 	}
 
-	// ⑧ 写命令 + 状态发布 (DEGRADED 事实标签 + 1Hz 节流告警 + 恢复沿, 第 4 步)
+	// ⑧ 写命令 + 状态发布
 	for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
 	{
 		command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
 	}
+	recordWcet(wcet_t0);
 	publishStatusRt(time, mode, meas, true);
 	return controller_interface::return_type::OK;
 }
@@ -510,6 +515,17 @@ controller_interface::CallbackReturn CartesianMotionController::on_deactivate(co
 	{
 		worker_.join();   // 循环 2ms 一拍, join 有界
 	}
+	// WCET 终报 (第 5 步验收证据): 预算 2ms, 防线1 的生效证据
+	if (update_count_ > 0 && !wcet_samples_.empty())
+	{
+		std::vector<double> srt = wcet_samples_;
+		std::sort(srt.begin(), srt.end());
+		const double p50 = srt[srt.size() / 2];
+		const double p99 = srt[srt.size() * 99 / 100];
+		ULOG_INFO("cm: WCET 终报 %lu 拍: p50=%.1fµs p99=%.1fµs max=%.1fµs (预算 2000µs)",
+			static_cast<unsigned long>(update_count_), p50, p99, wcet_max_us_);
+	}
+	wcet_samples_.clear();
 	has_target_ = false;   // 重激活不追陈旧目标 (防跳变); 失败计数同步清零
 	consecutive_fail_ = 0;
 	give_up_ = false;
@@ -527,6 +543,21 @@ controller_interface::CallbackReturn CartesianMotionController::on_cleanup(const
 	ik_.reset();
 	fk_.reset();
 	return CallbackReturn::SUCCESS;
+}
+
+// WCET 记账: 每拍两次 steady_clock + 会话样本 (停用时算分位, 第 5 步验收工具)
+void CartesianMotionController::recordWcet(
+	const std::chrono::steady_clock::time_point & t0)
+{
+	const double us = std::chrono::duration<double, std::micro>(
+		std::chrono::steady_clock::now() - t0).count();
+	wcet_sum_us_ += us;
+	if (us > wcet_max_us_)
+	{
+		wcet_max_us_ = us;
+	}
+	wcet_samples_.push_back(us);
+	++update_count_;
 }
 
 // RT 周期状态发布: ~20Hz 节流, 消息锁外本地构建, tryPublish 单次拷贝 (零阻塞)

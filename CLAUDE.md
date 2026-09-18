@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-UniStackBot is a ROS 2 Humble workspace for a general-purpose, multi-morphology real-time robot control framework. It targets fixed-base arms, wheeled bases, quadrupeds, wheeled-arm humanoids, and bipedal humanoids from a single layered architecture. The first concrete robot is the **Piper arm**: URDF/Xacro description + the unified sim-control layer (`unistackbot_sim_control`, ros2_control hardware plugin with pluggable backends) + Gazebo integration. `unistackbot_controller` and `unistackbot_hardware` (real driver) are still skeletons (empty `placeholder.cpp`).
+UniStackBot is a ROS 2 Humble workspace for a general-purpose, multi-morphology real-time robot control framework. It targets fixed-base arms, wheeled bases, quadrupeds, wheeled-arm humanoids, and bipedal humanoids from a single layered architecture. The first concrete robot is the **Piper arm**: URDF/Xacro description + the unified sim-control layer (`unistackbot_sim_control`, ros2_control hardware plugin with pluggable backends) + Gazebo integration. `unistackbot_controller` now hosts the CartesianMotionController CM plugin (P1.5, IK servoing on the control loop); `unistackbot_hardware` (real driver) is still a skeleton.
 
 ## Build & Run
 
@@ -46,6 +46,8 @@ ros2 launch unistackbot_bringup control.launch.py robot:=piper   # robot:=xarm7 
 ros2 launch unistackbot_gazebo ign.launch.py robot:=piper        # gui:=true|false, use_rviz:=true 可选
 ```
 
+双控制器切换 (mock/gz 同款): CM 控制器默认以 inactive 注册, `ros2 control switch_controllers --deactivate joint_trajectory_controller --activate cartesian_motion_controller` 接管 (切回反向同理)。位姿目标: `ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped ...` (base 系); 曲线分析录包: `ros2 bag record -s mcap /joint_states /cartesian_motion_controller/{status,target} /tf`。
+
 All control/sim launches take a **required** `robot:=<机型>` argument (resolves `unistackbot_description/arms/<robot>/` + `unistackbot_bringup/config/<robot>_controllers.yaml`; unknown robots fail fast with the available list). Current robots: `piper` (6-DoF arm + gripper), `xarm7` (7-DoF arm, vendor: UFACTORY — see `arms/xarm7/README.md` + `arms/xarm7/ik_decision_card.md`). Command the arm via the JTC action (`/joint_trajectory_controller/follow_joint_trajectory`, type `control_msgs/action/FollowJointTrajectory`) over all the robot's joints. Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo, both green = pass.
 
 ## Architecture
@@ -54,7 +56,8 @@ Three layers orchestrated by `unistackbot_bringup`. `unistackbot_description` is
 
 ```
 unistackbot_bringup            → 顶层启动 / 参数编排
-unistackbot_controller         → 运动控制 / 运动学解算  (rclcpp, geometry_msgs, nav_msgs, tf2)
+unistackbot_controller         → 控制器集成 (CM 笛卡尔流式控制器) + 工具节点
+unistackbot_algorithm          → 纯算法库 (FK/IK/种子库, 零控制器依赖)
 unistackbot_hardware           → 硬件抽象 / 驱动通信     (hardware_interface, pluginlib, serial)
   ├─ unistackbot_sim_control  → 统一仿真控制层（kinematic 后端 + /sim_control 服务）
   └─ unistackbot_gazebo        → Gazebo 集成（world + launch）
@@ -66,7 +69,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 ### Package responsibilities
 
 - **unistackbot_bringup** — top-level launch + controller config. `control.launch.py robot:=<机型>` starts `robot_state_publisher`, a standalone `ros2_control_node`, and spawners for `joint_state_broadcaster` + `joint_trajectory_controller`; `robot` is required and no robot name is hardcoded anywhere in the launch. Controller config is per-robot: `config/<robot>_controllers.yaml` (update_rate 500 Hz; JTC with position command interface), shared by both the standalone node and Gazebo mode. `scripts/demo_motion.py` (`ros2 run`) sends a round-trip demo trajectory for **any** robot — it reads the joint list from the controller's params, limits/max_velocity from `robot_description`, and generates waypoints as range-percentages (no robot is hardcoded). Goals must list ALL the robot's joints (JTC rejects subsets unless `allow_partial_joints_goal`).
-- **unistackbot_controller** — 形态盲运动学库（2026-09-17 P1.3 落地）：`urdf_fk`（kdl_parser 建链 + FK/雅可比/限位/链序名，RT 零分配）+ `fk_tool` 命令行 + 单测/TF 对拍（`test/check_fk_tf.sh`，实测 ~4e-13）。`dls_ik` 数值 IK（Eigen SVD 阻尼伪逆 + boxed DLS 避限位 + SolveMode 流式/冷启动解耦 + 四分支代表种子 + `timeout_ns` 墙钟预算 + `min_sigma` 奇异遥测 + `NEAR_SINGULAR` 失败分类（σ 阈值 0.05 实测校准）；600 样本 Oracle 冷启动 99.5%）+ 可选**种子库**（`loadSeedLibrary` 读机型资产 `arms/<robot>/ik/seed_lib_<robot>.txt`，COLD_START 阶梯级0.5 分支封顶 top-6；预算档 1ms 96.2% / 2ms 96.9% / 5ms 98.3%；生成器 `test/gen_seed_library.py` + 增量 `test/seed_lib_incremental.py`，xarm7 冻结 v1.1=12k 条）+ `ik_tool` + `ik_demo_node`（RViz 交互拖动）。**换臂/换求解器的验证 SOP 见 `docs/ik_validation_playbook.md`（六阶段方法论 + 参数审计表 + 验收模板）**。OTG 门另立项。 Scope update (2026-09-17, 取代 2026-09-09 的"只放基础设施"裁决): this package hosts generic infrastructure controllers (OTG ingest gate for external commands — safety chain member — plus FK/IK from URDF and a plugin template) **and algorithm engineering** — 自研算法控制器落地本包（如 Cartesian IK 运动控制器）, 旧的"形态算法永不进本包/保持空壳"裁决废止。双通道接入语义不变, 仅对外部团队算法成立: external process (ingress+OTG) or CM plugin. Full boundary analysis: `docs/hardware_framework_design.md` §14.
+- **unistackbot_controller** — 形态盲运动学库（2026-09-17 P1.3 落地）：`urdf_fk`（kdl_parser 建链 + FK/雅可比/限位/链序名，RT 零分配）+ `fk_tool` 命令行 + 单测/TF 对拍（`test/check_fk_tf.sh`，实测 ~4e-13）。`dls_ik` 数值 IK（Eigen SVD 阻尼伪逆 + boxed DLS 避限位 + SolveMode 流式/冷启动解耦 + 四分支代表种子 + `timeout_ns` 墙钟预算 + `min_sigma` 奇异遥测 + `NEAR_SINGULAR` 失败分类（σ 阈值 0.05 实测校准）；600 样本 Oracle 冷启动 99.5%）+ 可选**种子库**（`loadSeedLibrary` 读机型资产 `arms/<robot>/ik/seed_lib_<robot>.txt`，COLD_START 阶梯级0.5 分支封顶 top-6；预算档 1ms 96.2% / 2ms 96.9% / 5ms 98.3%；生成器 `test/gen_seed_library.py` + 增量 `test/seed_lib_incremental.py`，xarm7 冻结 v1.1=12k 条）+ `ik_tool` + `ik_demo_node`（RViz 交互拖动）。**换臂/换求解器的验证 SOP 见 `docs/ik_validation_playbook.md`（六阶段方法论 + 参数审计表 + 验收模板）**。**CartesianMotionController（P1.5, 2026-09-18 双链验收）**: IK 上环宿主, `cartesian_motion_controller/` 自包含文件夹。契约: `~/target`(PoseStamped, reliable+KeepLast1, base系) / `~/control`(TRACKING/HOLD) / `~/status`(误差+min_sigma+结果码); 关节反馈=/joint_states 不新增。三防线: 流式 500µs 预算(实测 max 11µs) / worker 冷启动出环(SpLatest seq 对账回灌) / 安全层(限位+步长饱和, URDF max_velocity 单一事实源)。双机型 mock+gz E2E 绿, WCET p99 4.8µs, 隔离测量 update 零缺页; 已知边界: 折叠零位远目标需 JTC 预摆位或 worker(无库机型阶梯不足), 加速度界挂真机前(Ruckig 已选型), 策略归编排层。双控制器以 switch_controllers 切换(CM 默认 inactive 注册, ign.launch 同)。 OTG 门另立项。 Scope update (2026-09-17, 取代 2026-09-09 的"只放基础设施"裁决): this package hosts generic infrastructure controllers (OTG ingest gate for external commands — safety chain member — plus plugin template) **and algorithm engineering** — 自研算法控制器落地本包, 旧的"形态算法永不进本包/保持空壳"裁决废止。双通道接入语义不变, 仅对外部团队算法成立: external process (ingress+OTG) or CM plugin. Full boundary analysis: `docs/hardware_framework_design.md` §14.
 - **unistackbot_description** — URDF/Xacro, RViz config, `display.launch.py`.
 - **unistackbot_hardware** — real-driver plugin skeleton (empty `placeholder.cpp`); deps (`hardware_interface`, `pluginlib`) and the `device`/`baudrate`/`loop_rate` params in `piper_ros2_control.xacro` anticipate the real Piper CAN driver.
 - **unistackbot_sim_control** — 统一仿真控制层（ 对 ros2_control 提供统一插件接口，对内按后端分类）:

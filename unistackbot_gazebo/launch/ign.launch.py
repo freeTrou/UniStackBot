@@ -136,6 +136,14 @@ def _launch_setup(context):
             arguments=['joint_trajectory_controller', '--controller-manager', '/controller_manager'],
             output='screen',
         ),
+        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, 与 JTC 由 switch_controllers 切换)
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['cartesian_motion_controller', '--controller-manager',
+                       '/controller_manager', '--inactive'],
+            output='screen',
+        ),
     ]
 
     # 资源路径放首位: 先设环境再拉起后续进程

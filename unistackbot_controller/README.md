@@ -1,6 +1,6 @@
 # unistackbot_controller
 
-运动控制层：**形态盲运动学库**（URDF → KDL 链 → FK + 雅可比）+ 算法控制器骨架。库不含任何机型知识——机型只是 URDF 数据。
+控制器集成包：**CM 控制器插件**（笛卡尔流式运动控制）+ ROS 工具节点。算法库（urdf_fk/dls_ik/种子库）住 `unistackbot_algorithm`（2026-09-17 拆分），控制器只消费类型。
 
 ## 能力（P1.3, 2026-09-17）
 
@@ -11,8 +11,8 @@
 ## 验证
 
 ```bash
-bash unistackbot_controller/test/run_urdf_fk_test.sh xarm7 link7 link_base strict   # 单测 37 断言
-bash unistackbot_controller/test/run_urdf_fk_test.sh piper link6 base_link          # 机型无关性
+bash unistackbot_algorithm/urdf_fk/test/run_urdf_fk_test.sh xarm7 link7 link_base strict   # 单测 37 断言
+bash unistackbot_algorithm/urdf_fk/test/run_urdf_fk_test.sh piper link6 base_link          # 机型无关性
 bash test/check_fk_tf.sh xarm7                                                      # sim 对拍: TF vs FK 10 位姿, 实测 ~4e-13
 ```
 
@@ -26,16 +26,28 @@ TF 对拍原理：robot_state_publisher 是独立实现（kdl_parser 建树 + �
 
 **C 项收官（2026-09-17）**：冷启动 99.5%（600 样本 v2 Oracle，关节正推全姿态）。关键修复链：SolveMode 接口解耦（STREAMING 粘性 1.5 / COLD_START 无粘性+四分支代表种子）、boxed DLS（迭代 clamp 进线搜索，2/90→59/90）、Wampler λ、收敛邻域信任步。完整方法论与换臂 SOP 见 `docs/ik_validation_playbook.md`。迭代内 clamp 与线搜索组合、收敛后限位检查（绝不 clamp 伪装——FK 回代断言当场抓住）。
 
-## 算法控制器骨架（待 P1.4 后实例化）
+## CartesianMotionController（P1.5, 2026-09-18 双链验收）
 
-状态接口→`RobotFeedback`、`RobotCommand`→命令接口的薄适配骨架；OTG 摄入门（安全链）另立项。
+IK 算法上环的宿主：`cartesian_motion_controller/` 自包含文件夹（hpp+cpp+plugin xml）。
 
+**对外契约（冻结）**：
+- `~/target` `geometry_msgs/PoseStamped`（值通道，**reliable+KeepLast(1)**，base 系，入口四元数归一化）
+- `~/control` `unistackbot_interface/CartesianControl`（事件通道：TRACKING/HOLD，transient_local）
+- `~/status` `unistackbot_interface/msg/CartesianMotionStatus`（位姿误差/收敛/min_sigma/结果码，20Hz + INACTIVE 门闩）
+- 关节反馈不新增：`/joint_states`（JSB）是关节空间单一事实源
 
-运动控制 / 运动学解算层（rclcpp、geometry_msgs、nav_msgs、tf2）。
+**三条防线**：① update() 内流式 IK 墙钟预算（500µs，实测 max 11µs）② 连续失败 3 拍 → worker 低优线程 COLD_START（自建 UrdfFk+DlsIk 实例——KDL 不跨线程，种子库线程内加载即预热），结果经 SpLatest seq 对账回灌 ③ 安全层独立于 IK：NaN 门 → 限位 clamp → 步长饱和（URDF max_velocity/update_rate 单一事实源）。失败处置 = 逐拍事实码 + NEAR_SINGULAR 停烧预算（give_up，新目标自动重启）；无降级状态机（对标 MoveIt Servo，策略归编排层/OTG 门）。
 
-## 现状
+**激活预热**：四档日志（cached_tid 首syscall）+ 可达/不可达假解 + RealtimePublisher 首拍——首触成本全留非 RT 阶段。
 
-**空骨架**（`src/placeholder.cpp`），尚未开始实现。
+**验收数据**（双机型双链）：mock/gz E2E 收敛 5e-8；WCET p50 1.5µs / p99 4.8µs / max 87µs（预算 2000µs）；隔离测量 update 路径 12s **零缺页**；双模式长程 11/12（唯一失败=启动期 action 未就绪，竞态非控制）。
+
+**已知边界**：折叠零位直发远目标是流式域边界（σ≈0.002 深奇异）——JTC 预摆位后一切正常，或等 worker 冷启动（piper 无种子库时阶梯可能不足）；加速度界（一行）挂真机前清单（Ruckig 已选型）；策略（锁存/联动/看门狗动作）挂编排层账。
+
+## 工具节点
+
+- `fk_tool` / `ik_tool`：算法调试 CLI
+- `ik_demo_node`：RViz 拖动演示（走 JTC；CM 就绪后可改发 `~/target`）
 
 ## 范围裁决（2026-09-17, 取代 2026-09-09 裁决）
 
