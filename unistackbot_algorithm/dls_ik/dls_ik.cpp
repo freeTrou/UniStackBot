@@ -1,4 +1,4 @@
-#include "unistackbot_controller/dls_ik.hpp"
+#include "dls_ik/dls_ik.hpp"
 
 #include "ulog/ulog.hpp"
 
@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <random>
 
-namespace unistackbot_controller
+namespace unistackbot_algorithm
 {
 
 namespace
@@ -724,4 +724,4 @@ IkResult DlsIk::solve(
 	return finish(IkResult::ITERATION_LIMIT);
 }
 
-}  // namespace unistackbot_controller
+}  // namespace unistackbot_algorithm

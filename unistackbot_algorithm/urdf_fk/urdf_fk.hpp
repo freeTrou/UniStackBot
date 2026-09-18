@@ -1,5 +1,5 @@
-#ifndef UNISTACKBOT_CONTROLLER__URDF_FK_HPP_
-#define UNISTACKBOT_CONTROLLER__URDF_FK_HPP_
+#ifndef UNISTACKBOT_ALGORITHM__URDF_FK_HPP_
+#define UNISTACKBOT_ALGORITHM__URDF_FK_HPP_
 
 #include <memory>
 #include <string>
@@ -10,7 +10,7 @@
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainjnttojacsolver.hpp>
 
-namespace unistackbot_controller
+namespace unistackbot_algorithm
 {
 
 /*
@@ -91,5 +91,5 @@ private:
 	double max_reach_{0.0};   // 链长上界 (init 时累计)
 };
 
-}  // namespace unistackbot_controller
-#endif  // UNISTACKBOT_CONTROLLER__URDF_FK_HPP_
+}  // namespace unistackbot_algorithm
+#endif  // UNISTACKBOT_ALGORITHM__URDF_FK_HPP_

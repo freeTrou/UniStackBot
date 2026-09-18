@@ -20,16 +20,16 @@
 #include <string>
 #include <vector>
 
-#include "unistackbot_controller/dls_ik.hpp"
+#include "dls_ik/dls_ik.hpp"
 
-using unistackbot_controller::CartesianPose;
-using unistackbot_controller::DlsIk;
-using unistackbot_controller::DlsIkConfig;
-using unistackbot_controller::DlsIkStats;
-using unistackbot_controller::IkResult;
-using unistackbot_controller::RedundancyPreference;
-using unistackbot_controller::RedundancyType;
-using unistackbot_controller::UrdfFk;
+using unistackbot_algorithm::CartesianPose;
+using unistackbot_algorithm::DlsIk;
+using unistackbot_algorithm::DlsIkConfig;
+using unistackbot_algorithm::DlsIkStats;
+using unistackbot_algorithm::IkResult;
+using unistackbot_algorithm::RedundancyPreference;
+using unistackbot_algorithm::RedundancyType;
+using unistackbot_algorithm::UrdfFk;
 
 static int g_pass = 0, g_fail = 0;
 #define CHECK(cond) do { if (cond) { ++g_pass; } else { ++g_fail; std::printf("FAIL: %s\n", #cond); } } while (0)
@@ -149,7 +149,7 @@ int main(int argc, char ** argv)
 		for (unsigned k = 0; k < n; ++k) {q[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
 		DlsIkStats st;
 		const IkResult r = ik.solve(e.pose, q, preserve, q, &st,
-			unistackbot_controller::SolveMode::COLD_START);
+			unistackbot_algorithm::SolveMode::COLD_START);
 		if (e.reachable)
 		{
 			++reach_total;
@@ -251,7 +251,7 @@ int main(int argc, char ** argv)
 				q = prev_q;
 			}
 			const IkResult r = ik.solve(p, q, preserve, q, nullptr,
-				unistackbot_controller::SolveMode::STREAMING);
+				unistackbot_algorithm::SolveMode::STREAMING);
 			if (r != IkResult::OK)
 			{
 				++consec_fail;
@@ -335,7 +335,7 @@ int main(int argc, char ** argv)
 			++total;
 			const auto t0 = std::chrono::steady_clock::now();
 			const IkResult r = ik.solve(e.pose, q, preserve, q, nullptr,
-				unistackbot_controller::SolveMode::COLD_START);
+				unistackbot_algorithm::SolveMode::COLD_START);
 			const auto t1 = std::chrono::steady_clock::now();
 			if (r == IkResult::OK) {++ok;}
 			times.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
@@ -368,7 +368,7 @@ int main(int argc, char ** argv)
 			std::vector<double> sentinel(n, -7.0), out = sentinel;
 			DlsIkStats st;
 			const IkResult r = ik.solve(p, seed, preserve, out, &st,
-				unistackbot_controller::SolveMode::COLD_START);
+				unistackbot_algorithm::SolveMode::COLD_START);
 			CHECK(r != IkResult::OK);
 			CHECK(st.timed_out);
 			bool unchanged = true;
@@ -414,7 +414,7 @@ int main(int argc, char ** argv)
 				std::vector<double> q = seed;
 				DlsIkStats st;
 				const IkResult r = ik.solve(e.pose, seed, preserve, q, &st,
-					unistackbot_controller::SolveMode::COLD_START);
+					unistackbot_algorithm::SolveMode::COLD_START);
 				times.push_back(st.solve_us);
 				max_us = std::max(max_us, st.solve_us);
 				if (st.timed_out) {++n_timeout;}
@@ -470,7 +470,7 @@ int main(int argc, char ** argv)
 				}
 				DlsIkStats st;
 				const IkResult r = ik.solve(p, q, preserve, q, &st,
-					unistackbot_controller::SolveMode::STREAMING);
+					unistackbot_algorithm::SolveMode::STREAMING);
 				max_us = std::max(max_us, st.solve_us);
 				if (r != IkResult::OK) {continue;}
 				if (!prev_q.empty())

@@ -23,8 +23,8 @@ from scipy.spatial.transform import Rotation as Rrot
 ROBOT = sys.argv[1] if len(sys.argv) > 1 else "xarm7"
 MAX_ADD = int(sys.argv[2]) if len(sys.argv) > 2 else 4000
 URDF = f"/tmp/verify_{ROBOT}.urdf"
-PKG_ROOT = __file__.rsplit("/", 2)[0]
-LIB = f"{PKG_ROOT}/../unistackbot_description/arms/{ROBOT}/ik/seed_lib_{ROBOT}.txt"
+REPO_ROOT = __file__.rsplit("/", 3)[0]
+LIB = f"{REPO_ROOT}/unistackbot_description/arms/{ROBOT}/ik/seed_lib_{ROBOT}.txt"
 TIP, BASE = "link7", "link_base"
 VOX = 0.03
 GAP = 0.05          # 加密间隔 (组合度量): dp + 0.35*(1-|qd|) > 0.05 才补

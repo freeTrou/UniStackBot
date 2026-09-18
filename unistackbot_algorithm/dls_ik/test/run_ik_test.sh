@@ -4,9 +4,9 @@
 set -euo pipefail
 ROBOT="${1:-xarm7}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKG_ROOT="$(dirname "$SCRIPT_DIR")"
-REPO_ROOT="$(dirname "$PKG_ROOT")"
-WS_ROOT="$(dirname "$(dirname "$REPO_ROOT")")"
+PKG_ROOT="$(dirname "$SCRIPT_DIR")"            # dls_ik/ 算法文件夹
+ALGO_PKG="$(dirname "$PKG_ROOT")"              # unistackbot_algorithm 包根 (include 基)
+REPO_ROOT="$(dirname "$ALGO_PKG")"             # 仓库根
 
 URDF="/tmp/verify_${ROBOT}.urdf"
 ORACLE="$PKG_ROOT/test/ik_oracle_${ROBOT}.txt"
@@ -15,11 +15,11 @@ ORACLE="$PKG_ROOT/test/ik_oracle_${ROBOT}.txt"
 
 echo "== 编译 =="
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
-	-I"$PKG_ROOT/include" \
-	-I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser -I/opt/ros/humble/include -I"$REPO_ROOT/unistackbot_interface/include" -I"$REPO_ROOT/unistackbot_common" \
+	-I"$ALGO_PKG" \
+	-I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser -I"$REPO_ROOT/unistackbot_interface/include" -I"$REPO_ROOT/unistackbot_common" \
 	"$PKG_ROOT/test_dls_ik.cpp" \
-	"$PKG_ROOT/src/dls_ik.cpp" \
-	"$PKG_ROOT/src/urdf_fk.cpp" \
+	"$PKG_ROOT/dls_ik.cpp" \
+	"$ALGO_PKG/urdf_fk/urdf_fk.cpp" \
 	-L/opt/ros/humble/lib -lkdl_parser -lorocos-kdl -lurdfdom_model -Wl,-rpath,/opt/ros/humble/lib \
 	-o /tmp/test_dls_ik
 

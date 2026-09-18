@@ -1,5 +1,5 @@
-#ifndef UNISTACKBOT_CONTROLLER__DLS_IK_HPP_
-#define UNISTACKBOT_CONTROLLER__DLS_IK_HPP_
+#ifndef UNISTACKBOT_ALGORITHM__DLS_IK_HPP_
+#define UNISTACKBOT_ALGORITHM__DLS_IK_HPP_
 
 #include <chrono>
 #include <cstdint>
@@ -10,11 +10,11 @@
 
 #include <Eigen/Dense>
 
-#include "unistackbot_controller/urdf_fk.hpp"
+#include "urdf_fk/urdf_fk.hpp"
 #include "unistackbot_interface/ik_result.hpp"
 #include "unistackbot_interface/robot_command.hpp"   // RedundancyPreference/RedundancyType
 
-namespace unistackbot_controller
+namespace unistackbot_algorithm
 {
 
 // 契约类型来自 interface 包 (跨层共享); 本命名空间内直接使用
@@ -187,5 +187,5 @@ private:
 	mutable std::vector<std::pair<double, std::size_t>> lib_scratch_;
 };
 
-}  // namespace unistackbot_controller
-#endif  // UNISTACKBOT_CONTROLLER__DLS_IK_HPP_
+}  // namespace unistackbot_algorithm
+#endif  // UNISTACKBOT_ALGORITHM__DLS_IK_HPP_

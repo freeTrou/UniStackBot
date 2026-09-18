@@ -3,20 +3,22 @@
 <package format="3">
   <name>unistackbot_controller</name>
   <version>0.1.0</version>
-  <description>运动控制层：形态盲运动学库（URDF FK+雅可比）+ 算法控制器插件模板（骨架）。</description>
+  <description>控制器集成包：笛卡尔流式运动控制器（CM 插件）+ IK 工具与演示节点。算法库见 unistackbot_algorithm。</description>
   <maintainer email="todo@todo.todo">UniStackBot</maintainer>
   <license>TODO: Declaration of license</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
-  <depend>orocos_kdl_vendor</depend>
-  <depend>orocos_kdl</depend>
-  <depend>urdf</depend>
-  <depend>urdfdom</depend>
-  <depend>kdl_parser</depend>
+  <depend>controller_interface</depend>
+  <depend>realtime_tools</depend>
+  <depend>pluginlib</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>tinyxml2_vendor</depend>
+  <depend>geometry_msgs</depend>
   <depend>eigen</depend>
   <depend>unistackbot_interface</depend>
+  <depend>unistackbot_algorithm</depend>
   <depend>interactive_markers</depend>
   <depend>visualization_msgs</depend>
   <depend>rclcpp_action</depend>
@@ -28,5 +30,7 @@
 
   <export>
     <build_type>ament_cmake</build_type>
+    <!-- pluginlib 发现走 package.xml export (与 sim_control 同款机制); 路径相对包 share 根 -->
+    <pluginlib plugin="cartesian_motion_controller/cartesian_motion_controller.xml" />
   </export>
 </package>

@@ -17,7 +17,7 @@
 #include "rcl_interfaces/srv/get_parameters.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-#include "unistackbot_controller/urdf_fk.hpp"
+#include "urdf_fk/urdf_fk.hpp"
 
 int main(int argc, char ** argv)
 {
@@ -96,7 +96,7 @@ int main(int argc, char ** argv)
 
 	// 先 init 拿链序关节名, 再把用户给的 j=值 按链序重排
 	const std::string urdf_text = urdf_param.string_value;
-	unistackbot_controller::UrdfFk fk;
+	unistackbot_algorithm::UrdfFk fk;
 	std::string msg;
 	if (!fk.init(urdf_text, "link_base", tip, msg))
 	{
@@ -128,7 +128,7 @@ int main(int argc, char ** argv)
 		return 1;
 	}
 
-	unistackbot_controller::CartesianPose p;
+	unistackbot_algorithm::CartesianPose p;
 	if (!fk.fk(q, p))
 	{
 		std::fprintf(stderr, "FK 失败: 关节数 %zu vs %u\n", q.size(), fk.jointCount());

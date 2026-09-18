@@ -1,0 +1,7 @@
+<library path="cartesian_motion_controller">
+  <class name="unistackbot_controller/CartesianMotionController"
+         type="unistackbot_controller::CartesianMotionController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Cartesian streaming IK motion controller (unistackbot P1.5: dls_ik 上环宿主, 流式伺服 + 安全饱和 + 降级)</description>
+  </class>
+</library>

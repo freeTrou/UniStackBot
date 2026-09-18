@@ -1,20 +1,21 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>unistackbot_interface</name>
+  <name>unistackbot_algorithm</name>
   <version>0.1.0</version>
-  <description>UniStackBot 公共接口定义：跨包/跨仓库共享的消息、服务与契约类型（单一事实源）。</description>
+  <description>纯算法库（2026-09-17 自 unistackbot_controller 拆出）：形态盲运动学解算（URDF→FK/雅可比）+ 数值 IK + 种子库工具链。零控制器生态依赖，可独立复用。</description>
   <maintainer email="todo@todo.todo">UniStackBot</maintainer>
   <license>TODO: Declaration of license</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <buildtool_depend>rosidl_default_generators</buildtool_depend>
 
-  <depend>std_msgs</depend>
-  <depend>geometry_msgs</depend>
-
-  <exec_depend>rosidl_default_runtime</exec_depend>
-  <member_of_group>rosidl_interface_packages</member_of_group>
+  <depend>orocos_kdl_vendor</depend>
+  <depend>orocos_kdl</depend>
+  <depend>urdf</depend>
+  <depend>urdfdom</depend>
+  <depend>kdl_parser</depend>
+  <depend>eigen</depend>
+  <depend>unistackbot_interface</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

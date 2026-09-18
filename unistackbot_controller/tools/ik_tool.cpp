@@ -15,7 +15,7 @@
 #include "rcl_interfaces/srv/get_parameters.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-#include "unistackbot_controller/dls_ik.hpp"
+#include "dls_ik/dls_ik.hpp"
 
 int main(int argc, char ** argv)
 {
@@ -80,7 +80,7 @@ int main(int argc, char ** argv)
 		return 1;
 	}
 
-	unistackbot_controller::UrdfFk fk;
+	unistackbot_algorithm::UrdfFk fk;
 	std::string msg;
 	if (!fk.init(urdf_text, "link_base", tip, msg))
 	{
@@ -88,14 +88,14 @@ int main(int argc, char ** argv)
 		return 1;
 	}
 
-	unistackbot_controller::DlsIk ik;
+	unistackbot_algorithm::DlsIk ik;
 	if (!ik.init(&fk, msg))
 	{
 		std::fprintf(stderr, "%s\n", msg.c_str());
 		return 1;
 	}
 
-	unistackbot_controller::CartesianPose target;
+	unistackbot_algorithm::CartesianPose target;
 	target.x = pos[0]; target.y = pos[1]; target.z = pos[2];
 	target.qw = quat[0]; target.qx = quat[1]; target.qy = quat[2]; target.qz = quat[3];
 
@@ -107,16 +107,16 @@ int main(int argc, char ** argv)
 		seed[i] = (fk.qMin()[i] + fk.qMax()[i]) / 2.0;
 	}
 
-	unistackbot_controller::RedundancyPreference pre;
+	unistackbot_algorithm::RedundancyPreference pre;
 	std::vector<double> q;
 	const auto r = ik.solve(target, seed, pre, q);
-	if (r != unistackbot_controller::IkResult::OK)
+	if (r != unistackbot_algorithm::IkResult::OK)
 	{
 		std::fprintf(stderr, "求解失败: %s\n", unistackbot_interface::ik_result_message(r));
 		return 1;
 	}
 
-	unistackbot_controller::CartesianPose back;
+	unistackbot_algorithm::CartesianPose back;
 	fk.fk(q, back);
 	const double err = std::sqrt(std::pow(back.x - target.x, 2) + std::pow(back.y - target.y, 2) +
 		std::pow(back.z - target.z, 2));

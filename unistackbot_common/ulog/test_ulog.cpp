@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <fstream>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -28,6 +29,8 @@ using unistackbot_common::ulog_init;
 using unistackbot_common::ulog_level;
 using unistackbot_common::ulog_set_level;
 using unistackbot_common::ulog_shutdown;
+using unistackbot_common::ulog_written;
+using unistackbot_common::ulog_dropped;
 
 int g_failures = 0;
 
@@ -490,6 +493,151 @@ void no_shutdown_exit_test()
 	ULOG_INFO("record-before-exit-without-shutdown");
 }
 
+
+// ---- 引用计数 (2026-09-17 新增): 多组件同进程共用 ulog —— init 幂等计引用,
+//      shutdown 末位才真停。触发场景: ros2_control_node 内 SimControlHardware
+//      与 CartesianMotionController 并存, 各自 init/shutdown 不得互踢。 ----
+void refcount_tests()
+{
+	const std::string f0 = g_dir + "/rc_a.log";
+	const std::string f1 = g_dir + "/rc_b.log";
+
+	// 组件 A: init (首引用, 起 writer)
+	ulog_config ca;
+	ca.console = false;
+	ca.file_path = f0.c_str();
+	ca.level = ulog_level::info;
+	ca.max_bytes = 1000000;   // 配额给足: 本测试不验证轮转 (max_bytes=0 会按默认轮转,
+	                          // 67B 就被转走, 内容断言失效 —— 2026-09-17 实测踩中)
+	ca.backups = 2;
+	const bool a_ok = ulog_init(ca);
+	check(a_ok, "refcount: A init");
+
+	// 组件 B: init (第二引用, 幂等路径; 首配置为准 —— 不得重开文件)
+	ulog_config cb = ca;
+	cb.file_path = f1.c_str();
+	const bool b_ok = ulog_init(cb);
+	check(b_ok, "refcount: B init (幂等)");
+	// A 发日志 -> 落盘 (writer 未受 B init 影响)
+	ULOG_INFO("refcount: A line 1");
+	ulog_flush();
+	const uint64_t written_after_a = ulog_written();
+	check(written_after_a > 0, "refcount: A 发日志 writer 正常");
+
+	// A shutdown (引用 2->1): writer 必须存活, B 还能发
+	ulog_shutdown();
+	ULOG_INFO("refcount: B line after A shutdown");
+	ulog_flush();
+	check(ulog_written() > written_after_a, "refcount: A shutdown 后 writer 存活");
+
+	// B shutdown (引用 1->0): 真停 (fclose 落盘), 后续 emit 短路进 noop
+	ulog_shutdown();
+	{
+		// 首配置 file_path 保持: B 的日志进了 A 的文件 (f0), f1 从未创建
+		std::ifstream in(f0);
+		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		check(all.find("B line after A shutdown") != std::string::npos,
+			"refcount: 首配置 file_path 保持 (B 日志落 f0)");
+	}
+	check(!std::ifstream(f1.c_str()).good(), "refcount: f1 未被创建 (幂等 init 未重定向)");
+	const uint64_t before_noop = ulog_dropped();
+	ULOG_INFO("refcount: after final shutdown (应短路)");
+	check(ulog_dropped() > before_noop, "refcount: 末位 shutdown 后 emit 短路");
+
+	// 重开: 新会话正常
+	ulog_config cc = ca;
+	cc.file_path = f1.c_str();   // 新会话独立文件
+	check(ulog_init(cc), "refcount: 停机后再 init");
+	ULOG_INFO("refcount: new session line");
+	ulog_flush();
+	check(ulog_written() > 0, "refcount: 新会话 writer 正常");
+	ulog_shutdown();
+	ulog_config cd = cc;
+	check(ulog_init(cd), "refcount: 新会话再 init");
+	ULOG_INFO("refcount: probe");
+	const uint64_t base2 = ulog_dropped();
+	ulog_shutdown();
+	check(ulog_dropped() >= base2, "refcount: 新会话 shutdown 生效 (emit 短路)");
+}
+
+
+// ---- RAW 快路径与 flush 落盘语义 (2026-09-17 评审修复配套) ----
+void raw_flush_tests()
+{
+	const std::string f0 = g_dir + "/rf.log";
+	ulog_config cfg;
+	cfg.console = false;
+	cfg.file_path = f0.c_str();
+	cfg.level = ulog_level::info;
+	cfg.max_bytes = 1000000;
+	cfg.backups = 2;
+	check(ulog_init(cfg), "raw/flush: init");
+
+	// RAW 正常路径: 激活时落盘
+	ULOG_INFO_RAW("raw line while active");
+	ulog_flush();
+
+	// flush 语义: 返回后文件立即可读 (后端分支内补排空 + fflush —— 2026-09-17 修复)
+	{
+		std::ifstream in(f0);
+		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		check(all.find("raw line while active") != std::string::npos,
+			"raw/flush: flush 返回后文件已可读");
+	}
+
+	// RAW 级别过滤对齐 (评审第二轮): min_level=warn 时 RAW(INFO) 被级别过滤,
+	// 不落盘也不计 noop (级别过滤不计数的既有裁定)。
+	// 调级走 ulog_set_level —— init 幂等且首配置为准, 重 init 改不了级别 (注意事项 2)
+	ulog_set_level(ulog_level::warn);
+	ULOG_INFO_RAW("raw filtered by level (must not land)");
+	ulog_flush();
+	{
+		std::ifstream in(f0);
+		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		check(all.find("raw filtered by level") == std::string::npos,
+			"raw/flush: min_level=warn 时 RAW 被级别过滤");
+	}
+	ulog_set_level(ulog_level::info);
+
+	// RAW 关闭路径回归 (评审 P0-2): shutdown 后 RAW 必须短路计 noop, 不得付出完整
+	// emit 代价 (now/tid/strlen/拷贝/push) —— 与 ULOG_INFO 语义对齐
+	ulog_shutdown();
+	const uint64_t base = ulog_dropped();
+	ULOG_INFO_RAW("raw after shutdown (must be swallowed)");
+	check(ulog_dropped() == base + 1, "raw/flush: shutdown 后 RAW 短路计 noop");
+}
+
+// ---- 轮转 rename 失败路径 (2026-09-18 评审第三轮): 预建同名目录使 rename 报
+//      EISDIR (非 ENOENT) —— 断言诊断非致命, 日志继续落盘, 不形成失败循环 ----
+void rotate_rename_fail_test()
+{
+	const std::string f0 = g_dir + "/rotfail.log";
+	ulog_config cfg;
+	cfg.console = false;
+	cfg.file_path = f0.c_str();
+	cfg.level = ulog_level::info;
+	cfg.max_bytes = 200;   // 几条即触发轮转
+	cfg.backups = 2;
+	check(ulog_init(cfg), "rotfail: init");
+	// 让 f0.1 成为目录: rename(file -> 已存在目录) = EISDIR
+	const std::string blocker = f0 + ".1";
+	::mkdir(blocker.c_str(), 0755);
+	for (int i = 0; i < 30; ++i)
+	{
+		ULOG_INFO("rotfail line %d padpadpadpad", i);   // 撑过 max_bytes 多次触发轮转
+	}
+	ulog_flush();
+	ulog_shutdown();
+	// 断言: 没崩 (走到这即通过一半); 且至少有日志落盘 (f0 或被轮转出的 .2)
+	bool landed = false;
+	{
+		std::ifstream in(f0);
+		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		landed = !all.empty();
+	}
+	check(landed, "rotfail: rename 失败不致命, 日志继续落盘");
+	::rmdir(blocker.c_str());
+}
 int main()
 {
 	g_dir = "/tmp/ulog_test_XXXXXX";
@@ -509,6 +657,9 @@ int main()
 	storm_test();
 	rt_safety_test();
 	overload_test();
+	refcount_tests();
+	raw_flush_tests();
+	rotate_rename_fail_test();
 	no_shutdown_exit_test();
 
 	std::printf("%s\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILED");

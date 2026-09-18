@@ -8,6 +8,20 @@ controller_manager:
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    cartesian_motion_controller:
+      type: unistackbot_controller/CartesianMotionController
+
+cartesian_motion_controller:
+  ros__parameters:
+    base_link: link_base
+    tip_link: link7
+    seed_library_package: unistackbot_description
+    seed_library_relpath: arms/xarm7/ik/seed_lib_xarm7.txt
+    update_timeout_ns: 500000
+    cold_timeout_ns: 50000000
+    max_cart_step: 0.02
+    degraded_n: 50
+
 joint_trajectory_controller:
   ros__parameters:
     joints:

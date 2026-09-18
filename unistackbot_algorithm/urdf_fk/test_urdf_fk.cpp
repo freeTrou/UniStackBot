@@ -14,10 +14,10 @@
 #include <new>
 #include <string>
 
-#include "unistackbot_controller/urdf_fk.hpp"
+#include "urdf_fk/urdf_fk.hpp"
 
-using unistackbot_controller::CartesianPose;
-using unistackbot_controller::UrdfFk;
+using unistackbot_algorithm::CartesianPose;
+using unistackbot_algorithm::UrdfFk;
 
 static int g_pass = 0;
 static int g_fail = 0;

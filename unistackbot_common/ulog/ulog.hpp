@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <cstdarg>
 #include <cstdint>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -25,6 +26,16 @@
 // 队列容量 (2 的幂): 默认 8192 条 ≈ 1.2MB; 过载测试可用 -DULOG_QUEUE_CAPACITY=64 缩小
 #ifndef ULOG_QUEUE_CAPACITY
 #define ULOG_QUEUE_CAPACITY 8192
+#endif
+
+// 单例符号可见性硬化 (2026-09-17 评审 P0 实验): 单例静态依赖 inline 符号跨 .so
+// 合并 —— 默认可见性下成立; 使用方 -fvisibility=hidden 会把符号藏掉导致各 .so
+// 一份实例 (双后端+文件交错, dlopen 实验实测)。对单例入口显式 default 导出,
+// hidden 旗标下依然合并; -Bsymbolic 仍不可用 (自绑定, 见 README 注意事项 8)。
+#if defined(__GNUC__) || defined(__clang__)
+#define ULOG_EXPORT __attribute__((visibility("default")))
+#else
+#define ULOG_EXPORT
 #endif
 
 namespace unistackbot_common
@@ -64,16 +75,16 @@ struct ULogRecord
 static_assert(sizeof(ULogRecord) == 152, "record layout is part of the contract");
 static_assert(std::is_trivially_copyable_v<ULogRecord>, "ULogRecord must stay trivially copyable");
 
-inline MpscRing<ULogRecord, ULOG_QUEUE_CAPACITY> & ring()
+ULOG_EXPORT inline MpscRing<ULogRecord, ULOG_QUEUE_CAPACITY> & ring()
 {
 	static MpscRing<ULogRecord, ULOG_QUEUE_CAPACITY> r;
 	return r;
 }
 
 // 前端状态: active=false (未 init/已 shutdown) 时宏直接短路 —— 连格式化都不做, 零成本
-inline std::atomic<bool> active{false};
-inline std::atomic<int> min_level{static_cast<int>(ulog_level::info)};
-inline std::atomic<uint64_t> noop_dropped{0};   // active=false 期间被短路的条数
+ULOG_EXPORT inline std::atomic<bool> active{false};
+ULOG_EXPORT inline std::atomic<int> min_level{static_cast<int>(ulog_level::info)};
+ULOG_EXPORT inline std::atomic<uint64_t> noop_dropped{0};   // active=false 期间被短路的条数
 
 inline uint64_t now_ns() noexcept
 {
@@ -171,27 +182,53 @@ private:
 		{
 			std::snprintf(old_path, sizeof(old_path), "%s.%d", path.c_str(), i);
 			std::snprintf(new_path, sizeof(new_path), "%s.%d", path.c_str(), i + 1);
-			::rename(old_path, new_path);
+			if (::rename(old_path, new_path) != 0 && errno != ENOENT)
+			{
+				// ENOENT = 首次轮转时 log.N 尚不存在, 常态; 其余失败 (权限/磁盘)
+				// 直写 stderr 诊断 (不得用 ULOG 自身 —— 递归), 轮转尽力继续
+				std::fprintf(stderr, "ulog: 轮转 rename 失败 %s -> %s: %s\n",
+					old_path, new_path, std::strerror(errno));
+			}
 		}
 		std::snprintf(new_path, sizeof(new_path), "%s.1", path.c_str());
-		::rename(path.c_str(), new_path);
+		if (::rename(path.c_str(), new_path) != 0 && errno != ENOENT)
+		{
+			std::fprintf(stderr, "ulog: 轮转 rename 失败 %s: %s\n",
+				path.c_str(), std::strerror(errno));
+		}
 		file = std::fopen(path.c_str(), "a");
+		if (file == nullptr)
+		{
+			// 直接 stderr (不得用 ULOG 自身 —— 递归)。file 置空后 write_one 跳过
+			// 文件写, file_bytes 不再累计, 不会形成"失败循环重触发 rotate"
+			std::fprintf(stderr, "ulog: rotate 后重开失败: %s\n", path.c_str());
+		}
 		file_bytes = 0;
 	}
 
 	void write_one(const ULogRecord & rec)
 	{
 		static const char * kLevelName[] = {"DEBUG", "INFO", "WARN", "ERROR"};
+		const char * lvname = (rec.level < 4) ? kLevelName[rec.level] : "UNKNOWN";
 		char line[256];
 		const time_t sec = static_cast<time_t>(rec.ts_ns / 1000000000ULL);
 		const unsigned msec = static_cast<unsigned>((rec.ts_ns % 1000000000ULL) / 1000000ULL);
-		std::tm tm_buf;
-		localtime_r(&sec, &tm_buf);
-		char stamp[32];
-		const size_t sl = std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &tm_buf);
+		// 同秒时间戳缓存 (2026-09-17 评审 P1): localtime_r 内部涉时区数据访问,
+		// 每条调用是高 TPS 下的后端瓶颈 —— 秒不变则复用格式化结果
+		static time_t last_sec = -1;   // -1 起: 首条必更新缓存 (sec==0 边界)
+		static char last_stamp[32];
+		static size_t last_sl = 0;
+		if (sec != last_sec)
+		{
+			std::tm tm_buf;
+			localtime_r(&sec, &tm_buf);
+			last_sl = std::strftime(last_stamp, sizeof(last_stamp), "%Y-%m-%d %H:%M:%S", &tm_buf);
+			last_sec = sec;
+		}
+		const size_t sl = last_sl;
 		const int len = std::snprintf(line, sizeof(line), "[%.*s.%03u] [%s] %.*s\n",
-			static_cast<int>(sl), stamp, msec,
-			kLevelName[rec.level & 3u],
+			static_cast<int>(sl), last_stamp, msec,
+			lvname,   // 越界显式判 "UNKNOWN" (加新级别时同步扩表)
 			static_cast<int>(rec.msg_len), rec.msg);
 		if (len <= 0)
 		{
@@ -230,7 +267,7 @@ private:
 		}
 	}
 
-	public:
+public:
 	void run()
 	{
 		prctl(PR_SET_NAME, "ulog", 0, 0, 0);
@@ -251,11 +288,21 @@ private:
 			}
 			// flush 请求处理: I/O 在锁外 (持锁做 fflush 是反模式, 也触发 TSAN 报告),
 			// 确认与 notify 在锁内 (防丢失唤醒的标准姿势)
-			if (flush_req_gen.load(std::memory_order_relaxed) != flush_done_gen.load(std::memory_order_relaxed))
+			// 代际快照先行 (2026-09-17 评审修复): 声明完成的 must 是快照值 ——
+			// 若 store 前又有新 flush 请求到达, 其 waiters 留给下一轮循环
+			// (原实现 store(flush_req_gen.load()) 双读竞态, 新请求被过早确认)
+			const uint64_t flush_req_snapshot = flush_req_gen.load(std::memory_order_acquire);
+			if (flush_req_snapshot != flush_done_gen.load(std::memory_order_acquire))
 			{
+				// 排空在快照之后补一轮: 满足"排空当前环内全部记录并落盘"的文档语义
+				ULogRecord pending;
+				while (ring().pop(pending))
+				{
+					write_one(pending);
+				}
 				flush_sinks();
 				std::lock_guard<std::mutex> lk(flush_mtx);
-				flush_done_gen.store(flush_req_gen.load(std::memory_order_relaxed), std::memory_order_relaxed);
+				flush_done_gen.store(flush_req_snapshot, std::memory_order_relaxed);
 				flush_cv.notify_all();
 			}
 			const auto now = std::chrono::steady_clock::now();
@@ -279,10 +326,25 @@ private:
 	}
 };
 
-inline ULog & writer()
+ULOG_EXPORT inline ULog & writer()
 {
 	static ULog instance;
 	return instance;
+}
+
+// 组件级引用计数 (2026-09-17): 同进程多个插件/组件共用 ulog 单例 —— 各自
+// init/shutdown 不得互踢 (实测场景: ros2_control_node 内 SimControlHardware 与
+// CartesianMotionController 并存)。first init 起 writer, 末位 shutdown 才停。
+ULOG_EXPORT inline std::mutex & ref_mutex()
+{
+	static std::mutex m;
+	return m;
+}
+
+ULOG_EXPORT inline int & ref_count()
+{
+	static int n = 0;
+	return n;
 }
 
 }  // namespace ulog_detail
@@ -291,12 +353,12 @@ inline ULog & writer()
 // true = 全部就绪。必须在任何日志调用之前完成 (单线程装配期)。
 inline bool ulog_init(const ulog_config & cfg)
 {
-	static std::mutex init_mutex;
-	std::lock_guard<std::mutex> lk(init_mutex);
+	std::lock_guard<std::mutex> lk(ulog_detail::ref_mutex());
 	auto & b = ulog_detail::writer();
 	if (b.running.load(std::memory_order_relaxed))
 	{
-		return true;   // 幂等
+		++ulog_detail::ref_count();   // 幂等 + 计引用 (首配置为准)
+		return true;
 	}
 	ulog_detail::min_level.store(static_cast<int>(cfg.level), std::memory_order_relaxed);
 	b.console = cfg.console;
@@ -322,6 +384,7 @@ inline bool ulog_init(const ulog_config & cfg)
 	b.running.store(true, std::memory_order_relaxed);
 	b.thread = std::thread([&b]() { b.run(); });
 	ulog_detail::active.store(true, std::memory_order_relaxed);
+	ulog_detail::ref_count() = 1;
 	// 文件开失败: 返回 false 提示, 但终端模式已启动 (设计 §7)
 	return !(cfg.file_path != nullptr && b.file == nullptr);
 }
@@ -329,6 +392,18 @@ inline bool ulog_init(const ulog_config & cfg)
 // 停机: 停标志 → 后端排空+落盘 → join。此后日志调用静默短路并计入 noop_dropped
 inline void ulog_shutdown()
 {
+	std::lock_guard<std::mutex> lk(ulog_detail::ref_mutex());
+	auto & b0 = ulog_detail::writer();
+	if (!b0.running.load(std::memory_order_relaxed))
+	{
+		return;
+	}
+	if (ulog_detail::ref_count() > 1)
+	{
+		--ulog_detail::ref_count();   // 还有其他组件在用, 只退引用不停机
+		return;
+	}
+	ulog_detail::ref_count() = 0;
 	ulog_detail::active.store(false, std::memory_order_relaxed);
 	auto & b = ulog_detail::writer();
 	if (!b.running.exchange(false, std::memory_order_relaxed))
@@ -355,7 +430,12 @@ inline void ulog_flush()
 		return;
 	}
 	std::unique_lock<std::mutex> lk(b.flush_mtx);
-	const uint64_t my_gen = b.flush_req_gen.fetch_add(1, std::memory_order_relaxed) + 1;
+	// release (2026-09-17 评审内存序修复): 本调用之前的 ring push (release 写) 不得
+	// 重排到 req 自增之后 —— 后端 acquire 读到新代际时, 待 flush 记录必已入环。
+	// relaxed 在 x86 TSO 下侥幸成立, ARM/RISC-V 上 flush 可能空确认。
+	// 依赖链: MpscRing::push 的发布 store 是 release (mpsc_ring.hpp, 已核实) ——
+	// 该组件若改弱内存序, 此处保证失效, 修改须联动评审
+	const uint64_t my_gen = b.flush_req_gen.fetch_add(1, std::memory_order_release) + 1;
 	b.flush_cv.wait_for(lk, std::chrono::seconds(5), [&b, my_gen]() { return b.flush_done_gen.load(std::memory_order_relaxed) >= my_gen; });
 }
 
@@ -407,7 +487,24 @@ inline uint64_t ulog_written()
 #define ULOG_WARN(...) ULOG_DETAIL_LOG(unistackbot_common::ulog_level::warn, __VA_ARGS__)
 #define ULOG_ERROR(...) ULOG_DETAIL_LOG(unistackbot_common::ulog_level::error, __VA_ARGS__)
 
-// 无格式快路径: 字面量纯 memcpy, 连 vsnprintf 都不走
-#define ULOG_INFO_RAW(msg) unistackbot_common::ulog_detail::emit_raw(unistackbot_common::ulog_level::info, msg)
+// 无格式快路径: 字面量纯 memcpy, 连 vsnprintf 都不走。
+// active 检查与 ULOG_DETAIL_LOG 对齐 (2026-09-17 评审修复): 未激活时不得付出
+// now_ns/tid/strlen/拷贝/push 的完整 emit 代价, 更不得触碰未消费的环
+#define ULOG_INFO_RAW(msg)                                                                                  \
+	do                                                                                                      \
+	{                                                                                                       \
+		if (unistackbot_common::ulog_detail::active.load(std::memory_order_relaxed))                        \
+		{                                                                                                   \
+			if (static_cast<int>(unistackbot_common::ulog_level::info) >=                                    \
+				unistackbot_common::ulog_detail::min_level.load(std::memory_order_relaxed))                 \
+			{                                                                                               \
+				unistackbot_common::ulog_detail::emit_raw(unistackbot_common::ulog_level::info, msg);       \
+			}                                                                                               \
+		}                                                                                                   \
+		else                                                                                                \
+		{                                                                                                   \
+			unistackbot_common::ulog_detail::noop_dropped.fetch_add(1, std::memory_order_relaxed);          \
+		}                                                                                                   \
+	} while (0)
 
 #endif  // UNISTACKBOT_COMMON__ULOG_HPP_

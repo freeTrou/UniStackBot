@@ -22,8 +22,8 @@ from scipy.spatial.transform import Rotation as Rrot
 ROBOT = sys.argv[1] if len(sys.argv) > 1 else "xarm7"
 TARGET = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
 URDF = f"/tmp/verify_{ROBOT}.urdf"
-PKG_ROOT = __file__.rsplit("/", 2)[0]
-OUT = f"{PKG_ROOT}/../unistackbot_description/arms/{ROBOT}/ik/seed_lib_{ROBOT}.txt"
+REPO_ROOT = __file__.rsplit("/", 3)[0]
+OUT = f"{REPO_ROOT}/unistackbot_description/arms/{ROBOT}/ik/seed_lib_{ROBOT}.txt"
 TIP, BASE = "link7", "link_base"
 
 lim = {}

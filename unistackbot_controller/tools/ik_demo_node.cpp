@@ -29,18 +29,18 @@
 #include "interactive_markers/interactive_marker_server.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 
-#include "unistackbot_controller/dls_ik.hpp"
+#include "dls_ik/dls_ik.hpp"
 #include "ulog/ulog.hpp"
 
 using visualization_msgs::msg::InteractiveMarker;
 using visualization_msgs::msg::InteractiveMarkerControl;
 using visualization_msgs::msg::InteractiveMarkerFeedback;
 
-using unistackbot_controller::CartesianPose;
-using unistackbot_controller::DlsIk;
-using unistackbot_controller::IkResult;
-using unistackbot_controller::RedundancyPreference;
-using unistackbot_controller::UrdfFk;
+using unistackbot_algorithm::CartesianPose;
+using unistackbot_algorithm::DlsIk;
+using unistackbot_algorithm::IkResult;
+using unistackbot_algorithm::RedundancyPreference;
+using unistackbot_algorithm::UrdfFk;
 
 class IkDemo : public rclcpp::Node, public std::enable_shared_from_this<IkDemo>
 {
@@ -61,7 +61,7 @@ public:
 		const auto urdf = getParam("/robot_state_publisher", "robot_description").string_value;
 		if (urdf.empty() || !fk_.init(urdf, "link_base", "link7", msg_) || !ik_.init(&fk_, msg_))
 		{
-			RCLCPP_ERROR(get_logger(), "%s", msg_.empty() ? "robot_description 为空" : msg_.c_str());
+			ULOG_ERROR("%s", msg_.empty() ? "robot_description 为空" : msg_.c_str());
 			return;
 		}
 		const unsigned int n = fk_.jointCount();
@@ -159,7 +159,7 @@ public:
 			{
 				if (!has_goal_) {return;}
 				std::vector<double> q_sol;
-				unistackbot_controller::DlsIkStats st;
+				unistackbot_algorithm::DlsIkStats st;
 				const auto r = ik_.solve(goal_, q_prev_, RedundancyPreference(), q_sol, &st);
 				++(r == IkResult::OK ? n_ok_ : n_fail_);
 				sum_us_ += st.solve_us;
@@ -197,7 +197,7 @@ public:
 					jtc_->async_send_goal(goal, opts);
 				}
 			});
-		RCLCPP_INFO(get_logger(), "IK 演示就绪: RViz 里拖动 6D 标记, 臂会跟随 (手画圈看肘部自主摆动)");
+		ULOG_INFO("IK 演示就绪: RViz 里拖动 6D 标记, 臂会跟随 (手画圈看肘部自主摆动)");
 	}
 
 private:

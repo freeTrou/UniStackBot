@@ -1,10 +1,10 @@
-#include "unistackbot_controller/urdf_fk.hpp"
+#include "urdf_fk/urdf_fk.hpp"
 
 #include <kdl_parser/kdl_parser.hpp>
 #include <urdf_model/model.h>
 #include <urdf_parser/urdf_parser.h>
 
-namespace unistackbot_controller
+namespace unistackbot_algorithm
 {
 
 namespace
@@ -204,4 +204,4 @@ bool UrdfFk::jacobian(
 	return true;
 }
 
-}  // namespace unistackbot_controller
+}  // namespace unistackbot_algorithm

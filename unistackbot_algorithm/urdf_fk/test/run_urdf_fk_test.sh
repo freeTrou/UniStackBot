@@ -15,8 +15,9 @@ TIP="${2:-link7}"
 BASE="${3:-link_base}"
 STRICT="${4:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKG_ROOT="$(dirname "$SCRIPT_DIR")"
-REPO_ROOT="$(dirname "$PKG_ROOT")"
+PKG_ROOT="$(dirname "$SCRIPT_DIR")"            # urdf_fk/ 算法文件夹
+ALGO_PKG="$(dirname "$PKG_ROOT")"              # unistackbot_algorithm 包根 (include 基)
+REPO_ROOT="$(dirname "$ALGO_PKG")"             # 仓库根
 WS_ROOT="$(dirname "$(dirname "$REPO_ROOT")")"
 
 set +u
@@ -30,10 +31,10 @@ xacro "$SRC" use_world:=false use_ros2_control:=false > "$URDF" 2>/dev/null
 
 echo "== 编译 =="
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
-	-I"$PKG_ROOT/include" \
+	-I"$ALGO_PKG" \
 	"$PKG_ROOT/test_urdf_fk.cpp" \
-	"$PKG_ROOT/src/urdf_fk.cpp" \
-	-I/usr/include/eigen3 -I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser -lorocos-kdl -L/opt/ros/humble/lib -lkdl_parser -lurdfdom_model -Wl,-rpath,/opt/ros/humble/lib -o /tmp/test_urdf_fk
+	"$PKG_ROOT/urdf_fk.cpp" \
+	-I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser -lorocos-kdl -L/opt/ros/humble/lib -lkdl_parser -lurdfdom_model -Wl,-rpath,/opt/ros/humble/lib -o /tmp/test_urdf_fk
 
 echo "== 运行 ($ROBOT) =="
 /tmp/test_urdf_fk "$URDF" "$BASE" "$TIP" $STRICT
