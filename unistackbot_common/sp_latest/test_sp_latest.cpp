@@ -6,13 +6,16 @@
 
 #include "sp_latest.hpp"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <ctime>
 #include <sys/prctl.h>
 #include <thread>
+#include <vector>
 
 namespace
 {
@@ -130,6 +133,349 @@ void stress_test()
 		static_cast<unsigned long long>(misses.load()),
 		buf.tears(),
 		static_cast<unsigned long long>(kWriterOps));
+}
+
+// ---- readLastFrame 针对性压测 (2026-09-20: 三轮外部评审三轮边界 bug 后的防复发层) ----
+// 校验三件事: ① 恒等负载一致 (撕裂) ② 帧身份自洽 seq_out == 2*stamp+2 (身份错位——
+// 旧"读旧槽自证"实现曾按起点奇偶各错半, 靠此断言族抓) ③ 返回 kind 与帧号一致。
+// 写者节流 ~5µs/帧 (busy 等待, 覆盖"写窗口 + 空闲窗"两种相位, 让重试路径真实命中)。
+
+void readlast_test()
+{
+	SpLatest<Payload> buf;
+	buf.init(Payload{0, 0, 0, 0});
+
+	std::atomic<bool> writer_done{false};
+	std::atomic<uint64_t> dirty{0};
+	std::atomic<uint64_t> reads{0};
+	std::atomic<uint64_t> nones{0};
+
+	std::thread writer([&]()
+	{
+		for (uint64_t i = 1; i <= 200000; ++i)
+		{
+			buf.publish(Payload{i, i, i, i});
+			for (volatile int32_t spin = 0; spin < 3000; ++spin)
+			{
+				// busy 节流 ~5µs: 写窗口 ~1% 占空比, 读者重试路径可命中成功窗
+			}
+		}
+		writer_done.store(true, std::memory_order_release);
+	});
+
+	std::thread reader([&]()
+	{
+		while (!writer_done.load(std::memory_order_acquire))
+		{
+			Payload out;
+			uint64_t s = 0;
+			const auto kind = buf.readLastFrame(out, s);
+			if (kind == SpLatest<Payload>::FrameKind::kNone)
+			{
+				nones.fetch_add(1, std::memory_order_relaxed);
+				continue;
+			}
+			reads.fetch_add(1, std::memory_order_relaxed);
+			// ① 恒等负载 (撕裂即现形)
+			// ② 帧身份自洽: init 帧 (stamp=0) ↔ seq=2; 第 i 帧 (stamp=i) ↔ seq=2+2i
+			// ③ kind ↔ 帧号: stamp==0 → kInit, 否则 kLive
+			const bool identity = (s == 2 * out.stamp + 2);
+			const auto expect = (out.stamp == 0) ? SpLatest<Payload>::FrameKind::kInit
+			                                     : SpLatest<Payload>::FrameKind::kLive;
+			if (out.stamp != out.a || out.a != out.b || out.b != out.c || !identity || kind != expect)
+			{
+				dirty.fetch_add(1, std::memory_order_relaxed);
+			}
+		}
+	});
+
+	writer.join();
+	reader.join();
+
+	Payload out;
+	uint64_t s = 0;
+	const bool final_ok = buf.readLastFrame(out, s) == SpLatest<Payload>::FrameKind::kLive
+		&& out.stamp == 200000;
+	check(final_ok, "readLastFrame: final frame reachable");
+	check(dirty.load() == 0, "readLastFrame: zero dirty (tear/identity/kind)");
+	std::printf("INFO: readLastFrame reads=%llu none=%llu tears=%u (写 200000 拍, 节流5µs)\n",
+		static_cast<unsigned long long>(reads.load()),
+		static_cast<unsigned long long>(nones.load()),
+		buf.tears());
+}
+
+// ---- readLastFrame 极限工况: 全速背靠背写者 + 4KB 大载荷 (用户验收要求, 2026-09-20) ----
+// 写者无节流连发 (写窗口占空比拉到极限 ≈ 必撞; 远超设计域——真实总线 1kHz 占空比 ~0.05%),
+// 载荷 ~4KB 触发 kRetryPauseN=64 自适应档。验证目标不是成功率而是**安全性**:
+// ① 零脏数据 (撕裂/身份错位 = 硬错) ② 帧身份恒自洽 (seq == 2*stamp+2) ③ 写者停后必达最终帧。
+
+constexpr uint64_t kFatStressOps = 200000;
+
+struct FatPayload
+{
+	uint64_t stamp{0};
+	std::array<uint64_t, 511> blob{};   // 8 + 511×8 = 4096 (64 倍数, 恰在 4096B 级)
+};
+static_assert(sizeof(FatPayload) == 4096, "FatPayload 须为 4096 (64 的倍数)");
+static_assert(std::is_trivially_copyable_v<FatPayload>, "FatPayload must be trivially copyable");
+
+// 4096B + 双向 1kHz 真实总线频率 (用户裁定 2026-09-20): 写者每 1ms 发一帧, 读者每 1ms 收一帧。
+// 1 万帧 ≈ 10s; 拷贝 1.5µs / 间隔 1000µs → 单次失败 ~0.3%, kNone 预期 ≈0 — 大载荷设计域结论用例。
+void readlast_fat_throttled()
+{
+	SpLatest<FatPayload> buf;
+	buf.init(FatPayload{});
+
+	std::atomic<bool> writer_done{false};
+	std::atomic<uint64_t> dirty{0};
+	std::atomic<uint64_t> reads{0};
+	std::atomic<uint64_t> nones{0};
+
+	std::thread writer([&]()
+	{
+		for (uint64_t i = 1; i <= 10000; ++i)
+		{
+			FatPayload f;
+			f.stamp = i;
+			for (uint64_t & v : f.blob)
+			{
+				v = i;
+			}
+			buf.publish(f);
+			for (volatile int32_t spin = 0; spin < 900000; ++spin)
+			{
+				// busy 节流 ~1ms = 1kHz (volatile 防优化)
+			}
+		}
+		writer_done.store(true, std::memory_order_release);
+	});
+
+	std::thread reader([&]()
+	{
+		while (!writer_done.load(std::memory_order_acquire))
+		{
+			FatPayload out;
+			uint64_t s = 0;
+			const auto kind = buf.readLastFrame(out, s);
+			if (kind == SpLatest<FatPayload>::FrameKind::kNone)
+			{
+				nones.fetch_add(1, std::memory_order_relaxed);
+			}
+			else
+			{
+				reads.fetch_add(1, std::memory_order_relaxed);
+				bool ok = (s == 2 * out.stamp + 2);
+				for (uint64_t v : out.blob)
+				{
+					if (v != out.stamp)
+					{
+						ok = false;
+						break;
+					}
+				}
+				const auto expect = (out.stamp == 0) ? SpLatest<FatPayload>::FrameKind::kInit
+				                                     : SpLatest<FatPayload>::FrameKind::kLive;
+				if (!ok || kind != expect)
+				{
+					dirty.fetch_add(1, std::memory_order_relaxed);
+				}
+			}
+			for (volatile int32_t spin = 0; spin < 900000; ++spin)
+			{
+				// 收帧侧同样 1ms 节拍 (双向 1kHz 同频)
+			}
+		}
+	});
+
+	writer.join();
+	reader.join();
+
+	FatPayload out;
+	uint64_t s = 0;
+	const bool final_ok = buf.readLastFrame(out, s) == SpLatest<FatPayload>::FrameKind::kLive
+		&& out.stamp == 10000;
+	check(final_ok, "fat-1kHz: final frame reachable");
+	check(dirty.load() == 0, "fat-1kHz: zero dirty @4096B 双向1kHz真实频率");
+	std::printf("INFO: fat-1kHz reads=%llu none=%llu tears=%u (双向 10000 拍 @1kHz, 载荷 %zuB)\n",
+		static_cast<unsigned long long>(reads.load()),
+		static_cast<unsigned long long>(nones.load()),
+		buf.tears(),
+		sizeof(FatPayload));
+}
+
+// ---- readLastFrame 同时启动工况 + 3 次重试 WCET 实测 (用户验收, 2026-09-20) ----
+// 双线程同时启动 (无相位构造), 各自 1kHz 节拍, 4096B — 同相拍即互撞 (写者拍首 publish,
+// 读者拍首 read), 相位随节拍微漂扫过整周期。记录每次调用耗时 → 3 次重试的真实最坏值。
+
+void readlast_fat_collide()
+{
+	SpLatest<FatPayload> buf;
+	buf.init(FatPayload{});
+
+	std::atomic<bool> writer_done{false};
+	std::atomic<uint64_t> dirty{0};
+	std::atomic<uint64_t> reads{0};
+	std::atomic<uint64_t> nones{0};
+
+	std::thread writer([&]()
+	{
+		for (uint64_t i = 1; i <= 10000; ++i)
+		{
+			FatPayload f;
+			f.stamp = i;
+			for (uint64_t & v : f.blob)
+			{
+				v = i;
+			}
+			buf.publish(f);
+			for (volatile int32_t spin = 0; spin < 900000; ++spin)
+			{
+				// busy 节流 ~1ms = 1kHz
+			}
+		}
+		writer_done.store(true, std::memory_order_release);
+	});
+
+	std::vector<double> lat_us;   // 每次调用耗时 (测试程序, 堆上统计无妨)
+	lat_us.reserve(11000);
+
+	std::thread reader([&]()
+	{
+		while (!writer_done.load(std::memory_order_acquire))
+		{
+			FatPayload out;
+			uint64_t s = 0;
+			timespec t0{};
+			clock_gettime(CLOCK_MONOTONIC, &t0);
+			const auto kind = buf.readLastFrame(out, s);
+			timespec t1{};
+			clock_gettime(CLOCK_MONOTONIC, &t1);
+			const double us = static_cast<double>(t1.tv_sec - t0.tv_sec) * 1.0e6
+				+ static_cast<double>(t1.tv_nsec - t0.tv_nsec) / 1.0e3;
+			lat_us.push_back(us);
+
+			if (kind == SpLatest<FatPayload>::FrameKind::kNone)
+			{
+				nones.fetch_add(1, std::memory_order_relaxed);
+			}
+			else
+			{
+				reads.fetch_add(1, std::memory_order_relaxed);
+				bool ok = (s == 2 * out.stamp + 2);
+				for (uint64_t v : out.blob)
+				{
+					if (v != out.stamp)
+					{
+						ok = false;
+						break;
+					}
+				}
+				const auto expect = (out.stamp == 0) ? SpLatest<FatPayload>::FrameKind::kInit
+				                                     : SpLatest<FatPayload>::FrameKind::kLive;
+				if (!ok || kind != expect)
+				{
+					dirty.fetch_add(1, std::memory_order_relaxed);
+				}
+			}
+			for (volatile int32_t spin = 0; spin < 900000; ++spin)
+			{
+				// 读者同 1kHz 节拍 (与写者同时启动)
+			}
+		}
+	});
+
+	writer.join();
+	reader.join();
+
+	std::sort(lat_us.begin(), lat_us.end());
+	const auto pct = [&](double p) -> double
+	{
+		return lat_us.empty() ? 0.0 : lat_us[static_cast<size_t>(p * static_cast<double>(lat_us.size() - 1))];
+	};
+
+	FatPayload out;
+	uint64_t s = 0;
+	const bool final_ok = buf.readLastFrame(out, s) == SpLatest<FatPayload>::FrameKind::kLive
+		&& out.stamp == 10000;
+	check(final_ok, "collide: final frame reachable");
+	check(dirty.load() == 0, "collide: zero dirty @必撞工况 (每拍撞写窗)");
+	std::printf("INFO: collide reads=%llu none=%llu | readLastFrame 耗时 µs: p50=%.2f p99=%.2f max=%.2f (n=%zu)\n",
+		static_cast<unsigned long long>(reads.load()),
+		static_cast<unsigned long long>(nones.load()),
+		pct(0.50), pct(0.99), lat_us.empty() ? 0.0 : lat_us.back(), lat_us.size());
+}
+
+void readlast_stress_fat()
+{
+	SpLatest<FatPayload> buf;
+	buf.init(FatPayload{});
+
+	std::atomic<bool> writer_done{false};
+	std::atomic<uint64_t> dirty{0};
+	std::atomic<uint64_t> reads{0};
+	std::atomic<uint64_t> nones{0};
+
+	std::thread writer([&]()
+	{
+		for (uint64_t i = 1; i <= kFatStressOps; ++i)
+		{
+			FatPayload f;
+			f.stamp = i;
+			for (uint64_t & v : f.blob)
+			{
+				v = i;
+			}
+			buf.publish(f);
+		}
+		writer_done.store(true, std::memory_order_release);
+	});
+
+	std::thread reader([&]()
+	{
+		while (!writer_done.load(std::memory_order_acquire))
+		{
+			FatPayload out;
+			uint64_t s = 0;
+			const auto kind = buf.readLastFrame(out, s);
+			if (kind == SpLatest<FatPayload>::FrameKind::kNone)
+			{
+				nones.fetch_add(1, std::memory_order_relaxed);
+				continue;
+			}
+			reads.fetch_add(1, std::memory_order_relaxed);
+			bool ok = (s == 2 * out.stamp + 2);
+			for (uint64_t v : out.blob)
+			{
+				if (v != out.stamp)
+				{
+					ok = false;
+					break;
+				}
+			}
+			const auto expect = (out.stamp == 0) ? SpLatest<FatPayload>::FrameKind::kInit
+			                                     : SpLatest<FatPayload>::FrameKind::kLive;
+			if (!ok || kind != expect)
+			{
+				dirty.fetch_add(1, std::memory_order_relaxed);
+			}
+		}
+	});
+
+	writer.join();
+	reader.join();
+
+	FatPayload out;
+	uint64_t s = 0;
+	const bool final_ok = buf.readLastFrame(out, s) == SpLatest<FatPayload>::FrameKind::kLive
+		&& out.stamp == kFatStressOps;
+	check(final_ok, "fat-stress: final frame reachable after writer stops");
+	check(dirty.load() == 0, "fat-stress: zero dirty @4KB full-speed writer (必撞场景)");
+	std::printf("INFO: fat-stress reads=%llu none=%llu tears=%u (写 %llu 拍全速, 载荷 %zuB)\n",
+		static_cast<unsigned long long>(reads.load()),
+		static_cast<unsigned long long>(nones.load()),
+		buf.tears(),
+		static_cast<unsigned long long>(kFatStressOps),
+		sizeof(FatPayload));
 }
 
 // ---- 双通道全双工测试: 模拟真实工况 (主站 ↔ CM, 两侧等速 1kHz, 各持一个 buf) ----
@@ -636,6 +982,10 @@ int main()
 {
 	functional_tests();
 	stress_test();
+	readlast_test();
+	readlast_fat_throttled();
+	readlast_fat_collide();
+	readlast_stress_fat();
 	duplex_test();
 	duplex_test_big();
 	duplex_test_motors();

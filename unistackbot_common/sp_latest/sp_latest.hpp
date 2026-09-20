@@ -29,6 +29,47 @@ class SpLatest
 	static_assert(std::atomic<seq_t>::is_always_lock_free, "seq atomic must be lock-free on target platform");
 
 public:
+	// init 占位帧判据: init() 后首个可读快照的 seq 恒为 2, 写者首次**真实** publish 后 seq≥4。
+	// init 初值不一定是实际反馈 (真机总线上线前=占位值; 仿真后端 init 即真值) ——
+	// 真机调用方拿到 seq==kInitFrameSeq 的快照应忽略不进控制 (上线前 CM 不动作)。
+	// 已知瑕疵 (仅 32 位平台): seq_t=uint32 时 24.9 天绕回, 序列会再次经过 2 →
+	// frameKind 误判 kInit 一拍; 64 位平台 (~2.9 亿年) 不涉及, 不修。
+	static constexpr uint64_t kInitFrameSeq = 2;
+
+	// 帧类别 —— 通用的"init 占位 vs 真实反馈"判断, 调用方不碰 seq 魔法数。
+	enum class FrameKind : int32_t
+	{
+		kNone = 0,   // 本拍重试未取到新帧 — **out 保持既有值 = 上一帧** (持久接收变量下
+		             //   API 即"要么最新要么上一帧"; 非错误, 勿当异常处理)
+		kInit = 1,   // init 占位帧 (装配期初值, 非实际反馈 — 真机调用方应忽略)
+		kLive = 2,   // 真实发布帧
+	};
+
+	// readLastFrame 有界重试预算 (用户终裁 2026-09-20: 3 次):
+	// pause 档位按载荷三级自适应 (≤1KB:16 / ≤4KB:64 / >4KB:128)。本机实测 pause≈31ns
+	// → 每轮节流 0.5/2/4µs, 3 轮总覆盖 1.5/6/12µs, 覆盖对应写槽;
+	// 档位不再上探: 更大档的单轮节流在 2kHz 周期占比过高, 破坏 WCET 的风险大于收益。
+	// **物理约束账 (必撞极限实测, 2026-09-20)**: 大载荷的真实瓶颈不在节流预算, 而在
+	// "拷贝时长 vs 写者周期" — read 成功率 ≈ 1 − sizeof(T)拷贝时长/写者间隔。真实总线
+	// (1kHz, 间隔 1000µs) 下 4KB 载荷成功率 ≈99.9%; 全速背靠背写者 (~3.5µs 间隔) 下
+	// 成功率 ~10%, kNone 高是超设计域的正确降级 (零脏数据, 实测 fat-stress 用例)。
+	// **载荷上界纪律**: sizeof(T) 应补齐 64 倍数 (slots_[1] 槽对齐的前提, 调用方以
+	// reserved 字段补齐并 static_assert 钉死); >16KB 的大数据勿走值通道 — 用 sp_ring
+	// (事件通道) 或拆分通道 (勿用指针+池: 回收安全需 hazard/epoch, 重回多变量交叉推理)。
+	static constexpr int32_t kReadRetries = 3;
+	static constexpr int32_t kRetryPauseN = (sizeof(T) > 4096u) ? 128 : (sizeof(T) > 1024u) ? 64 : 16;
+
+	// seq → 帧类别。输入契约: 须为 read/readLastFrame 返回的 seq_out (恒为偶数——
+	// read 只在稳定偶数时成功); 奇数输入未定义 (正常运行不可达)
+	[[nodiscard]] static FrameKind frameKind(uint64_t seq)
+	{
+		if (seq == 0)
+		{
+			return FrameKind::kNone;
+		}
+		return (seq <= kInitFrameSeq) ? FrameKind::kInit : FrameKind::kLive;
+	}
+
 	// 构造不做任何事 —— 装配由 init() 显式完成 (与全工程"装配期显式初始化"风格一致)。
 	// 零态即"从未发布"(seq=0, 成员 NSDMI 已保证), 默认构造后 read 直接 false
 	SpLatest() = default;
@@ -75,7 +116,7 @@ public:
 	}
 
 	// 读者(唯一): 取最新完整快照。单遍直线代码, WCET = 一次拷贝 (无重试循环)。
-	// true  = out 为 seq_out 对应的完整快照
+	// true  = out 为 seq_out 对应的完整快照 (seq_out==kInitFrameSeq 为 init 占位帧, 见常量处说明)
 	// false = 从未发布(seq==0) / 写入中(奇数) / 撕裂 —— out 保持调用前的值 (调用方沿用旧值即标准降级)
 	bool read(T & out, uint64_t & seq_out) const
 	{
@@ -100,6 +141,53 @@ public:
 		out = tmp;
 		seq_out = s1;
 		return true;
+	}
+
+	// 宽松取值: **要么最新帧, 要么上一帧** (用户需求终稿 2026-09-20)。
+	// 重试成功 → 最新帧 (kLive/kInit); 重试耗尽 → kNone, out 保持既有值 = 上一帧。
+	// **推荐姿势 = 持久接收变量 + 一个 last_live 布尔** (防 init 残留):
+	//   Feedback fb;  bool live = false;              // 循环外持久
+	//   switch (ch.readLastFrame(fb, s)) {
+	//     case kLive: live = true; /* 用 fb */ break;
+	//     case kInit: live = false; break;            // 总线未上线, 忽略
+	//     case kNone: if (live) { /* 用 fb = 上一帧 */ } break;
+	//   }
+	// 上一帧的载体是 out 参数本身 — 组件零缓存、零旧槽推理, kNone 分支零代码。
+	// 首次调用即 kNone (从未成功过) 时 out = 调用方初始化值 (与 init 双保险)。
+	//
+	// 实现设计裁决 (2026-09-20, 三轮外部评审三轮边界 bug 后的终解): **只依赖已证明原语**。
+	// 旧实现"读旧槽自证"需 current_(idx/idx2) 与 published_(s0/s1) 四读点交叉推理 — 两个独立
+	// 原子变量的交错空间组合爆炸, 证明不可维护 (≥4 → ≥3 → 奇偶分界, 三轮全在新交错上翻车)。
+	// 终解 = 有界重试 read(): read 自身是单变量夹逼 (published_ 两读夹一次拷贝, 闭式安全),
+	// 组合零新增推理; 重试间 pause 节流推进时间跨过写者的写槽窗口, 成功拿到的是**新帧**
+	// (新鲜度优于旧实现的"上一帧")。init 占位帧可判断: 成功返回 frameKind(seq_out),
+	// seq==kInitFrameSeq → kInit, 调用方以 kind==kLive 门禁控制路径即可挡住占位帧。
+	// kNone = 重试预算耗尽 (写者高频连发 / 读者异常卡顿): out 保持既有值 = 上一帧
+	// (持久接收变量下即需求语义, 非异常; 临时量下 out 为垃圾, 故姿势要求持久变量)。
+	// WCET 账: 常态 1 次拷贝; 撞窗典型为早期失败 (s0 奇 → 2 原子读 0 拷贝); 理论最坏
+	// 5×(3 原子读 + 1 拷贝, 撕裂型失败) + 节流 (~1-2.5µs 按档)。
+	// tears 语义 (外部评审四轮钉死): 计的是**失败的 read 尝试数** — readLastFrame 一次
+	// kNone 会 +5, 与 read() 混用时也逐次累计; 监控阈值须按此口径校准。
+	FrameKind readLastFrame(T & out, uint64_t & seq_out) const
+	{
+		for (int32_t attempt = 0; attempt < kReadRetries; ++attempt)
+		{
+			if (read(out, seq_out))
+			{
+				return frameKind(seq_out);
+			}
+			for (int32_t p = 0; p < kRetryPauseN; ++p)
+			{
+#if defined(__x86_64__) || defined(__i386__)
+				asm volatile("pause" ::: "memory");
+#elif defined(__aarch64__) || defined(__arm__)
+				asm volatile("yield" ::: "memory");   // ARM 交叉编译目标
+#else
+				std::atomic_thread_fence(std::memory_order_relaxed);   // 未知架构兜底
+#endif
+			}
+		}
+		return FrameKind::kNone;
 	}
 
 	// 零拷贝看门狗轮询: N 拍不变 = 上游停发 (seq_t 零扩展为 uint64, 恒无损)
