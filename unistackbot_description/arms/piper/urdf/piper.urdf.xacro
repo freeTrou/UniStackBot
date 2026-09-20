@@ -5,6 +5,8 @@
     <xacro:arg name="use_ros2_control" default="false" />
     <xacro:arg name="use_world" default="true" />
     <xacro:arg name="use_gazebo" default="false" />
+    <!-- mujoco 链: 是否无头 (不拉 Simulate 渲染窗); 传给 ros2_control 块的 headless 硬件参数 -->
+    <xacro:arg name="headless" default="true" />
 
     <xacro:include filename="$(find unistackbot_description)/arms/piper/urdf/piper_macro.xacro"/>
     <xacro:include filename="$(find unistackbot_description)/arms/piper/urdf/piper_gripper_macro.xacro"/>
@@ -23,7 +25,8 @@
     </xacro:if>
 
     <xacro:if value="$(arg use_ros2_control)">
-        <xacro:piper_ros2_control use_gripper="$(arg use_gripper)" use_gazebo="$(arg use_gazebo)"/>
+        <xacro:piper_ros2_control use_gripper="$(arg use_gripper)" use_gazebo="$(arg use_gazebo)"
+                                  headless="$(arg headless)"/>
     </xacro:if>
 
 </robot>

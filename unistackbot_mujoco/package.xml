@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>unistackbot_mujoco</name>
+  <version>0.1.0</version>
+  <description>MuJoCo 集成层: mujoco.launch.py (第三条控制链, 真实动力学回归)。控制器管理器宿主为 mujoco_ros2_control 的定制 ros2_control_node (内嵌 MuJoCo 引擎 + 物理线程); MJCF 资产住 description 包 arms/&lt;robot&gt;/mujoco/。</description>
+  <maintainer email="todo@todo.todo">UniStackBot</maintainer>
+  <license>TODO: Declaration of license</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>mujoco_ros2_control</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>unistackbot_controller</exec_depend>
+  <exec_depend>unistackbot_interface</exec_depend>
+  <exec_depend>unistackbot_description</exec_depend>
+  <exec_depend>unistackbot_bringup</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

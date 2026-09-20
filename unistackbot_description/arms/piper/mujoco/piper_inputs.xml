@@ -1,0 +1,39 @@
+<mujoco_inputs>
+
+  <!-- piper URDF→MJCF 转换定制输入 (unistackbot)
+       约定 (对齐 mujoco_ros2_control 0.1.2 demo):
+       - position 执行器 name == joint name (插件按名映射, 日志可查)
+       - mimic 手指: gripper 主关节有执行器, 两手指 passive + equality 耦合
+         (URDF mimic: gripper_joint1 = 0.5*gripper, gripper_joint2 = -0.5*gripper)
+       - ctrlrange 取自 URDF <ros2_control> min/max (与控制器限位单一事实源对齐)
+       - kp 为 piper 量级起步值 (小桌面臂, 连杆 ~1-2kg), 首跑后按跟踪调 -->
+
+  <raw_inputs>
+    <option integrator="implicitfast"/>
+
+    <default>
+      <default class="visual">
+        <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+      </default>
+    </default>
+
+    <actuator>
+      <position name="joint1" joint="joint1" kp="1500" dampratio="1.0" ctrlrange="-2.6179938 2.6179938"/>
+      <position name="joint2" joint="joint2" kp="1500" dampratio="1.0" ctrlrange="0 3.1415926"/>
+      <position name="joint3" joint="joint3" kp="1000" dampratio="1.0" ctrlrange="-2.9670597 0"/>
+      <position name="joint4" joint="joint4" kp="500" dampratio="1.0" ctrlrange="-1.7453292 1.7453292"/>
+      <position name="joint5" joint="joint5" kp="300" dampratio="1.0" ctrlrange="-1.2217304 1.2217304"/>
+      <position name="joint6" joint="joint6" kp="200" dampratio="1.0" ctrlrange="-2.0943951 2.0943951"/>
+      <position name="gripper" joint="gripper" kp="200" dampratio="1.0" ctrlrange="0 0.1"/>
+    </actuator>
+
+    <equality>
+      <joint joint1="gripper" joint2="gripper_joint1" polycoef="0 0.5 0 0 0"/>
+      <joint joint1="gripper" joint2="gripper_joint2" polycoef="0 -0.5 0 0 0"/>
+    </equality>
+  </raw_inputs>
+
+</mujoco_inputs>

@@ -39,7 +39,7 @@ g++ -std=c++17 -O2 -pthread -Wall -Wextra -Wconversion -I.. test_ulog.cpp -o tes
 ```
 测试二进制（test_ulog/bench_ulog 等）已在 .gitignore，勿提交。
 
-Three launch entry points, all currently Piper-specific:
+Four launch entry points, all currently Piper-specific (控制链三选一: mock/gz/mujoco):
 
 ```bash
 # 1. Visualization only (RViz + joint_state_publisher_gui; ros2_control off by default)
@@ -49,17 +49,20 @@ ros2 launch unistackbot_description display.launch.py
 # 2. Mock control chain: standalone controller_manager + SimControlHardware (kinematic backend), no simulator
 ros2 launch unistackbot_bringup control.launch.py robot:=piper   # robot:=xarm7 等; use_rviz:=true|false
 
-# 3. Gazebo Sim / Fortress (current chain): controller manager inside gz_ros2_control
+# 3. Gazebo Sim / Fortress: controller manager inside gz_ros2_control
 ros2 launch unistackbot_gazebo ign.launch.py robot:=piper        # gui:=true|false, use_rviz:=true 可选
+
+# 4. MuJoCo (mujoco_ros2_control, 2026-09-20): controller manager = mujoco 定制 ros2_control_node
+ros2 launch unistackbot_mujoco mujoco.launch.py robot:=piper     # headless:=true(默认)|false, use_rviz:=true 可选
 ```
 
-Both control chains spawn `joint_state_broadcaster` + `joint_stream_controller` (active) + `cartesian_motion_controller` (inactive 注册). **JTC 已从双链移除** (2026-09-18)。命令通道:
+All control chains spawn `joint_state_broadcaster` + `joint_stream_controller` (active) + `cartesian_motion_controller` (inactive 注册). **JTC 已从链上移除** (2026-09-18)。命令通道:
 
-- 关节空间: `/joint_stream_controller/command`（`unistackbot_interface/JointCommand`, reliable+KeepLast(1), 点流语义——每条消息是"最新目标"）。仿真链（position 命令接口）只消费 CSP 模式。关节按 `joint_names` 字段对名映射，必须列全。
+- 关节空间: `/joint_stream_controller/command`（`unistackbot_interface/JointCommand`, reliable+KeepLast(1), 点流语义——每条消息是"最新目标"）。仿真链（position 命令接口）只消费 CSP 模式。关节按 `joint_names` 字段对名映射，必须列全（**mujoco 链只列 7 个主关节**——手指 passive, 见 `unistackbot_mujoco/README.md` 差异表）。
 - 笛卡尔空间: `ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped ...`（base 系）。
 - 曲线分析录包: `ros2 bag record -s mcap /joint_states /joint_stream_controller/command /cartesian_motion_controller/{status,target} /tf`。
 
-双控制器切换 (mock/gz 同款): CM 以 inactive 注册, `ros2 control switch_controllers --deactivate joint_stream_controller --activate cartesian_motion_controller` 接管 (切回反向同理)。Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo, both green = pass.
+双控制器切换 (三条链同款): CM 以 inactive 注册, `ros2 control switch_controllers --deactivate joint_stream_controller --activate cartesian_motion_controller` 接管 (切回反向同理)。Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo/MuJoCo, both green = pass.
 
 RT 备注: 控制器管理器 RT 线程调优走**官方参数**（`<robot>_controllers.yaml` 的 `thread_priority: 80` / `cpu_affinity: 1` / `lock_memory: true`; 核1=CM update, 核2 预留总线）。`lock_memory` 依赖 `ulimit -l unlimited`（非 root 下失败仅 WARN 不阻塞）。
 
@@ -75,7 +78,8 @@ unistackbot_controller         → 控制器集成 (CM 笛卡尔流式 + JointSt
 unistackbot_algorithm          → 纯算法库 (FK/IK/种子库, 零控制器依赖)
 unistackbot_hardware           → 硬件抽象 / 驱动通信     (hardware_interface, pluginlib, serial)
   ├─ unistackbot_sim_control  → 统一仿真控制层（kinematic 后端 + /sim_control 服务）
-  └─ unistackbot_gazebo        → Gazebo 集成（world + launch）
+  ├─ unistackbot_gazebo        → Gazebo 集成（world + launch）
+  └─ unistackbot_mujoco        → MuJoCo 集成（mujoco_ros2_control 链 launch; MJCF 资产住 description）
 物理硬件 / 仿真器
 ```
 
@@ -115,6 +119,12 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
   - The ign chain prepends the description package's ament share root to `IGN_GAZEBO_RESOURCE_PATH`: URDF→SDF conversion rewrites `package://` to `model://`, and Fortress resolves those only via that env var.
   - `scripts/gz_clean.sh` (`ros2 run unistackbot_gazebo gz_clean.sh`) kills the whole launch process family — ign servers routinely survive launch shutdown and poison the next run; run it before every launch.
   - `src/sim_control_gz_node.cpp` — `/sim_control/*` 的 gz 适配器（**纯 ROS 构建，零 ign 编译依赖**）。gz 链路的 ros2_control 插件是 `GazeboSimSystem` 而非 SimControlHardware，故 `/sim_control/*` 由这个 side-car 独立节点承载：pause/resume/step 经 launch 里 parameter_bridge 桥接的 `/world/<world>/control`（`ros_gz_interfaces/srv/ControlWorld`）下发；`reset` 拒绝（Fortress 实测有毒：返回 success=true 但世界 negative-timestep 停摆）、`set_joint_state` 拒绝（无原生等价，Garden+ 才有）。契约头从 `unistackbot_sim_control` include。由 `ign.launch.py` 启动，`world` 参数（`unistack_world`）须与 `empty_ign.world` 的 `<world name>` 及桥接服务名一致。
+- **unistackbot_mujoco** — MuJoCo 集成 (第三条控制链, 2026-09-20): `mujoco.launch.py` 纯 launch 胶水零 C++。控制器管理器宿主 = `mujoco_ros2_control` 的**定制 `ros2_control_node`**（controller_manager + MuJoCo 引擎 + 物理线程 + 渲染同进程; 上游 ros2_control 合入仿真 PR 后可换回标准节点——临时措施）。真实动力学回归链, 对照 mock (理想执行器)/gz (ODE)。要点:
+  - 安装: apt 二进制 `ros-humble-mujoco-ros2-control` 0.1.2 (内嵌 MuJoCo 3.12.0); RT 线程官方参数 (500Hz/FIFO80/核1) 实测生效, 与 mock 链同份 `<robot>_controllers.yaml`。
+  - robot_description 参数直供（单行化, 同 gz 链坑）; `use_sim_time: true`; MJCF 缺失/未知机型 fail-fast。
+  - headless 默认 true (URDF 硬件参数; apt 0.1.2 无 `MUJOCO_HEADLESS` 环境变量支持——PR #157 未随发布)。GUI 收场有 GL 析构段错误 (demo 同款, 控制器已干净关闭, 无害)。
+  - MJCF 资产住 description 包 `arms/<robot>/mujoco/`（URDF→MJCF 用包自带 `robot_description_to_mjcf` 转换 + 手工策展; mesh 直引 collision STL 零复制; **equality 方向坑**: MuJoCo 3.x 实测 `joint1 = poly(joint2)`, 官方文档文字相反——详见 `arms/piper/mujoco/README.md`）。
+  - `/sim_control` 适配器未接: mujoco 定制节点自带 `reset_world`/`set_pause`/`step_simulation`/`set_free_joint_state` 四服务（映射表在 `unistackbot_mujoco/README.md`）, 另有 gz 链没有的 `apply_external_wrench`。无孤儿进程问题（普通进程收场, 不需要 gz_clean 类脚本）。
 
 ## RT 基准与调优（仓库根 test/）
 
@@ -126,19 +136,21 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 
 ## ros2_control wiring (cross-file contract)
 
-`piper.urdf.xacro` declares four args: `use_gripper`, `use_ros2_control`, `use_world`, `use_gazebo`. `use_gazebo` is three-way (xacro quirk: `$(arg …)` turns `true` into Python `True`, so comparisons must match both):
+`piper.urdf.xacro` declares five args: `use_gripper`, `use_ros2_control`, `use_world`, `use_gazebo`, `headless` (mujoco 链专用). `use_gazebo` is four-way (xacro quirk: `$(arg …)` turns `true` into Python `True`, so comparisons must match both):
 
 - `use_gazebo:=false` → `unistackbot_sim_control/SimControlHardware` (backend=kinematic; bringup's standalone `ros2_control_node`)
 - `use_gazebo:=true`/`classic` → Gazebo Classic `gazebo_ros2_control/GazeboSystem`（**链已删**，仅 xacro 分支保留为惰性能力，无消费者）
-- `use_gazebo:=ign` → Gazebo Sim (Fortress) `gz_ros2_control/GazeboSimSystem` + `gz_ros2_control-system` — the current sim chain
+- `use_gazebo:=ign` → Gazebo Sim (Fortress) `gz_ros2_control/GazeboSimSystem` + `gz_ros2_control-system`
+- `use_gazebo:=mujoco` → `mujoco_ros2_control/MujocoSystemInterface` + 硬件参数 `mujoco_model`（MJCF 路径, `arms/<robot>/mujoco/<robot>.xml`）/ `sim_speed_factor` / `headless`（apt 0.1.2 无 `MUJOCO_HEADLESS` 环境变量支持, headless 走此参数）
 
 All `<gazebo>` plugin blocks live in each robot's `<robot>_ros2_control.xacro` and point at `$(find unistackbot_bringup)/config/<robot>_controllers.yaml` — the *description* package depends on bringup's installed config in both sim modes.
 
 Contracts to keep in sync when changing joints or interfaces:
 
 - `SimControlHardware` accepts dynamic joints (≤16). Each joint must declare exactly one `position` command interface; state interfaces mirror the URDF (position required, velocity/effort optional, effort is always published as 0). Per-joint `max_velocity` `<param>` caps the kinematic backend (default 5 rad/s).
-- `gripper_joint1`/`gripper_joint2` follow `gripper` via URDF `<mimic>` tags **plus** `<param name="mimic">`/`multiplier` entries in the `<ros2_control>` block (both simulators' ros2_control plugins require the block entries); the kinematic backend derives their state in `step()`.
+- `gripper_joint1`/`gripper_joint2` follow `gripper` via URDF `<mimic>` tags **plus** `<param name="mimic">`/`multiplier` entries in the `<ros2_control>` block (gz/Classic 链需要; kinematic 后端在 `step()` 推导)。**mujoco 链不同**: 手指在 `<ros2_control>` 里只声明 state 接口（passive）, 跟随由 MJCF 侧 equality 约束实现（方向坑: MuJoCo 3.x 实测 `joint1 = poly(joint2)`, 见 `arms/piper/mujoco/README.md`）→ JointStream 解析 URDF 后只管 7 个主关节。
 - Gotcha: inside `piper_ros2_control.xacro` the gripper block tests `$(arg use_gripper)` — the *global* xacro arg, not the macro's `use_gripper` param, which is therefore dead there. It only works because `piper.urdf.xacro` passes the arg through unchanged.
+- MJCF 资产 (`arms/<robot>/mujoco/`) 与 URDF 惯量/结构/限位联动——URDF 改动后须再生成（`mujoco/README.md` 有命令）; mesh 直引 `../meshes/collision/` STL, 无复制资产。
 
 ## Description package conventions
 

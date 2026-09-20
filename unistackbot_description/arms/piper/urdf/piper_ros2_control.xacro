@@ -1,20 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <xacro:macro name="piper_ros2_control" params="use_gripper:=true use_gazebo:=false">
+    <xacro:macro name="piper_ros2_control" params="use_gripper:=true use_gazebo:=false headless:=true">
 
         <ros2_control name="piper_system" type="system">
 
             <hardware>
-                <!-- use_gazebo: 'ign'=Gazebo Sim(Fortress), 'true'/'classic'=Gazebo Classic, 其余=mock 插件.
+                <!-- use_gazebo: 'ign'=Gazebo Sim(Fortress), 'mujoco'=MuJoCo(mujoco_ros2_control),
+                     'true'/'classic'=Gazebo Classic, 其余=mock 插件.
                      注意: $(arg) 传参时 xacro 会把 true/false 解析成 Python 布尔, 条件需同时匹配 True -->
                 <xacro:if value="${use_gazebo == 'ign'}">
                     <plugin>gz_ros2_control/GazeboSimSystem</plugin>
                 </xacro:if>
+                <xacro:if value="${use_gazebo == 'mujoco'}">
+                    <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+                    <!-- MJCF 资产: 身体树由本 URDF 转换 + 手工策展, 见 arms/piper/mujoco/README.md -->
+                    <param name="mujoco_model">$(find unistackbot_description)/arms/piper/mujoco/piper.xml</param>
+                    <param name="sim_speed_factor">1.0</param>
+                    <!-- $(arg) 布尔坑: true 会变成 Python True, 归一回小写字符串 -->
+                    <param name="headless">${'true' if headless in [True, 'true'] else 'false'}</param>
+                </xacro:if>
                 <xacro:if value="${use_gazebo in [True, 'true', 'classic']}">
                     <plugin>gazebo_ros2_control/GazeboSystem</plugin>
                 </xacro:if>
-                <xacro:unless value="${use_gazebo in ['ign', True, 'true', 'classic']}">
+                <xacro:unless value="${use_gazebo in ['ign', 'mujoco', True, 'true', 'classic']}">
                     <plugin>unistackbot_sim_control/SimControlHardware</plugin>
                     <param name="backend">kinematic</param>
                 </xacro:unless>
@@ -92,24 +101,38 @@
                     <param name="max">0.1</param>
                     <param name="max_velocity">3.0</param>
                 </joint>
-                <!-- 两个 mimic 手指关节: URDF 侧已有 <mimic> 标签, 此处按 gazebo_ros2_control
-                     要求补 mimic/multiplier 参数才能在仿真中受控跟随 gripper -->
-                <joint name="gripper_joint1">
-                    <command_interface name="position"/>
-                    <state_interface name="position"/>
-                    <state_interface name="velocity"/>
-                    <param name="mimic">gripper</param>
-                    <param name="multiplier">0.5</param>
-                    <param name="offset">0.0</param>
-                </joint>
-                <joint name="gripper_joint2">
-                    <command_interface name="position"/>
-                    <state_interface name="position"/>
-                    <state_interface name="velocity"/>
-                    <param name="mimic">gripper</param>
-                    <param name="multiplier">-0.5</param>
-                    <param name="offset">0.0</param>
-                </joint>
+                <!-- 两个 mimic 手指关节, 按链分流:
+                     mujoco: passive (MJCF 侧 equality 耦合跟随 gripper, 见 mujoco/README.md),
+                             无 command_interface → JointStream 解析后只管 7 个主关节
+                     其余 (mock/gz): 按 gazebo_ros2_control 要求补 mimic/multiplier 参数受控跟随 -->
+                <xacro:if value="${use_gazebo == 'mujoco'}">
+                    <joint name="gripper_joint1">
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                    </joint>
+                    <joint name="gripper_joint2">
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                    </joint>
+                </xacro:if>
+                <xacro:unless value="${use_gazebo == 'mujoco'}">
+                    <joint name="gripper_joint1">
+                        <command_interface name="position"/>
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                        <param name="mimic">gripper</param>
+                        <param name="multiplier">0.5</param>
+                        <param name="offset">0.0</param>
+                    </joint>
+                    <joint name="gripper_joint2">
+                        <command_interface name="position"/>
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                        <param name="mimic">gripper</param>
+                        <param name="multiplier">-0.5</param>
+                        <param name="offset">0.0</param>
+                    </joint>
+                </xacro:unless>
             </xacro:if>
 
         </ros2_control>
