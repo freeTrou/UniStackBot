@@ -69,8 +69,8 @@ run_cyclic 25 "90% (25进程)"
 
 # ---------- B. SMI 计数 + 中断分布 + hwlatdetect (固件级) ----------
 if command -v hwlatdetect >/dev/null 2>&1; then
-  HW=$(sudo -n hwlatdetect --duration=60 --threshold=20 2>/dev/null | grep -E "Max Latency|Samples" | tr '\n' ' ')
-  [ -z "$HW" ] && HW="sudo 需密码, 跳过 (手动: sudo hwlatdetect --duration=60 --threshold=20)"
+  HW=$(sudo -n hwlatdetect --duration=60 --threshold=5 2>/dev/null | grep -E "Max Latency|Samples" | tr '\n' ' ')
+  [ -z "$HW" ] && HW="sudo 需密码, 跳过 (手动: sudo hwlatdetect --duration=60 --threshold=5)"
 else
   HW="rt-tests 未装 hwlatdetect"
 fi
