@@ -32,5 +32,6 @@
     <build_type>ament_cmake</build_type>
     <!-- pluginlib 发现走 package.xml export (与 sim_control 同款机制); 路径相对包 share 根 -->
     <pluginlib plugin="cartesian_motion_controller/cartesian_motion_controller.xml" />
+    <pluginlib plugin="joint_stream_controller/joint_stream_controller.xml" />
   </export>
 </package>

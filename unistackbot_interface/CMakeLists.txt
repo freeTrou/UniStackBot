@@ -16,6 +16,7 @@ find_package(geometry_msgs REQUIRED)
 # 纯 C++ 共享头 (非 rosidl) 放 include/unistackbot_interface/, 由消费方加 include 路径直引
 set(INTERFACE_FILES
 	msg/CartesianControl.msg
+	msg/JointCommand.msg
 	msg/CartesianMotionStatus.msg
 )
 if(INTERFACE_FILES)

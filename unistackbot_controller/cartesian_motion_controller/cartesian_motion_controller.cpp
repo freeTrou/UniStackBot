@@ -109,6 +109,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_init()
 	auto_declare<double>("max_cart_step", max_cart_step_);
 	auto_declare<int>("degraded_n", degraded_n_);
 	auto_declare<int>("ik_max_iterations", ik_max_iterations_);
+	auto_declare<int>("worker_cpu", worker_cpu_);
+	auto_declare<int>("worker_nice", worker_nice_);
 	auto_declare<double>("converge_pos_tol", converge_pos_tol_);
 	auto_declare<double>("converge_rot_tol", converge_rot_tol_);
 	// Humble: controller_manager 把自身 robot_description 以参数覆盖注入控制器节点
@@ -138,6 +140,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	degraded_n_ = get_node()->get_parameter("degraded_n").as_int();
 	cold_after_fails_ = get_node()->get_parameter("cold_after_fails").as_int();
 	ik_max_iterations_ = get_node()->get_parameter("ik_max_iterations").as_int();
+	worker_cpu_ = get_node()->get_parameter("worker_cpu").as_int();
+	worker_nice_ = get_node()->get_parameter("worker_nice").as_int();
 	converge_pos_tol_ = get_node()->get_parameter("converge_pos_tol").as_double();
 	converge_rot_tol_ = get_node()->get_parameter("converge_rot_tol").as_double();
 	if (base_link_.empty() || tip_link_.empty())
@@ -348,6 +352,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 controller_interface::return_type CartesianMotionController::update(
 	const rclcpp::Time & time, const rclcpp::Duration & /*period*/)
 {
+	// RT 线程调优归官方 CM 参数 (thread_priority/cpu_affinity, 见 yaml) ——
+	// 控制器层不再自设 (撞车: update 与全部控制器共用 CM 的同一条 RT 线程)
 	const auto wcet_t0 = std::chrono::steady_clock::now();
 	const std::size_t n = cmd_.size();
 
@@ -638,9 +644,8 @@ bool CartesianMotionController::applySolution(const double * q)
 // 种子库在本线程加载: 解析线性读全文件, 页天然全触 (加载即预热)。
 void CartesianMotionController::workerLoop()
 {
-	prctl(PR_SET_NAME, "cm_cold", 0, 0, 0);
-	// 让路 (与 ulog 后端同款姿态): 冷启动不与 RT 线程抢单
-	setpriority(PRIO_PROCESS, static_cast<id_t>(::syscall(SYS_gettid)), 10);
+	// worker 调优全参数化 (yaml: worker_cpu/worker_nice): 默认 nice+10 让路姿态
+	unistackbot_common::rt_tune::apply(worker_cpu_, 0, worker_nice_, "cm_cold");
 	UrdfFk fk;
 	std::string msg;
 	if (!fk.init(worker_urdf_, base_link_, tip_link_, msg))

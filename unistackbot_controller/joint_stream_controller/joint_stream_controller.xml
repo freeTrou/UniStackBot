@@ -1,0 +1,7 @@
+<library path="joint_stream_controller">
+  <class name="unistackbot_controller/JointStreamController"
+         type="unistackbot_controller::JointStreamController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Joint-level topic streaming controller (CSP; replaces JTC action path, 2026-09-18)</description>
+  </class>
+</library>

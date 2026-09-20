@@ -13,6 +13,7 @@
 #include "controller_interface/controller_interface.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "realtime_tools/realtime_publisher.hpp"
+#include "rt_tune/rt_tune.hpp"
 #include "sp_latest/sp_latest.hpp"
 #include "unistackbot_interface/joint_capacity.hpp"
 #include "unistackbot_interface/msg/cartesian_control.hpp"
@@ -77,6 +78,7 @@ private:
 	void warmup();
 	// WCET 记账 (每拍; 停用时终报 p50/p99/max)
 	void recordWcet(const std::chrono::steady_clock::time_point & t0);
+
 	// IK 解走安全层 (NaN 门 → 限位 clamp → 步长饱和), 两条路径共用 (流式/冷启动回灌)
 	bool applySolution(const double * q);
 	// worker 线程体 (第 3 步, 防线2): 低优线程跑 COLD_START, 结果经值通道回灌 update
@@ -90,6 +92,8 @@ private:
 	double max_cart_step_{0.02};          // 单周期笛卡尔步长限幅 [m]
 	int degraded_n_{50};                  // 连续失败降级阈值 (第 4 步)
 	int ik_max_iterations_{40};           // 流式求解迭代上限 (收敛常态 <5, 40 保险)
+	int worker_cpu_{-1};                  // worker 冷启动线程绑核 (-1=不绑; CM 主线程归官方参数)
+	int worker_nice_{10};                 // worker nice (让路姿态, 默认 +10)
 	int cold_after_fails_{3};             // 流式连续失败 N 拍后请求冷启动
 	double converge_pos_tol_{0.001};      // converged 判定: 位置容差 [m]
 	double converge_rot_tol_{0.01};       // converged 判定: 姿态容差 [rad]

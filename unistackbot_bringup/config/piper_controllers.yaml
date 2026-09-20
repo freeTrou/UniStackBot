@@ -1,18 +1,30 @@
 controller_manager:
   ros__parameters:
     update_rate: 500
+    # RT 线程调优 (官方参数, ros2_control_node 起 RT 线程时应用:
+    # set_current_thread_affinity + configure_sched_fifo — 见官方 userdoc)
+    thread_priority: 80     # SCHED_FIFO (0-99; 80=设计文档 CM 档, IgH 90/CiA402 85 之上预留)
+    cpu_affinity: 1         # 核1 = CM 的 update 线程; 核2 预留总线 (IgH/CiA402, 真机批次)
+    lock_memory: true       # mlockall (页锁; 需 memlock ulimit, 失败仅 WARN)
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-    joint_trajectory_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
+    joint_stream_controller:
+      type: unistackbot_controller/JointStreamController
 
     cartesian_motion_controller:
       type: unistackbot_controller/CartesianMotionController
 
+joint_stream_controller:
+  ros__parameters:
+    interpolation: hold          # hold | ruckig (慢上层选 ruckig)
+    # RT 线程调优归 controller_manager 官方参数 (thread_priority/cpu_affinity)
+
 cartesian_motion_controller:
   ros__parameters:
+    worker_cpu: -1        # 冷启动 worker 线程绑核
+    worker_nice: 10       # worker nice (让路姿态)
     base_link: base_link
     tip_link: link6
     # piper 暂无种子库资产, relpath 留空 = 走分支+随机阶梯
@@ -23,18 +35,3 @@ cartesian_motion_controller:
     max_cart_step: 0.02
     degraded_n: 50
 
-joint_trajectory_controller:
-  ros__parameters:
-    joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - gripper
-    command_interfaces:
-      - position
-    state_interfaces:
-      - position
-      - velocity

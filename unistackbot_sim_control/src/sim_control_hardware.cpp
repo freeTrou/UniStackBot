@@ -310,7 +310,10 @@ hardware_interface::CallbackReturn SimControlHardware::on_activate(const rclcpp_
 		ULOG_ERROR("Backend '%s' failed to activate", backend_->name().c_str());
 		return hardware_interface::CallbackReturn::ERROR;
 	}
-	// 默认语义: mock 无需首拍同步 (cmd/state 同从 0 起); 真机驱动重写此处时先 read 再 cmd=state
+	// 防线 arm (阶段0a): 基准 = 当前接口值; 真机驱动重写此处时先 read 再 cmd=state 再 arm
+	last_cmd_ = cmd_position_;
+	last_state_ = state_position_;
+	guard_armed_ = true;
 	ULOG_INFO("SimControlHardware activated (INACTIVE -> ACTIVE), RT loop starting");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -319,6 +322,7 @@ hardware_interface::CallbackReturn SimControlHardware::on_deactivate(const rclcp
 {
 	// 后端生命周期转发: 异步后端在此停 plant (有界 join)
 	deactivateBackend();
+	guard_armed_ = false;   // 防线解除 (重激活重新 arm 建基准)
 	// 默认语义: 停用后接口收回、RT 循环停止, 命令数组保持最后值 (无人再消化)
 	ULOG_INFO("SimControlHardware deactivated (ACTIVE -> INACTIVE), RT loop stopped");
 	return hardware_interface::CallbackReturn::SUCCESS;
@@ -455,11 +459,94 @@ hardware_interface::return_type SimControlHardware::read(const rclcpp::Time & /*
 	}
 
 	stepBackend(dt, integrate);
+
+	// ---- 状态有限性门 (阶段0a; mock 后端状态自产恒真, 此门为真机驱动同型预演) ----
+	if (guard_armed_)
+	{
+		bool bad = false;
+		for (size_t i = 0; i < joints_.size(); ++i)
+		{
+			if (!std::isfinite(state_position_[i]))
+			{
+				state_position_[i] = last_state_[i];
+				++fault_state_nonfinite_;
+				bad = true;
+			}
+			else
+			{
+				last_state_[i] = state_position_[i];
+			}
+		}
+		if (bad && (++guard_cycles_ % 500) == 0)
+		{
+			ULOG_WARN("read 防线: 状态非有限, 已保持上一拍 (nonfinite=%lu)",
+				static_cast<unsigned long>(fault_state_nonfinite_));
+		}
+	}
 	return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type SimControlHardware::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+hardware_interface::return_type SimControlHardware::write(const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
+	// ---- 最终防线 (阶段0a; 真机驱动同型照抄) ----
+	// 不论上层控制器是谁, 下发前逐一过门: NaN → 限位 → 步长。
+	// 注意 dt 用实际周期 (pause 期间 period 仍报正常周期, 步长界不变 = 保守侧)
+	if (guard_armed_)
+	{
+		const double dt = period.seconds() > 0.0 ? period.seconds() : 0.002;
+		bool warned = false;
+		for (size_t i = 0; i < joints_.size(); ++i)
+		{
+			if (joints_[i].is_mimic())
+			{
+				continue;   // mimic 命令由源关节派生, 不独立设门
+			}
+			double c = cmd_position_[i];
+			if (!std::isfinite(c))
+			{
+				// NaN 门: 拒绝本拍该关节命令, 保持上一拍 (绝不下发非有限值)
+				c = last_cmd_[i];
+				++fault_cmd_nonfinite_;
+				warned = true;
+			}
+			// 限位 clamp (最后关口收口; 控制器层的"拒绝"语义在先, 此处兜底)
+			const double clamped = std::clamp(c, joints_[i].min, joints_[i].max);
+			if (clamped != c)
+			{
+				++fault_cmd_clamped_;
+				warned = true;
+				c = clamped;
+			}
+			// 步长饱和: |Δcmd| ≤ max_velocity·dt (真机=速度物理限的软件界)
+			const double step = joints_[i].max_velocity * dt;
+			if (step > 0.0)
+			{
+				const double lo = last_cmd_[i] - step;
+				const double hi = last_cmd_[i] + step;
+				const double sat = std::clamp(c, lo, hi);
+				if (sat != c)
+				{
+					++fault_cmd_clamped_;
+					warned = true;
+					c = sat;
+				}
+			}
+			cmd_position_[i] = c;
+			last_cmd_[i] = c;
+		}
+		// 告警: 命中即报 (节流版: 同一异常态 500 拍内只报一次增量)
+		if (warned && fault_cmd_nonfinite_ + fault_cmd_clamped_ > last_fault_log_)
+		{
+			if (guard_cycles_ == 0 || fault_cmd_nonfinite_ + fault_cmd_clamped_ - last_fault_log_ >= 100)
+			{
+				last_fault_log_ = fault_cmd_nonfinite_ + fault_cmd_clamped_;
+				ULOG_WARN("write 防线命中: nonfinite=%lu clamped=%lu (累计)",
+					static_cast<unsigned long>(fault_cmd_nonfinite_),
+					static_cast<unsigned long>(fault_cmd_clamped_));
+			}
+			++guard_cycles_;
+		}
+	}
 	// 同步后端: transmit 为空操作 (命令已在 read 的 step 中消化); 异步后端: 此处发 cmd 给 plant
 	writeBackend();
 	return hardware_interface::return_type::OK;

@@ -104,6 +104,21 @@ private:
 	std::atomic<bool> paused_{false};                       // 冻结状态推进 (mimic 仍按源推导)
 	std::atomic<uint32_t> step_requests_{0};                // 暂停期间待处理的单步请求数
 	std::atomic<bool> service_running_{false};              // 服务线程退出旗标 (false 时线程自查退出)
+
+	// ---- write()/read() 最终防线 (2026-09-20 阶段0a; 真机驱动同型照抄) ----
+	// 语义: 不论上层控制器是谁, 下发的命令必须合法保守; 反馈状态必须有限可信。
+	// write(): NaN 门(保持上一拍+计数) → 限位 clamp(最后关口收口, 与控制器层
+	//          "拒绝"分层) → 步长饱和(|Δcmd| ≤ max_velocity·dt)
+	// read():  状态有限性门(异常→保持上一拍+计数) — mock 后端状态自产恒真,
+	//          此门为真机驱动(编码器炸值)预演同型结构
+	std::vector<double> last_cmd_;          // 上一拍已下发命令 (防线基准)
+	std::vector<double> last_state_;        // 上一拍可信状态 (read 门保持基准)
+	uint64_t fault_cmd_nonfinite_{0};       // 计数: 命令非有限
+	uint64_t fault_cmd_clamped_{0};         // 计数: 命令被限位/步长修正
+	uint64_t fault_state_nonfinite_{0};     // 计数: 状态非有限
+	uint64_t guard_cycles_{0};              // 拍计数 (告警节流用)
+	uint64_t last_fault_log_{0};            // 上次告警时的累计故障数 (增量节流基准)
+	bool guard_armed_{false};               // 激活后 arm (首拍建立基准)
 };
 
 }  // namespace unistackbot_sim_control

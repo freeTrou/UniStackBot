@@ -81,7 +81,7 @@ def _launch_setup(context):
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_trajectory_controller', '--controller-manager', '/controller_manager'],
+            arguments=['joint_stream_controller', '--controller-manager', '/controller_manager'],
             output='screen',
         ),
         # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, 与 JTC 由 switch_controllers 切换)
