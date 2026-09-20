@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 启动必读（每次会话最先执行）
+
+先读记忆目录恢复工作上下文，再读本文件：
+1. `~/.claude/projects/-home-work-project-git-project-UniStackBot-ws-src-UniStackBot/memory/MEMORY.md` — 记忆索引
+2. 重点读 `p15-progress.md`（进行中项目的快照：已完成/验收数据/下一步/环境坑）
+3. 记忆是时点快照不是实时状态——引用的文件/参数先对照当前代码核实再用
+
 ## Project Overview
 
 UniStackBot is a ROS 2 Humble workspace for a general-purpose, multi-morphology real-time robot control framework. It targets fixed-base arms, wheeled bases, quadrupeds, wheeled-arm humanoids, and bipedal humanoids from a single layered architecture. The first concrete robot is the **Piper arm**: URDF/Xacro description + the unified sim-control layer (`unistackbot_sim_control`, ros2_control hardware plugin with pluggable backends) + Gazebo integration. `unistackbot_controller` now hosts the CartesianMotionController CM plugin (P1.5, IK servoing on the control loop); `unistackbot_hardware` (real driver) is still a skeleton.
