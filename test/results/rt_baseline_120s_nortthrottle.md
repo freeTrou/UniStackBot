@@ -36,7 +36,11 @@
 
 复测: bash test/rt_chain_bench.sh <新标签>; 对比 test/results/ 下两文件。
 
-## 归因实锤: 500ms 事件 = RT throttling
+## ~~归因实锤~~ 已翻案: 500ms ≠ RT throttling (2026-09-20 下午复核)
+
+> **本段归因撤销**。重启把 sysctl 还原回 950000 后, 隔离全套 (isolcpus/nohz_full/rcu_nocbs/irqaffinity) 下负载档复测无 500ms — "-1 后消失"是相关不因果。机制上三重反证: SCHED_OTHER 负载不进 RT 带宽账本 / RT 占空比 <1% vs 95% 门槛 / 500ms 整齐值对不上 throttle 的 ≤50ms 残留 signature。详见 `rt_baseline_isolcpus.md` 翻案段。sysctl 保持默认 950000 (保险丝), 下方持久化建议一并撤回。
+
+原 A/B 数据 (保留存档):
 
 | 指标 | throttle=950000 (前基线) | throttle=-1 (本基线) | 变化 |
 |---|---|---|---|
@@ -53,5 +57,6 @@
 - 无负载档反而出现 19240µs (核2) / 2858µs (核1) — 无负载时 CPU 进深 C-state,
   唤醒退出延迟大 (符合 RT 手册 §1.6 的预判路径); 负载档反而热核稳定 (843-2981µs)
 - 2-3ms 级尾部仍在 = PREEMPT_VOLUNTARY 内核抢占粒度 + 中断 — **低延迟内核 + isolcpus 的目标**
-- 注意: 此参数是 sysctl 运行时参数, **当前只 -w 设置, 未持久化** — 重启会回到 950000;
-  已建议用户写 /etc/sysctl.d/90-unistackbot-rt.conf
+- 注意: 此参数是 sysctl 运行时参数, 重启会回到 950000;
+  ~~已建议用户写 /etc/sysctl.d/90-unistackbot-rt.conf~~ **撤回 (2026-09-20)**: 保持默认 950000 —
+  它是同核 RT 疯转时的保险丝 (冻 ≤50ms 后恢复), -1 拔保险丝; 本机占空比永不触发, 无收益纯风险

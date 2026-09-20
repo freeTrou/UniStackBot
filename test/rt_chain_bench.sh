@@ -44,6 +44,7 @@ cat > "$OUT" <<HDR
 | 内核 | $KERNEL |
 | PREEMPT | $PREEMPT |
 | cmdline | \`${CMDLINE}\` |
+| isolcpus | $(grep -oE "isolcpus=[^ ]*" /proc/cmdline || echo 无) |
 | sched_rt_runtime_us | $(sysctl -n kernel.sched_rt_runtime_us) |
 | ulimit -l | $(ulimit -l) |
 
@@ -57,11 +58,14 @@ echo "|---|---|---|" >> "$OUT"
 
 run_cyclic() {  # $1=负载进程数 $2=档名
   if [ "$1" -gt 0 ]; then python3 "$SCRIPT_DIR/cpu_load.py" start "$1"; sleep 3; fi
-  R=$(cyclictest -m -p 80 -D 120s -h 200 -a 1,2 -t 2 -q 2>&1 | grep "^# ")
+  # isolcpus=1,2 下默认亲和 mask 不含隔离核, cyclictest 不突破继承 mask (直接 -a 会 FATAL) → 必须显式 taskset
+  R=$(taskset -c 1,2 cyclictest -m -p 80 -D 120s -h 200 -a 1,2 -t 2 -q 2>&1)
   if [ "$1" -gt 0 ]; then python3 "$SCRIPT_DIR/cpu_load.py" stop; fi
   sleep 2
-  M=$(echo "$R" | grep Min); A=$(echo "$R" | grep Avg); X=$(echo "$R" | grep Max)
+  M=$(echo "$R" | grep "Min Latencies"); A=$(echo "$R" | grep "Avg Latencies"); X=$(echo "$R" | grep "Max Latencies")
+  [ -z "$M" ] && { echo "- ⚠️ $2 档 cyclictest 无统计输出:" >> "$OUT"; echo "$R" | grep -E "WARN|FATAL|Error" | sed 's/^/  /' >> "$OUT"; M="— —"; A="— —"; X="— —"; }
   echo "| $2 | $(echo $M|awk '{print $4}') / $(echo $A|awk '{print $4}') / $(echo $X|awk '{print $4}') | $(echo $M|awk '{print $5}') / $(echo $A|awk '{print $5}') / $(echo $X|awk '{print $5}') |" >> "$OUT"
+  echo "$R" | grep -E "WARN|FATAL" | grep -v "cpu_dma_latency" | sed "s/^/- cyclictest $2: /" >> "$OUT"
 }
 run_cyclic 0  "无负载 (0/28)"
 run_cyclic 14 "50% (14进程)"
