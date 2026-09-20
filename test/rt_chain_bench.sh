@@ -50,14 +50,14 @@ cat > "$OUT" <<HDR
 HDR
 
 # ---------- A. 平台层: cyclictest 三档负载 (核1,2) ----------
-echo "## A. cyclictest 三档 (核1+核2, FIFO80, 30s/档)" >> "$OUT"
+echo "## A. cyclictest 三档 (核1+核2, FIFO80, 120s/档)" >> "$OUT"
 echo "" >> "$OUT"
 echo "| 负载档 | 核1 Min/Avg/Max (µs) | 核2 Min/Avg/Max (µs) |" >> "$OUT"
 echo "|---|---|---|" >> "$OUT"
 
 run_cyclic() {  # $1=负载进程数 $2=档名
   if [ "$1" -gt 0 ]; then python3 "$SCRIPT_DIR/cpu_load.py" start "$1"; sleep 3; fi
-  R=$(cyclictest -m -p 80 -D 30s -h 100 -a 1,2 -t 2 -q 2>&1 | grep "^# ")
+  R=$(cyclictest -m -p 80 -D 120s -h 200 -a 1,2 -t 2 -q 2>&1 | grep "^# ")
   if [ "$1" -gt 0 ]; then python3 "$SCRIPT_DIR/cpu_load.py" stop; fi
   sleep 2
   M=$(echo "$R" | grep Min); A=$(echo "$R" | grep Avg); X=$(echo "$R" | grep Max)
@@ -67,13 +67,21 @@ run_cyclic 0  "无负载 (0/28)"
 run_cyclic 14 "50% (14进程)"
 run_cyclic 25 "90% (25进程)"
 
-# ---------- B. SMI 计数 + 中断分布 (优化完整性) ----------
+# ---------- B. SMI 计数 + 中断分布 + hwlatdetect (固件级) ----------
+if command -v hwlatdetect >/dev/null 2>&1; then
+  HW=$(sudo -n hwlatdetect --duration=60 --threshold=20 2>/dev/null | grep -E "Max Latency|Samples" | tr '\n' ' ')
+  [ -z "$HW" ] && HW="sudo 需密码, 跳过 (手动: sudo hwlatdetect --duration=60 --threshold=20)"
+else
+  HW="rt-tests 未装 hwlatdetect"
+fi
 echo "" >> "$OUT"
 echo "## B. SMI 与中断 (30s 采样)" >> "$OUT"
 SMI1=$(perf stat -e msr/smi_counter/ -a sleep 30 2>&1 | grep smi | grep -oE "[0-9,]+" | head -1)
 echo "- SMI 计数(30s, 全核): ${SMI1:-工具不可用}" >> "$OUT"
 IRQ1=$(cat /proc/interrupts | awk '{print $1}' | grep -c ":") 
 echo "- IRQ 活跃行数: $IRQ1 (优化后对比: isolcpus+managed_irq 应减少核1/2 命中)" >> "$OUT"
+echo "- hwlatdetect(60s, 阈20µs): $HW" >> "$OUT"
+echo "- RT 带宽: runtime=$(sysctl -n kernel.sched_rt_runtime_us)us / period=$(sysctl -n kernel.sched_rt_period_us)us" >> "$OUT"
 
 # ---------- C. 链路层: CM 拍间隔 + WCET + E2E (三档负载) ----------
 echo "" >> "$OUT"
