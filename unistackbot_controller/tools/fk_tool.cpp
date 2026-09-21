@@ -3,9 +3,9 @@
  *
  * 用法:
  *   ros2 run unistackbot_controller fk_tool --joints j1=0.5,j2=-0.3,...
- * 关节表读自运行链路的 /joint_trajectory_controller 参数; URDF 读自
- * /robot_state_publisher 参数 (链路活着时始终可用); 拓扑 = link_base -> link7
- * 由机型约定给出 (tip 可 --tip 覆盖)。
+ * 关节表由 --joints 名=值 表命令行给出 (内部按 URDF 链序重排); URDF 读自
+ * /robot_state_publisher 参数 (链路活着时始终可用); 拓扑默认 link_base -> link7
+ * (--base/--tip 可覆盖)。
  * 输出行格式 (对拍脚本解析):
  *   position [x, y, z]
  *   quaternion [w, x, y, z]

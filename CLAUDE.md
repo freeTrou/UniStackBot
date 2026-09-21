@@ -44,9 +44,13 @@ g++ -std=c++17 -O2 -pthread -Wall -Wextra -Wconversion -I.. test_ulog.cpp -o tes
 ```
 测试二进制（test_ulog/bench_ulog 等）已在 .gitignore，勿提交。
 
-Four launch entry points, all currently Piper-specific (控制链三选一: mock/gz/mujoco):
+统一入口 + 四个底层入口 (控制链三选一: mock/gz/mujoco):
 
 ```bash
+# 0. 统一入口 (2026-09-21 批次1): chain 一参切三链
+ros2 launch unistackbot_bringup sim.launch.py chain:=mock robot:=piper
+#    args: chain:=mock|gz|mujoco robot use_rviz gui headless (转发到下面 2-4 对应链的 launch)
+
 # 1. Visualization only (RViz + joint_state_publisher_gui; ros2_control off by default)
 ros2 launch unistackbot_description display.launch.py
 #    args: model:=<xacro> use_gripper use_ros2_control use_world gui rviz
@@ -61,7 +65,7 @@ ros2 launch unistackbot_gazebo ign.launch.py robot:=piper        # gui:=true|fal
 ros2 launch unistackbot_mujoco mujoco.launch.py robot:=piper     # headless:=true(默认)|false, use_rviz:=true 可选
 ```
 
-All control chains spawn `joint_state_broadcaster` + `joint_stream_controller` (active) + `cartesian_motion_controller` (inactive 注册). **JTC 已从链上移除** (2026-09-18)。命令通道:
+All control chains spawn `joint_state_broadcaster` + `joint_stream_controller` (active) + `cartesian_motion_controller` (inactive 注册) + `ee_state_broadcaster` (只读, 三链第四 spawner). **JTC 已从链上移除** (2026-09-18)。命令通道:
 
 - 关节空间: `/joint_stream_controller/command`（`unistackbot_interface/JointCommand`, reliable+KeepLast(1), 点流语义——每条消息是"最新目标"）。仿真链（position 命令接口）只消费 CSP 模式。关节按 `joint_names` 字段对名映射，必须列全（**mujoco 链只列 7 个主关节**——手指 passive, 见 `unistackbot_mujoco/README.md` 差异表）。
 - 笛卡尔空间: `ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped ...`（base 系）。
@@ -99,7 +103,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
   - **JointStreamController**（2026-09-18）: 关节级 topic 流式控制器, 取代 JTC action 层（topic 性能优, 点流取代 goal/结果握手）。`joint_stream_controller/` 自包含文件夹。契约: `~/command`(`unistackbot_interface/JointCommand`, reliable+KeepLast(1); CSP/CSV/CST/MIT 四模式, 仿真链只消费 CSP)。插值档位参数 `interpolation: hold | ruckig`（hold=**每周期**步长饱和逼近已采纳目标——消息只采纳目标、步进按控制周期, 与消息率解耦; ruckig=OtgStream 点流整形, 慢上层 10-100Hz 率失配填充, 路径插值永不在控制器——形状轴归上层/MoveIt）。安全层与 CM 同款。**断流受控减速**（0c, 2026-09-21）: `stale_timeout_ms`/`stale_decel_ms`（链上 yaml 默认 200/200）——StaleWatch 判 `~/command` 断流后 hold 档=关节速度线性衰减刹停、ruckig 档=OtgStream 刹停, 恢复自动续接。rosidl msg 非 POD 不进 SpLatest——经 CmdSnapshot 翻译层（先例）。gz E2E: 50Hz 命令流跟踪误差 0.0053 rad, 与 CM 切换共存。
   - **EeStateBroadcaster**（2026-09-21, 仿真测试方案批次2）: EE 位姿独立反馈流, `ee_state_broadcaster/` 自包含文件夹。契约: `~/ee_state`(PoseStamped, base 系, FK(关节状态), 默认 50Hz)。**只读控制器**（零命令接口认领, 与 JS/CM/JSB 共存——CM 切走后 EE 反馈不断流）。旋转表示决策挂起: 先四元数载体 (TF 兼容), 决策后升 EeState.msg 加并行字段不破坏消费者。
   - 工具节点: `fk_tool` / `ik_tool`（算法调试 CLI, `tools/`; fk_tool 支持 `--base/--tip`）+ `ik_demo_node`（RViz 交互拖动 → 发 CM `~/target`, 2026-09-21 重写）。
-- **unistackbot_algorithm** — 纯算法库（零控制器依赖）, 2026-09-17 从 controller 拆出: `ik_solver`（**IkSolver 抽象接口**, 2026-09-21: CM 的可插拔求解层——5 条硬契约在 `ik_solver.hpp`（失败不改 out_q/墙钟预算/SolveMode 语义/RT 纪律/stats）; 新数值求解器=实现接口+CM 加选择分支（yaml `ik_solver:` 参数）+playbook 六阶段; 用户 7 轴数值解按此接入, 与 DlsIk 平级 AB 对比）、`urdf_fk`（kdl_parser 建链 + FK/雅可比/限位/链序名, RT 零分配; `test/check_fk_tf.sh` TF 对拍实测 ~4e-13）+ `dls_ik`（Eigen SVD 阻尼伪逆 + boxed DLS 避限位 + SolveMode 流式/冷启动解耦 + 四分支代表种子 + `timeout_ns` 墙钟预算 + `min_sigma` 奇异遥测 + `NEAR_SINGULAR` 失败分类; 600 样本 Oracle 冷启动 99.5%）+ 可选**种子库**（`loadSeedLibrary` 读机型资产 `arms/<robot>/ik/seed_lib_<robot>.txt`, COLD_START 阶梯级0.5 分支封顶 top-6; 预算档 1ms 96.2% / 2ms 96.9% / 5ms 98.3%; 生成器 `test/gen_seed_library.py` + 增量 `test/seed_lib_incremental.py`, xarm7 冻结 v1.1=12k 条）。
+- **unistackbot_algorithm** — 纯算法库（零控制器依赖）, 2026-09-17 从 controller 拆出: `ik_solver`（**IkSolver 抽象接口**, 2026-09-21: CM 的可插拔求解层——5 条硬契约在 `ik_solver.hpp`（失败不改 out_q/墙钟预算/SolveMode 语义/RT 纪律/stats）; 新数值求解器=实现接口+CM 加选择分支（yaml `ik_solver:` 参数）+playbook 六阶段; 用户 7 轴数值解按此接入, 与 DlsIk 平级 AB 对比）、`urdf_fk`（kdl_parser 建链 + FK/雅可比/限位/链序名, RT 零分配; `test/check_fk_tf.sh` TF 对拍实测 ~4e-13, 机型通用化——frame 从 yaml 读）+ `dls_ik`（Eigen SVD 阻尼伪逆 + boxed DLS 避限位 + SolveMode 流式/冷启动解耦 + 四分支代表种子 + `timeout_ns` 墙钟预算 + `min_sigma` 奇异遥测 + `NEAR_SINGULAR` 失败分类; 600 样本 Oracle 冷启动 99.5%）+ 可选**种子库**（`loadSeedLibrary` 读机型资产 `arms/<robot>/ik/seed_lib_<robot>.txt`, COLD_START 阶梯级0.5 分支封顶 top-6; 预算档 1ms 96.2% / 2ms 96.9% / 5ms 98.3%; 生成器 `test/gen_seed_library.py` + 增量 `test/seed_lib_incremental.py`, xarm7 冻结 v1.1=12k 条）。
 - **unistackbot_description** — URDF/Xacro, RViz config, `display.launch.py`.
 - **unistackbot_hardware** — real-driver plugin skeleton (empty `placeholder.cpp`); deps (`hardware_interface`, `pluginlib`) and the `device`/`baudrate`/`loop_rate` params in `piper_ros2_control.xacro` anticipate the real Piper CAN driver.
 - **unistackbot_sim_control** — 统一仿真控制层（ 对 ros2_control 提供统一插件接口，对内按后端分类）:
@@ -109,7 +113,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
   - `/sim_control/*` 服务（reset / set_joint_state / pause / resume / step）: 插件进程内自建（`on_configure` 启动、`on_cleanup` 销毁），命令经 SPSC 无锁队列交给实时循环。**`/sim_control` 契约住本包**（`include/unistackbot_sim_control/sim_control_contract.hpp` 的 SimCommand/SimCmdType/SimControlServer; 2026-09-17 终局: 实现归实现的家、契约归契约的主人, 曾短暂上收 interface 后回迁）; 应答 `success=true` 只代表命令已被接受（入队/ign 请求已发出），不代表执行完成。注意：控制器激活时其保持命令每周期都会覆盖瞬移，**set_joint_state/reset 需在 pause 下使用**。
   - 日志走 ulog 宏（`ULOG_INFO`/`ULOG_ERROR`，非 RCLCPP）: `on_init` 里 `ulog_init` —— 终端 sink 恒开（launch 捕获 stdout），URDF `<ros2_control>` 块加 `<param name="ulog_file">` 可选开文件 sink；`on_shutdown` 里 `ulog_shutdown` 排空落盘。
   - gz 链路的 `/sim_control/*` 由 `unistackbot_gazebo` 包里的 `sim_control_gz_node` 承载（gz 知识归集成层; 契约头从本包 include——依赖方向 gazebo → sim_control）。
-  - 回归测试: 仓库根 `test/verify_robot.sh <robot> [--with-gazebo]`（**JTC 残余待适配**: 脚本还断言 joint_trajectory_controller active + follow_joint_trajectory goal, 当前链路上会失败）、`test/smoke_sim_control.sh` 深测 `/sim_control` 服务语义（piper 关节表，断言含 mimic/限位拒绝/reset）。两者都自包含（需先 colcon build + source，脚本自行定位工作区并套用 `~/cyclonedds.xml`）。
+  - 回归测试 (均自包含, 需先 colcon build + source, 脚本自行定位工作区并套用 `~/cyclonedds.xml`): `test/verify_robot.sh <robot> [--with-gazebo] [--with-mujoco]`（2026-09-21 重写: JS 点流 + CM 切换断言, 助手 `test/verify_motion.py`, 各链关节集自适应——链上已无 JTC）；`test/fault_injection.sh [--chain mock|mujoco]`（F1 断流/F2 NaN/F3 限位/F5 超速/F6 断流受控减速/F7 mimic 断言; F4 状态跳变由 smoke 覆盖; 死链硬门防空洞 PASS; bed 经环境变量注入关节表/阈值）；`test/smoke_sim_control.sh` 深测 `/sim_control` 服务语义（piper 关节表，断言含 mimic/限位拒绝/reset）。
 - **unistackbot_interface** — 公共接口定义包（ROS msg/srv/action + 纯 C++ 共享契约头）：跨包/跨仓库共享的类型放在这里（单一事实源，供算法团队外部仓库依赖）。已落地：① 机器人级契约: `RobotFeedback`/`RobotCommand`（含冗余偏好与 MIT 模式; 与 `JointCommand.msg` 字段对齐——单一契约两载体）、`IkResult`/`SimResult` 分层结果码、`joint_capacity.hpp` 的 kMaxJoints 唯一定义; ② 消息: `JointCommand.msg`（CSP/CSV/CST/MIT 四模式点流）、`CartesianControl.msg`（TRACKING/HOLD 事件通道）、`CartesianMotionStatus.msg`; ③ `test_contract.cpp` 契约自检。**`/sim_control` 契约不住本包**——住 `unistackbot_sim_control`。
 - **unistackbot_common** — 组件库，**不是 ROS 包**（无 package.xml/CMakeLists，colcon 自动忽略）：纯代码存放层，保持可在非 ROS 环境（RT 主站线程/单元测试/ARM 交叉编译）中直接复用。现有组件（每个独立子文件夹 = 文档 + 实现 + 测试三件套）:
   - `sp_latest/` — 双缓冲覆盖写/取最新原语（最新 **1** 个，"值通道"，seqlock 宣告式，seq 位宽自适应 64/32 位）；sim_control `threaded` 后端三通道 + CM worker 回灌 + JointStream 命令通道用它
@@ -126,6 +130,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
   - DDS comes from the machine-wide `~/cyclonedds.xml` (`CYCLONEDDS_URI` in `.bashrc`): binds `lo` + unicast `Peers 127.0.0.1`. This machine's `lo` lacks the MULTICAST flag, so unicast-only discovery intermittently dropped late joiners; the Peers bootstrap fixed it. The launches deliberately do NOT override `CYCLONEDDS_URI`. Run at most ONE launch stack at a time — leftover same-name nodes (robot_state_publisher / controller_manager) poison new runs.
   - The ign chain prepends the description package's ament share root to `IGN_GAZEBO_RESOURCE_PATH`: URDF→SDF conversion rewrites `package://` to `model://`, and Fortress resolves those only via that env var.
   - `scripts/gz_clean.sh` (`ros2 run unistackbot_gazebo gz_clean.sh`) kills the whole launch process family — ign servers routinely survive launch shutdown and poison the next run; run it before every launch.
+  - **gz 0.7.21 回归遗留 (2026-09-21 apt 连带升级, 与归组无关)**: 上游 mimic 接口改名 `<joint>_mimic/*` → piper 手指 ign 分支已改 state-only (同 mujoco 方案) 修激活; **遗留未解**: gripper 主关节 (prismatic) 不响应位置命令 + 手指无耦合漂移——需查上游 0.7.21 mimic 约定/changelog (要 GitHub 代理), 独立工作项。
   - `src/sim_control_gz_node.cpp` — `/sim_control/*` 的 gz 适配器（**纯 ROS 构建，零 ign 编译依赖**）。gz 链路的 ros2_control 插件是 `GazeboSimSystem` 而非 SimControlHardware，故 `/sim_control/*` 由这个 side-car 独立节点承载：pause/resume/step 经 launch 里 parameter_bridge 桥接的 `/world/<world>/control`（`ros_gz_interfaces/srv/ControlWorld`）下发；`reset` 拒绝（Fortress 实测有毒：返回 success=true 但世界 negative-timestep 停摆）、`set_joint_state` 拒绝（无原生等价，Garden+ 才有）。契约头从 `unistackbot_sim_control` include。由 `ign.launch.py` 启动，`world` 参数（`unistack_world`）须与 `empty_ign.world` 的 `<world name>` 及桥接服务名一致。
 - **unistackbot_mujoco** — MuJoCo 集成 (第三条控制链, 2026-09-20): `mujoco.launch.py` 纯 launch 胶水零 C++。控制器管理器宿主 = `mujoco_ros2_control` 的**定制 `ros2_control_node`**（controller_manager + MuJoCo 引擎 + 物理线程 + 渲染同进程; 上游 ros2_control 合入仿真 PR 后可换回标准节点——临时措施）。真实动力学回归链, 对照 mock (理想执行器)/gz (ODE)。要点:
   - 安装: apt 二进制 `ros-humble-mujoco-ros2-control` 0.1.2 (内嵌 MuJoCo 3.12.0); RT 线程调优经同一 yaml 预留接口 (500Hz/FIFO80/核1) 实测生效, 与 mock 链同份 `<robot>_controllers.yaml`。
@@ -136,7 +141,7 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 
 ## RT 基准与调优（仓库根 test/）
 
-- `test/rt_chain_bench.sh <标签>` — 一键 RT 基准套件: cyclictest 三档(无负载/50%/90%, `cpu_load.py` 造载) + SMI/中断采样 + hwlatdetect + RT 带宽记录 + CM 链路三档 E2E(WCET/误差/收敛)。结果 markdown 入库 `test/results/`（当前权威基线 `rt_baseline_isolcpus.md`, 2026-09-20 隔离全套生效后: 负载档 Max 6-12µs; 历史基线同目录）。内核背景: 本机是**低延迟内核 (lowlatency), 不是 PREEMPT_RT**——措辞勿混。cmdline 已加 `isolcpus=domain,managed_irq,1,2 nohz_full=1,2 rcu_nocbs=1,2 irqaffinity=0,3-27`（隔离核1/2）。
+- `test/rt_chain_bench.sh <标签> [chain]` (chain: mock 默认 | mujoco) — 一键 RT 基准套件: cyclictest 三档(无负载/50%/90%, `cpu_load.py` 造载) + SMI/中断采样 + hwlatdetect + RT 带宽记录 + CM 链路三档 E2E(WCET/误差/收敛)。结果 markdown 入库 `test/results/`（mock 权威基线 `rt_baseline_isolcpus.md`, 2026-09-20 隔离全套生效后: 负载档 Max 6-12µs; mujoco 基线 `rt_mujoco_baseline.md`: p99 4-55µs/误差 0.74mm/**max 508.6µs = 500µs IK 预算剪枝签名**——激活后首批冷 IK 烧穿预算, worker 3 拍自愈, 无害; warmup 多轮加固用户裁定暂缓排批次4; 历史基线同目录）。内核背景: 本机是**低延迟内核 (lowlatency), 不是 PREEMPT_RT**——措辞勿混。cmdline 已加 `isolcpus=domain,managed_irq,1,2 nohz_full=1,2 rcu_nocbs=1,2 irqaffinity=0,3-27`（隔离核1/2）。
 - RT 裁决 (2026-09-20, 勿回退): `sched_rt_runtime_us` **保持默认 950000**——"500ms 事件 = RT throttling" 归因已翻案 (SCHED_OTHER 负载不进 RT 带宽账本, RT 占空比 <1% vs 95% 门槛; 详见基线文档翻案段); 950ms 默认值是同核 RT 疯转时的保险丝, 不持久化 -1。
 - isolcpus 坑: cyclictest 直接 `-a 1,2` 会 FATAL（不突破继承亲和 mask）——必须 `taskset -c 1,2 cyclictest ...`（套件已内置）。
 - `test/rt_tune_boot.sh [0-3]` — **每次开机手动执行** `sudo bash test/rt_tune_boot.sh` (默认 = 核0-3 前四核): idle 按退出延迟>2µs 禁深睡 (x86 通用, 兼 ACPI/intel_idle 档表) + performance governor + EPP; uncore 锁频段默认关 (对照实验无收益)。幂等, sysfs 直写零依赖; 换机器改脚本内 DEFAULT_CPUS。生产环境再转 systemd oneshot。
@@ -162,7 +167,7 @@ Contracts to keep in sync when changing joints or interfaces:
 
 ## Description package conventions
 
-Robot models live under `unistackbot_description/arms/<robot>/urdf/` with mesh assets under `arms/<robot>/meshes/{visual,collision}/`. Mesh paths in URDF use the `package://unistackbot_description/...` URI — keep this prefix when adding new robots so resolved paths work after `--symlink-install`.
+Robot models live under `unistackbot_description/arms/<robot>/urdf/` with mesh assets under `arms/<robot>/meshes/{visual,collision}/`. Mesh paths in URDF use the `package://unistackbot_description/...` URI — keep this prefix when adding new robots so resolved paths work after `--symlink-install`. `arms/<robot>/original/` = 导入时点原始 URDF 留档（死档案 diff 基线，方法见 `arms/original_README.md`；git 仍是真版本管理）。
 
 The **Piper arm** is the reference model and the pattern to follow for new robots:
 - `piper.urdf.xacro` — top-level entry; declares the xacro args above and conditionally includes the macros below.
@@ -184,6 +189,7 @@ Not build input, but two items are normative for code:
 - `timesync_design.md` — MCU↔主机时间同步两帧协议（主机为时间服务器, MCU 落 sync.csv 锚点表; v1.9 USB 转串口部署版）。
 - `udp_internal_bus_argument.md` — 内部总线选型论证（插值器以下链路不采用 UDP 的文献证据版, 服务于 CAN FD 定版决策）。
 - `ik_validation_playbook.md` — 换臂/换 IK 求解器的六阶段验证方法论 + 参数审计表 + 验收模板。
+- `sim_environment_and_test_plan.md` — 三链仿真现状 / 对上接口契约 / 算法嵌入四路径 / 分链测试矩阵 / 实施批次（2026-09-21 批次1-3 全勾; warmup 加固排批次4）。
 - `control_course/` — control-theory course notes（传递函数 → 三环级联、PM/带宽账）. Background for the numbers cited in the design docs; not code documentation.
 
 ## Conventions to preserve
