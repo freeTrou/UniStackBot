@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # RT 链路基准测试套件 (2026-09-20): 平台 cyclictest 三档 + CM 链路层指标。
-# 用法: bash test/rt_chain_bench.sh <标签>     如: baseline / lowlat_after
+# 用法: bash test/rt_chain_bench.sh <标签> [chain]    chain: mock(默认) | mujoco
+#   mock   → C 节 = 纯算法 WCET (理想执行器)
+#   mujoco → C 节 = 动力学仿真下 WCET (物理线程与 CM RT 线程同机争用的真实代价)
 # 前置: colcon build + source; gz_clean 无残留; 输出 test/results/rt_<标签>.md
 # 注意: 全程不用 pkill 模式匹配 (自杀坑), 精确 PID 清理。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -88,14 +90,20 @@ echo "- hwlatdetect(60s, 阈20µs): $HW" >> "$OUT"
 echo "- RT 带宽: runtime=$(sysctl -n kernel.sched_rt_runtime_us)us / period=$(sysctl -n kernel.sched_rt_period_us)us" >> "$OUT"
 
 # ---------- C. 链路层: CM 拍间隔 + WCET + E2E (三档负载) ----------
+CHAIN="${2:-mock}"
 echo "" >> "$OUT"
-echo "## C. CM 链路 (mock xarm7, 三档负载 E2E)" >> "$OUT"
+echo "## C. CM 链路 ($CHAIN, 三档负载 E2E)" >> "$OUT"
 echo "" >> "$OUT"
 echo "| 负载档 | WCET p50/p99/max (µs) | 跟踪误差 (mm) | 收敛时间 (s) | 备注 |" >> "$OUT"
 echo "|---|---|---|---|---|" >> "$OUT"
 
-ros2 launch unistackbot_bringup control.launch.py robot:=xarm7 use_rviz:=false > /tmp/rtb_launch.log 2>&1 &
-LPID=$!
+if [ "$CHAIN" = "mujoco" ]; then
+  ros2 launch unistackbot_mujoco mujoco.launch.py robot:=xarm7 headless:=true > /tmp/rtb_launch.log 2>&1 &
+  LPID=$!
+else
+  ros2 launch unistackbot_bringup control.launch.py robot:=xarm7 use_rviz:=false > /tmp/rtb_launch.log 2>&1 &
+  LPID=$!
+fi
 sleep 15
 for i in 1 2 3; do
   timeout 15 ros2 control switch_controllers --deactivate joint_stream_controller --activate cartesian_motion_controller >/dev/null 2>&1
