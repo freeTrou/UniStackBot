@@ -77,9 +77,10 @@ unistackbot_bringup            → 顶层启动 / 参数编排
 unistackbot_controller         → 控制器集成 (CM 笛卡尔流式 + JointStream 关节流式) + 工具节点
 unistackbot_algorithm          → 纯算法库 (FK/IK/种子库, 零控制器依赖)
 unistackbot_hardware           → 硬件抽象 / 驱动通信     (hardware_interface, pluginlib, serial)
-  ├─ unistackbot_sim_control  → 统一仿真控制层（kinematic 后端 + /sim_control 服务）
-  ├─ unistackbot_gazebo        → Gazebo 集成（world + launch）
-  └─ unistackbot_mujoco        → MuJoCo 集成（mujoco_ros2_control 链 launch; MJCF 资产住 description）
+  └─ unistackbot_sim_control/  → 仿真集成组 (容器目录, 三独立包; 见其 README)
+      ├─ core     (包 unistackbot_sim_control: 统一仿真控制层 kinematic 后端 + /sim_control 服务)
+      ├─ gazebo   (包 unistackbot_gazebo: Gazebo 集成 world + launch + gz 适配器)
+      └─ mujoco   (包 unistackbot_mujoco: MuJoCo 集成 launch; MJCF 资产住 description)
 物理硬件 / 仿真器
 ```
 

@@ -1,27 +1,23 @@
-# unistackbot_sim_control
+# unistackbot_sim_control/ — 仿真集成组 (容器目录)
 
-统一仿真控制层：**对外**给 ros2_control 提供统一硬件插件，**对内**按后端分类，新仿真平台按同一后端接口扩展。
+本目录收纳全部三种仿真的集成, **三个独立 colcon 包** (维持三包: 依赖各自声明、
+可选择性构建; 与未来真机总线后端包 SocketCAN/EtherCAT master 同一"框架核心 +
+平行集成包"模式)。统一性不靠包结构: `/sim_control` 契约 + 共享
+`unistackbot_bringup/config/<robot>_controllers.yaml` + 三个 launch 同款 `robot:=` 人机工学。
 
-## 组成
+| 子目录 | 包名 | 角色 |
+|---|---|---|
+| `core/` | `unistackbot_sim_control` | 仿真核心: SimControlHardware 插件 (kinematic 后端) + `/sim_control` 契约 + write()/read() 防线 (真机驱动同型照抄) |
+| `gazebo/` | `unistackbot_gazebo` | Gazebo Fortress 链: `ign.launch.py` + world + gz 适配器 (`sim_control_gz_node`) + `gz_clean.sh` |
+| `mujoco/` | `unistackbot_mujoco` | MuJoCo 链 (mujoco_ros2_control 0.1.2): `mujoco.launch.py` |
 
-- **`SimControlHardware`**（SystemInterface 插件）—— URDF `<hardware>` 块写死本插件 + `<param name="backend">kinematic</param>`。接口按 URDF 声明镜像导出（effort 恒 0）；动态关节 ≤16，限位 / `max_velocity` / mimic 全来自 `<ros2_control>` 参数。
-- **后端**（`sim_backend_factory.hpp` 是唯一认识具体后端类的地方，新仿真 = 子类 + 登记一行）：
-  - `kinematic`：理想执行器——限位 clamp + `max_velocity` 饱和的一阶逼近，mimic 关节从源关节推导
-  - `threaded`：实时循环独立线程，三通道走 `unistackbot_common` 的无锁原语
-- **`/sim_control/*` 服务**（reset / set_joint_state / pause / resume / step）—— 插件进程内自建，命令经 SPSC 无锁队列进实时循环。应答 `success=true` 只代表**已接受**，不代表执行完成。JTC 激活时其保持命令每周期覆盖瞬移，**set_joint_state / reset 需在 pause 下用**。`set_joint_state` 用本包的 `srv/SetJointState.srv`。
-- ~~`sim_control_gz_node`~~ 已迁至 `unistackbot_gazebo`（gz 知识归 gz 集成层；本包保留 `/sim_control` 契约与 SimControlServer 脚手架，2026-09-16）
-- **日志**走 ulog 宏（`ULOG_INFO`/`ULOG_ERROR`）：终端 sink 恒开；URDF 加 `<param name="ulog_file">` 可选开文件 sink。
-
-## 用法
+起链 (三选一, 详见各包 README):
 
 ```bash
-# mock 链路（kinematic 后端，无仿真器；robot 必填）
-ros2 launch unistackbot_bringup control.launch.py robot:=<机型>
-
-# 回归测试（仓库根，自包含 10 项断言）
-bash test/smoke_sim_control.sh
+ros2 launch unistackbot_bringup control.launch.py robot:=piper    # mock (kinematic)
+ros2 launch unistackbot_gazebo ign.launch.py robot:=piper         # Gazebo Fortress
+ros2 launch unistackbot_mujoco mujoco.launch.py robot:=piper      # MuJoCo
 ```
 
-## 依赖说明
-
-CMake 直引 `../unistackbot_common`（sp_ring 队列 + ulog 日志；monorepo 内、未 install——对外发布前需调整）。
+注: mock 链的 launch 住 bringup (顶层启动编排); 目录名 != 包名 (`core/` 的包名是
+`unistackbot_sim_control`, 以 `package.xml` 为准)。

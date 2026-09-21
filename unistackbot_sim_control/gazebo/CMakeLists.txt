@@ -23,8 +23,8 @@ install(PROGRAMS scripts/gz_clean.sh
 add_executable(sim_control_gz_node src/sim_control_gz_node.cpp)
 target_compile_features(sim_control_gz_node PUBLIC cxx_std_17)
 target_include_directories(sim_control_gz_node PRIVATE
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>              # ulog
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>   # SimResult/kMaxJoints (纯头直引)
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../unistackbot_common>              # ulog
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../unistackbot_interface/include>   # SimResult/kMaxJoints (纯头直引)
 )
 ament_target_dependencies(sim_control_gz_node
 	rclcpp

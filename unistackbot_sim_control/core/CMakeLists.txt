@@ -30,8 +30,8 @@ add_library(sim_control_hardware SHARED
 target_compile_features(sim_control_hardware PUBLIC cxx_std_17)
 target_include_directories(sim_control_hardware PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>   # 交换原语 (monorepo 内直引)
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>   # /sim_control 契约头 (同上)
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../unistackbot_common>   # 交换原语 (monorepo 内直引)
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../unistackbot_interface/include>   # /sim_control 契约头 (同上)
 	$<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(sim_control_hardware

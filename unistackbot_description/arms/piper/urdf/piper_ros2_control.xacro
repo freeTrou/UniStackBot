@@ -102,10 +102,14 @@
                     <param name="max_velocity">3.0</param>
                 </joint>
                 <!-- 两个 mimic 手指关节, 按链分流:
-                     mujoco: passive (MJCF 侧 equality 耦合跟随 gripper, 见 mujoco/README.md),
-                             无 command_interface → JointStream 解析后只管 7 个主关节
-                     其余 (mock/gz): 按 gazebo_ros2_control 要求补 mimic/multiplier 参数受控跟随 -->
-                <xacro:if value="${use_gazebo == 'mujoco'}">
+                     mujoco/ign: passive —— 无 command_interface, 跟随由仿真侧原生 mimic 语义承担
+                       (mujoco: MJCF equality, 见 mujoco/README.md; gz 0.7.21+: URDF <mimic> 标签,
+                       插件原生处理)。JointStream 解析后只管 7 个主关节。
+                       2026-09-21 实测: gz_ros2_control 升级 0.7.21 后 (mujoco 安装的 apt 连带),
+                       带 mimic 参数声明手指会被导出为 <joint>_mimic 接口名 → JS 声明 9 关节对不上
+                       "Not acceptable command interfaces combination"。
+                     mock/Classic: 按 gazebo_ros2_control 要求补 mimic/multiplier 参数受控跟随 -->
+                <xacro:if value="${use_gazebo in ['mujoco', 'ign']}">
                     <joint name="gripper_joint1">
                         <state_interface name="position"/>
                         <state_interface name="velocity"/>
@@ -115,7 +119,7 @@
                         <state_interface name="velocity"/>
                     </joint>
                 </xacro:if>
-                <xacro:unless value="${use_gazebo == 'mujoco'}">
+                <xacro:unless value="${use_gazebo in ['mujoco', 'ign']}">
                     <joint name="gripper_joint1">
                         <command_interface name="position"/>
                         <state_interface name="position"/>

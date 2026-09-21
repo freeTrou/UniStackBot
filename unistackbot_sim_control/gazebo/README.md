@@ -52,3 +52,17 @@ ign server 常在 launch 关闭后存活并毒化下一次启动；**一次只�
 ## 关键文件
 
 `src/sim_control_gz_node.cpp`（`/sim_control/*` 的 gz 适配器，**纯 ROS 构建无 ign 编译依赖**——pause/resume/step 经 launch 里 parameter_bridge 桥接的 `ControlWorld` 服务下发，reset/set_joint_state 拒绝并说明）、`worlds/empty_ign.world`（`<world name>` 为 `unistack_world`——共享 world 的名字，与机型无关，须与 `sim_control_gz_node` 的 `world` 参数一致）、`scripts/gz_clean.sh`。
+
+## 已知问题 (2026-09-21, gz_ros2_control 0.7.21)
+
+装 mujoco 时 apt 连带升级了 gz/ros2_control 一族 (dpkg 2026-09-21 09:15 实锤), 行为变化:
+
+1. **mimic 接口改名**: ros2_control 块带 `<param name="mimic">` 的关节, 接口被导出为
+   `<joint>_mimic/*` (实现拆到 `libgz_hardware_plugins.so`) → JS 声明 9 关节与导出名对不上,
+   激活被拒 ("Not acceptable command interfaces combination")。
+   **已修**: piper xacro ign 分支手指改 state-only (同 mujoco 模式), 激活恢复, 手臂 6 关节
+   跟踪正常 (实测 0.3→0.5 rad)。
+2. **遗留**: gripper 主关节不响应位置命令 (revolute 正常/prismatic 不动, 与 mimic 无关,
+   无 mimic 参数时也复现); 手指无耦合自由漂移。待采用新版 mimic 约定或查上游 changelog
+   (需 GitHub 代理) —— 独立工作项, 不阻塞 mock/mujoco 链。
+
