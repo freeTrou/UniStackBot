@@ -93,7 +93,7 @@ private:
 	double max_cart_step_{0.02};          // 单周期笛卡尔步长限幅 [m]
 	int degraded_n_{50};                  // 连续失败降级阈值 (第 4 步)
 	int ik_max_iterations_{40};           // 流式求解迭代上限 (收敛常态 <5, 40 保险)
-	int worker_cpu_{-1};                  // worker 冷启动线程绑核 (-1=不绑; CM 主线程归官方参数)
+	int worker_cpu_{-1};                  // worker 冷启动线程绑核 (-1=不绑; CM 主线程调优走 yaml 预留接口)
 	int worker_nice_{10};                 // worker nice (让路姿态, 默认 +10)
 	int cold_after_fails_{3};             // 流式连续失败 N 拍后请求冷启动
 	double converge_pos_tol_{0.001};      // converged 判定: 位置容差 [m]

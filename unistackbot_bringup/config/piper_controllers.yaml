@@ -1,8 +1,8 @@
 controller_manager:
   ros__parameters:
     update_rate: 500
-    # RT 线程调优 (官方参数, ros2_control_node 起 RT 线程时应用:
-    # set_current_thread_affinity + configure_sched_fifo — 见官方 userdoc)
+    # RT 线程调优: 经预留参数接口由我们设置 (ros2_control_node 起 RT 线程时应用
+    # set_current_thread_affinity + configure_sched_fifo; 参数名是官方接口, 值是我们定的)
     thread_priority: 80     # SCHED_FIFO (0-99; 80=设计文档 CM 档, IgH 90/CiA402 85 之上预留)
     cpu_affinity: 1         # 核1 = CM 的 update 线程; 核2 预留总线 (IgH/CiA402, 真机批次)
     lock_memory: true       # mlockall (页锁; 需 memlock ulimit, 失败仅 WARN)
@@ -19,7 +19,7 @@ controller_manager:
 joint_stream_controller:
   ros__parameters:
     interpolation: hold          # hold | ruckig (慢上层选 ruckig)
-    # RT 线程调优归 controller_manager 官方参数 (thread_priority/cpu_affinity)
+    # RT 线程调优走 controller_manager 的 yaml 预留接口 (thread_priority/cpu_affinity, 值在上方 controller_manager 段)
     # 断流受控减速 (0c): ~/command 流死 200ms → 速度线性衰减到停 (200ms 窗);
     # 0 = 关闭。流式控制器安全默认开 (fault_injection F6 场景验证)
     stale_timeout_ms: 200.0

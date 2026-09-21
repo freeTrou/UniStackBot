@@ -17,7 +17,7 @@ unistackbot_common::rt_tune::apply(cpu, fifo_prio, nice_val, name);
 
 返回值: 0 = 全部成功; 按位错误码 (`kAffinityFailed`/`kFifoFailed`/`kNiceFailed`)。失败不抛不崩——调优是性能优化, 不是正确性前提。
 
-**分工边界**: 控制器管理器主线程的调优走 ros2_control 官方参数 (`thread_priority`/`cpu_affinity`/`lock_memory`); `rt_tune` 只管自建线程 (如 CM worker、总线主站线程)。
+**分工边界**: 控制器管理器主线程的调优经预留 yaml 参数接口由我们设置 (`thread_priority`/`cpu_affinity`/`lock_memory` —— 参数名是 ros2_control 暴露的接口, 值是我们定的); `rt_tune` 只管自建线程 (如 CM worker、总线主站线程)。
 
 ## 测试/基准: bench_rt_tune.cpp
 

@@ -373,8 +373,9 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 controller_interface::return_type CartesianMotionController::update(
 	const rclcpp::Time & time, const rclcpp::Duration & period)
 {
-	// RT 线程调优归官方 CM 参数 (thread_priority/cpu_affinity, 见 yaml) ——
-	// 控制器层不再自设 (撞车: update 与全部控制器共用 CM 的同一条 RT 线程)
+	// RT 线程调优: 我们经预留的 yaml 参数接口设置 (thread_priority/cpu_affinity,
+	// 参数名是 ros2_control 暴露的接口, 值是我们定的 —— 见 <robot>_controllers.yaml);
+	// 控制器层不自设 (撞车: update 与全部控制器共用 CM 的同一条 RT 线程)
 	const auto wcet_t0 = std::chrono::steady_clock::now();
 	const std::size_t n = cmd_.size();
 
