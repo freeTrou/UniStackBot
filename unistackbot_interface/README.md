@@ -12,7 +12,14 @@
 - `joint_capacity.hpp`：`kMaxJoints` 唯一定义（原住 sim_control_contract，上收）
 - 命名对照：设计文档语境 RobotStateSnapshot/JointCmd → 落地更名 RobotFeedback/RobotCommand
 
-测试（g++ 直编，不进 colcon）：`g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Iinclude test_contract.cpp -o /tmp/test_interface && /tmp/test_interface`（25 断言：POD/容量/默认值/信息非空）
+**第三批：控制器在线消息（2026-09-18）**：
+
+- `JointCommand.msg`：关节点流命令（CSP/CSV/CST/MIT 四模式 + `joint_names` 对名；消费者 reliable+KeepLast(1)）
+- `CartesianControl.msg`：CM 事件通道（TRACKING/HOLD）
+- `CartesianMotionStatus.msg`：CM 状态遥测（误差/min_sigma/结果码/stream_stale，20Hz）
+- 挂账：`EeState.msg` 待旋转表示决策后加入（加并行字段不破坏消费者）
+
+测试（g++ 直编，不进 colcon）：`g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Iinclude test_contract.cpp -o /tmp/test_interface && /tmp/test_interface`
 
 **`/sim_control` 契约曾居本包（2026-09-16），2026-09-17 回迁 `unistackbot_sim_control`**——契约随其主人（统一仿真控制层）与两个实现同居；本包回归**纯机器人级类型包**（结果码是类型故 `SimResult` 留下；`kMaxJoints` 因反馈/指令帧共用亦留）。实现归实现的家（gz 后端在 gazebo），类型归类型的家，契约归契约的家。
 

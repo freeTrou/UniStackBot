@@ -21,7 +21,8 @@
 | `meshes/end_tool/collision/end_tool.stl` | 同名 | 原样（link7 默认碰撞体引用） |
 | `config/link_inertial/xarm7_type7_HT_BR2.yaml` | 同名 | 原样（上游默认惯性参数） |
 | `config/kinematics/default/xarm7_default_kinematics.yaml` | 同名 | 原样（DH 标称参数） |
-| `ik/seed_lib_xarm7.txt` | — | **生成**（本仓库资产，非移植）：IK 种子库 v1.1（12000 条 = v1.0 8000 + 姿态感知增量 4000），`unistackbot_controller/test/gen_seed_library.py` 生成 + `test/seed_lib_incremental.py` 增量（指纹头在文件内）；消费方 `DlsIk::loadSeedLibrary`，换臂重生成 |
+| `ik/seed_lib_xarm7.txt` | — | **生成**（本仓库资产，非移植）：IK 种子库 v1.1（12000 条 = v1.0 8000 + 姿态感知增量 4000），`unistackbot_algorithm/dls_ik/test/gen_seed_library.py` 生成 + 同目录 `seed_lib_incremental.py` 增量（指纹头在文件内）；消费方 `DlsIk::loadSeedLibrary`，换臂重生成 |
+| `mujoco/xarm7.xml` 等 | — | **生成**：MJCF 资产（URDF→MJCF 转换 + 手工策展，见 `mujoco/README.md`；关节 damping 10/5/2 来自 URDF 厂商值、零位零接触无需 exclude、无 mimic） |
 
 **未移植**（保持体积与链路干净）：gripper/vacuum_gripper mesh（22MB+）、`xarm7_1305` 新版模型（11MB，`model_num>=1305` 时才用）、`xarm7.ros2_control/transmission/gazebo.xacro`（我们三条链自带插件体系，不引 `uf_robot_hardware`）、`xarm_device_macro.xacro`（全型号入口，由本包入口替代）。
 
@@ -41,8 +42,9 @@ xacro $(ros2 pkg prefix --share unistackbot_description)/arms/xarm7/urdf/xarm7.u
 - [x] RViz 可视化（`display.launch.py model:=` 直指本机型，2026-09-15）
 - [x] `xarm7_ros2_control.xacro` 三模式插件切换 + `unistackbot_bringup/config/xarm7_controllers.yaml`（2026-09-15 展开/落盘验证）
 - [x] 构型判定与 IK 路线裁决 → **[ik_decision_card.md](ik_decision_card.md)**（含 ssik 实测、oracle 三件套、机械设计输入）
-- [x] mock 链接入（`control.launch.py robot:=xarm7`，JTC 7 关节轨迹到位，2026-09-15）
+- [x] mock 链接入（`control.launch.py robot:=xarm7`，7 关节轨迹到位，2026-09-15；当时经 JTC，09-18 起 JS 点流）
 - [x] Fortress 链接入（`ign.launch.py robot:=xarm7 gui:=false`，物理仿真轨迹到位，2026-09-15）
-- [x] 机型参数化验收脚本 `test/verify_robot.sh <robot> [--with-gazebo]`（xarm7 13/13、piper 9/9 全过，2026-09-15）
+- [x] 机型参数化验收脚本 `test/verify_robot.sh <robot> [--with-gazebo]`（xarm7 13/13、piper 9/9 全过，2026-09-15；现含 `--with-mujoco`）
 - [x] 碰撞几何凸包化（2026-09-16，MoveIt2 前置地基）
+- [x] MuJoCo 链接入（MJCF 资产 + CM 双机型收敛，2026-09-21）
 - [ ] `smoke_sim_control.sh` 深度服务断言（mimic/set_joint_state 语义）仍为 piper 关节表，待参数化

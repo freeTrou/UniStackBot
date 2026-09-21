@@ -96,4 +96,6 @@ while (ring.pop(e)) { ship(e); }          // 消费者拿最新 N 条, 按序
   `static_assert(is_trivially_copyable)` (原先在 SimCommand 上, 现下沉到队列本体)
 - `kMaxJoints` 抽至 `unistackbot_common/contract.hpp` (全框架单一事实源, sim_control 经
   using-declaration 保持原用法)
+  —— **终局已变 (2026-09-17)**: 该文件不存在; `kMaxJoints` 唯一定义现住
+  `unistackbot_interface/joint_capacity.hpp` (跨仓库类型归 interface 包)
 - 域类型 `SimCmdType`/`SimCommand`/`kQueueCapacity` 留在 sim_control (域语义不进通用库)

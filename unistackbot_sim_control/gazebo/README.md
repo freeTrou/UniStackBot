@@ -47,22 +47,18 @@ ign server 常在 launch 关闭后存活并毒化下一次启动；**一次只�
 - **ign-transport 原生**：话题 `/stats`（RTF/暂停态，已桥接为 `ros_gz_interfaces/WorldStatistics`）、`pose/info`、`scene/info` 等；服务 `control`（pause/resume/step，gz 适配器的落点）、`create`/`remove`/`set_pose`、`set_physics`、`enable/disable_collision`、`scene/graph` 等，全挂 `/world/unistack_world/` 下
 - **ROS 桥**（`parameter_bridge`）：`/clock`、`/stats`、`/world/unistack_world/control`（世界控制服务，gz 适配器的通道）；传感器上线后按需加映射
 - **进程内 System 插件**：`gz_ros2_control-system`（CM 宿主，主乘骑）；world 现挂 Physics/UserCommands/SceneBroadcaster——`Contact`（碰撞接触）与 `ForceTorque`（腕 FT）留待协作二期声明加载
-- **reset 实测有毒（2026-09-16）**：Fortress 的 `WorldControl.reset{all}` 返回 success=true 但世界随即进入 negative-timestep 错误态、仿真停摆——适配器拒绝并引用此实证。`remove`+`create` 合成 reset 同样否决（CM 活在模型实体插件里，remove 即杀 CM）。Fortress 时代关节复位 = JTC 归零轨迹；Garden+ 才有可用原生 reset
+- **reset 实测有毒（2026-09-16）**：Fortress 的 `WorldControl.reset{all}` 返回 success=true 但世界随即进入 negative-timestep 错误态、仿真停摆——适配器拒绝并引用此实证。`remove`+`create` 合成 reset 同样否决（CM 活在模型实体插件里，remove 即杀 CM）。Fortress 时代关节复位 = JointStream 点流归零轨迹；Garden+ 才有可用原生 reset
 
 ## 关键文件
 
 `src/sim_control_gz_node.cpp`（`/sim_control/*` 的 gz 适配器，**纯 ROS 构建无 ign 编译依赖**——pause/resume/step 经 launch 里 parameter_bridge 桥接的 `ControlWorld` 服务下发，reset/set_joint_state 拒绝并说明）、`worlds/empty_ign.world`（`<world name>` 为 `unistack_world`——共享 world 的名字，与机型无关，须与 `sim_control_gz_node` 的 `world` 参数一致）、`scripts/gz_clean.sh`。
 
-## 已知问题 (2026-09-21, gz_ros2_control 0.7.21)
+## 已知边界 (2026-09-21 破案, 非 0.7.21 回归)
 
-装 mujoco 时 apt 连带升级了 gz/ros2_control 一族 (dpkg 2026-09-21 09:15 实锤), 行为变化:
-
-1. **mimic 接口改名**: ros2_control 块带 `<param name="mimic">` 的关节, 接口被导出为
-   `<joint>_mimic/*` (实现拆到 `libgz_hardware_plugins.so`) → JS 声明 9 关节与导出名对不上,
-   激活被拒 ("Not acceptable command interfaces combination")。
-   **已修**: piper xacro ign 分支手指改 state-only (同 mujoco 模式), 激活恢复, 手臂 6 关节
-   跟踪正常 (实测 0.3→0.5 rad)。
-2. **遗留**: gripper 主关节不响应位置命令 (revolute 正常/prismatic 不动, 与 mimic 无关,
-   无 mimic 参数时也复现); 手指无耦合自由漂移。待采用新版 mimic 约定或查上游 changelog
-   (需 GitHub 代理) —— 独立工作项, 不阻塞 mock/mujoco 链。
+- **关节限位咬合**（上游 gz_ros2_control #165）: 关节静置压在限位上会被 ODE 咬死。
+  启动位=限位线的关节已用 `initial_value` 略离限位修复（见 piper xacro ign 分支）；
+  **运行时命令精确停限位静置仍会冻**，测试流程避免。
+- **手指无耦合漂移**: 插件 mimic 只认 ros2_control 块参数，URDF `<mimic>` 标签被
+  sdformat 转换丢弃；加 mimic 参数可耦合但接口带 `<joint>_mimic` 后缀污染 /joint_states
+  ——方案待裁决（独立工作项）。
 
