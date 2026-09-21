@@ -95,6 +95,23 @@ post = dict(latest)
 drift = max(abs(post.get(k, 0) - pre.get(k, 0)) for k in names)
 results.append(('F1 断流2s漂移', f'漂移 {drift:.5f} rad', drift < 0.005))
 
+# ---- F6 断流受控减速 (0c): 流中途死 → 刹停, 不冲向最后目标 ----
+# 账: joint1 以 vmax=3.14 rad/s 流 1.0s → 走 ~3.14 rad (目标 5.0 未达);
+#     断流后 200ms 判定 + 200ms 线性减速 → 最多再走 3.14×(0.2+0.1)≈0.94 rad
+#     → 终值 < 4.5 即证明没冲到 5.0; 静止复查证明刹停 (而非仍在走)
+send([5.0] + [0.0] * 6, dur=1.0, hz=100)
+time.sleep(2.5)
+rclpy.spin_once(node, timeout_sec=0.1)
+p1 = dict(latest)
+time.sleep(0.8)
+rclpy.spin_once(node, timeout_sec=0.1)
+p2 = dict(latest)
+still = max(abs(p2.get(k, 0) - p1.get(k, 0)) for k in names)
+final1 = p2.get('joint1', 0.0)
+results.append(('F6 断流刹停-静止', f'0.8s 再漂移 {still:.5f} rad', still < 0.005))
+results.append(('F6 断流刹停-未冲目标', f'joint1 终值 {final1:.3f} rad (<4.5, 目标5.0; >2 动过)',
+                final1 < 4.5 and final1 > 2.0))
+
 for name, detail, ok in results:
     print(f'{"PASS" if ok else "FAIL"}: {name} — {detail}')
 print('---- 防线日志 ----')

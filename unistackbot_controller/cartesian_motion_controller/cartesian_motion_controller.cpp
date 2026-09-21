@@ -34,10 +34,12 @@ double rotationError(const CartesianPose & a, const CartesianPose & b)
 // 解析 URDF <ros2_control> 块每关节 max_velocity → 单拍步长上限。
 // 单一事实源: 与 BackendKinematic 同参数同缺省 (5 rad/s); 控制器拿不到
 // HardwareInfo (那是硬件插件的), 只能自行解 XML
+// 输出原始 max_velocity (vmax; 不做 /update_rate —— Humble 坑: configure 期
+// get_update_rate() 取不到真实频率, 步长换算延后到首拍校准, 见 update())
 bool parseStepLimits(const std::string & urdf, const std::vector<std::string> & chain_names,
-	unsigned int update_rate, std::vector<double> & out, std::string & err)
+	std::vector<double> & vmax_out, std::string & err)
 {
-	out.assign(chain_names.size(), 5.0 / std::max<double>(update_rate, 1.0));
+	vmax_out.assign(chain_names.size(), 5.0);
 	tinyxml2::XMLDocument doc;
 	if (doc.Parse(urdf.c_str(), urdf.size()) != tinyxml2::XML_SUCCESS)
 	{
@@ -72,8 +74,7 @@ bool parseStepLimits(const std::string & urdf, const std::vector<std::string> & 
 				const double v = std::atof(prm->GetText());
 				if (v > 0.0)
 				{
-					out[static_cast<std::size_t>(it - chain_names.begin())] =
-						v / std::max<double>(update_rate, 1.0);
+					vmax_out[static_cast<std::size_t>(it - chain_names.begin())] = v;
 				}
 			}
 		}
@@ -113,6 +114,9 @@ controller_interface::CallbackReturn CartesianMotionController::on_init()
 	auto_declare<int>("worker_nice", worker_nice_);
 	auto_declare<double>("converge_pos_tol", converge_pos_tol_);
 	auto_declare<double>("converge_rot_tol", converge_rot_tol_);
+	// 断流受控减速 (0c): 0=关闭 (默认, --once 单发目标语义); 流式跟踪场景 yaml 开启
+	auto_declare<double>("stale_timeout_ms", 0.0);
+	auto_declare<double>("stale_decel_ms", 200.0);
 	// Humble: controller_manager 把自身 robot_description 以参数覆盖注入控制器节点
 	auto_declare<std::string>("robot_description", "");
 	return CallbackReturn::SUCCESS;
@@ -203,12 +207,23 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	ikcfg.timeout_ns = static_cast<uint64_t>(update_timeout_ns_);
 	ikcfg.max_iterations = ik_max_iterations_;
 	ik_->setConfig(ikcfg);
-	// 步长限幅: URDF <ros2_control> max_velocity / update_rate (单一事实源)
-	if (!parseStepLimits(urdf, fk_->jointNames(), get_update_rate(), step_limits_, msg))
+	// 步长限幅: URDF <ros2_control> max_velocity 为单一事实源; /update_rate 的换算
+	// 延后到首拍校准 (Humble 坑: configure 期 get_update_rate() 取不到真实频率,
+	// 实测返回 1 —— 2026-09-21 排查 F6 断流不触发时实锤)。此处占位 = vmax
+	if (!parseStepLimits(urdf, fk_->jointNames(), vmax_, msg))
 	{
 		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 		return CallbackReturn::ERROR;
 	}
+	step_limits_ = vmax_;   // 占位 (hz=1); 首拍校准为 vmax/真实hz
+	// StaleWatch: 存 ms 配置, 周期数首拍校准
+	stale_ms_cfg_ = get_node()->get_parameter("stale_timeout_ms").as_double();
+	stale_decel_ms_cfg_ = get_node()->get_parameter("stale_decel_ms").as_double();
+	stale_cycles_ = 0u;
+	stale_decel_cycles_ = 1u;
+	watch_ = unistackbot_common::StaleWatch(0u);
+	rate_calibrated_ = false;
+	period_n_ = 0;
 
 	// 契约通道 (先装配通道再建订阅, 回调无未初始化竞态)。
 	// rt_target_ 不 init: 零态 = "从未发布" (seq=0), read() 的 false 即"无目标" ——
@@ -338,6 +353,12 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	{
 		cmd_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
 	}
+	prev_cmd_ = cmd_;
+	vel_.assign(n, 0.0);
+	decel_rate_.assign(n, 0.0);
+	watch_.reset();   // 重激活不继承断流态
+	stream_stale_ = false;
+	was_stale_ = false;
 	// 预热: 进 RT 前触达全部首触路径 (缺页/惰性绑定/线程私有 syscall), 见设计 §3
 	warmup();
 	// worker (防线2): 低优冷启动线程 —— 激活起、停用收
@@ -350,12 +371,61 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 }
 
 controller_interface::return_type CartesianMotionController::update(
-	const rclcpp::Time & time, const rclcpp::Duration & /*period*/)
+	const rclcpp::Time & time, const rclcpp::Duration & period)
 {
 	// RT 线程调优归官方 CM 参数 (thread_priority/cpu_affinity, 见 yaml) ——
 	// 控制器层不再自设 (撞车: update 与全部控制器共用 CM 的同一条 RT 线程)
 	const auto wcet_t0 = std::chrono::steady_clock::now();
 	const std::size_t n = cmd_.size();
+
+	// update_rate 校准 (Humble 坑, 见 on_configure 注释): 首拍 period 非稳态,
+	// 收 16 拍取中位数 (定长数组零分配; 16 拍 @500Hz = 32ms, 窗内由 write 层钳位兜底)
+	if (!rate_calibrated_)
+	{
+		const double p = period.seconds();
+		if (p > 1e-9)
+		{
+			period_samples_[period_n_++] = p;
+		}
+		if (period_n_ >= kPeriodSamples)
+		{
+			rate_calibrated_ = true;
+			std::sort(period_samples_, period_samples_ + kPeriodSamples);
+			const double hz = 1.0 / period_samples_[kPeriodSamples / 2];
+			for (std::size_t i = 0; i < step_limits_.size(); ++i)
+			{
+				step_limits_[i] = vmax_[i] / hz;
+			}
+			stale_cycles_ = (stale_ms_cfg_ > 0.0)
+				? static_cast<uint32_t>(stale_ms_cfg_ * hz / 1000.0) : 0u;
+			stale_decel_cycles_ = (stale_decel_ms_cfg_ > 0.0)
+				? static_cast<uint32_t>(std::max(stale_decel_ms_cfg_ * hz / 1000.0, 1.0)) : 1u;
+			watch_ = unistackbot_common::StaleWatch(stale_cycles_);
+			ULOG_INFO("cm: update_rate 校准 %.0f Hz (步长 %.4f rad/拍, 断流判定 %u 拍)",
+				hz, step_limits_.empty() ? 0.0 : step_limits_[0], stale_cycles_);
+		}
+	}
+
+	// ⓪ 断流看门狗 (~/target 值通道 seq 零拷贝轮询; stale_cycles_=0 → 恒 LIVE 零成本)。
+	//    速度估计 = 上一完整周期的实际命令步长 (快照口径: 各分支零维护, 冻结拍自然归零)
+	for (std::size_t i = 0; i < n; ++i) {vel_[i] = cmd_[i] - prev_cmd_[i];}
+	prev_cmd_ = cmd_;
+	const auto wst = watch_.tick(rt_target_.seq());
+	stream_stale_ = (wst == unistackbot_common::StaleWatch::State::STALE);
+	if (stream_stale_ && !was_stale_)
+	{
+		ULOG_WARN("cm: ~/target 断流 (静默 %u 拍), 受控减速刹停 (%u 拍线性窗)",
+			watch_.cyclesSinceUpdate(), stale_decel_cycles_);
+		for (std::size_t i = 0; i < n; ++i)
+		{
+			decel_rate_[i] = vel_[i] / static_cast<double>(stale_decel_cycles_);
+		}
+	}
+	else if (!stream_stale_ && was_stale_)
+	{
+		ULOG_INFO("cm: ~/target 流恢复");
+	}
+	was_stale_ = stream_stale_;
 
 	// ① 实测关节态 (接口序 → 链序); 误差基准 = 实测 FK
 	//    (gz 链命令≠实际, 用命令算误差是自欺; mock 链两者相等)
@@ -398,6 +468,34 @@ controller_interface::return_type CartesianMotionController::update(
 		}
 		recordWcet(wcet_t0);
 		publishStatusRt(time, mode, meas, meas_ok);
+		return controller_interface::return_type::OK;
+	}
+
+	// ③½ 断流受控减速 (0c; 仅流式跟踪场景启用): 上游流死 → 关节速度线性衰减到停。
+	//     提前出口跳过 IK (= 省 update_timeout_ns 预算); 恢复后流式从 cmd_ (已减速位)
+	//     无缝续解 —— 种子即命令, 连续性不破
+	if (stream_stale_)
+	{
+		const auto & lo = fk_->qMin();
+		const auto & hi = fk_->qMax();
+		for (std::size_t i = 0; i < n; ++i)
+		{
+			if (std::abs(vel_[i]) <= std::abs(decel_rate_[i]))
+			{
+				vel_[i] = 0.0;
+			}
+			else
+			{
+				vel_[i] -= decel_rate_[i];
+			}
+			cmd_[i] = std::clamp(cmd_[i] + vel_[i], lo[i], hi[i]);
+		}
+		for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
+		{
+			command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
+		}
+		recordWcet(wcet_t0);
+		publishStatusRt(time, mode, meas, true);
 		return controller_interface::return_type::OK;
 	}
 
@@ -598,6 +696,7 @@ void CartesianMotionController::publishStatusRt(
 	}
 	m.min_sigma = last_min_sigma_;
 	m.timed_out = last_timed_out_;
+	m.stream_stale = stream_stale_;
 	m.last_result = last_result_;
 	if (meas_ok)
 	{
@@ -680,7 +779,8 @@ void CartesianMotionController::workerLoop()
 		if (fk.fk(q2, t))
 		{
 			std::vector<double> out = q2;
-			ik.solve(t, q2, RedundancyPreference{}, out, nullptr,
+			// 结果有意丢弃: 就绪探测只求触达求解路径 (页/分支), 不消费解
+			(void)ik.solve(t, q2, RedundancyPreference{}, out, nullptr,
 				unistackbot_algorithm::SolveMode::COLD_START);
 		}
 		ULOG_INFO("cm worker: 就绪 (%u 关节, 库 %zu 条, 预算 %ldns)",
@@ -747,7 +847,8 @@ void CartesianMotionController::warmup()
 		{
 			std::vector<double> q_out = cmd_;
 			const RedundancyPreference preserve;
-			ik_->solve(t, cmd_, preserve, q_out, nullptr,
+			// 结果有意丢弃: 预热只求触达路径, 不消费解
+			(void)ik_->solve(t, cmd_, preserve, q_out, nullptr,
 				unistackbot_algorithm::SolveMode::STREAMING);
 		}
 	}
@@ -758,7 +859,8 @@ void CartesianMotionController::warmup()
 		far.qw = 1.0;
 		std::vector<double> q_out = cmd_;
 		const RedundancyPreference preserve;
-		ik_->solve(far, cmd_, preserve, q_out, nullptr,
+		// 结果有意丢弃: 预热只求触达路径, 不消费解
+		(void)ik_->solve(far, cmd_, preserve, q_out, nullptr,
 			unistackbot_algorithm::SolveMode::STREAMING);
 	}
 	// 4) RealtimePublisher 首拍 (内部互斥与发布路径)

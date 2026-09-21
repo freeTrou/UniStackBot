@@ -20,6 +20,10 @@ joint_stream_controller:
   ros__parameters:
     interpolation: hold          # hold | ruckig (慢上层选 ruckig)
     # RT 线程调优归 controller_manager 官方参数 (thread_priority/cpu_affinity)
+    # 断流受控减速 (0c): ~/command 流死 200ms → 速度线性衰减到停 (200ms 窗);
+    # 0 = 关闭。流式控制器安全默认开 (fault_injection F6 场景验证)
+    stale_timeout_ms: 200.0
+    # stale_decel_ms: 200.0
 
 cartesian_motion_controller:
   ros__parameters:
@@ -34,4 +38,8 @@ cartesian_motion_controller:
     cold_timeout_ns: 50000000
     max_cart_step: 0.02
     degraded_n: 50
+    # ~/target 断流受控减速 (0c): 默认关 —— --once 单发目标是合法用法, 断流策略
+    # 只服务流式跟踪 (RL/VLA ingress 连续目标流); 启用时取消注释 (status.stream_stale 置位)
+    # stale_timeout_ms: 200.0
+    # stale_decel_ms: 200.0
 

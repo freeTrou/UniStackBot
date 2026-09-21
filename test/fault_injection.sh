@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 故障注入测试床 (阶段0b, 2026-09-20): mock 链验证 write()/read() 最终防线。
-# 场景: F1 断流保持 / F2 NaN命令 / F3 限位外 / F5 超速 (F4 状态跳变由
-#       /sim_control set_joint_state 服务测试覆盖, 见 smoke_sim_control.sh)。
+# 故障注入测试床 (阶段0b, 2026-09-20; 0c 增 F6): mock 链验证 write()/read() 最终防线。
+# 场景: F1 断流保持 / F2 NaN命令 / F3 限位外 / F5 超速 / F6 断流受控减速
+#       (F4 状态跳变由 /sim_control set_joint_state 服务测试覆盖, 见 smoke_sim_control.sh)。
 # 前置: colcon build + 本机 DDS 配置 (~/cyclonedds.xml)。
 # 用法: bash test/fault_injection.sh
 

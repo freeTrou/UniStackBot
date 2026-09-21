@@ -17,6 +17,7 @@ uint8 DEGRADED	= 4	# 连续求解失败, 保持上一命令 (可观测降级)
 
 uint8 mode
 bool converged
+bool stream_stale	# ~/target 断流 (StaleWatch 判定; 断流受控减速中/已停, 0c)
 float64 position_error	# [m] 当前 FK 位姿与目标的位置误差
 float64 rotation_error	# [rad] 姿态误差
 float64 min_sigma	# 雅可比最小奇异值 (奇异接近度透传, dls_ik 遥测)

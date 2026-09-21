@@ -15,6 +15,7 @@
 #include "realtime_tools/realtime_publisher.hpp"
 #include "rt_tune/rt_tune.hpp"
 #include "sp_latest/sp_latest.hpp"
+#include "stale_watch/stale_watch.hpp"
 #include "unistackbot_interface/joint_capacity.hpp"
 #include "unistackbot_interface/msg/cartesian_control.hpp"
 #include "unistackbot_interface/msg/cartesian_motion_status.hpp"
@@ -122,6 +123,25 @@ private:
 	bool last_timed_out_{false};
 	double last_min_sigma_{-1.0};
 	std::string warned_frame_;           // 非本帧目标的单次警告去重
+
+	// ---- StaleWatch 断流受控减速 (0c; 设计 §6.1 同 JointStream) ----
+	// 默认关 (stale_cycles_=0): ~/target 的 --once 单发目标是合法用法, 断流策略
+	// 只服务流式跟踪场景 (RL/VLA ingress, 上层连续目标流) —— yaml 显式开启
+	double stale_ms_cfg_{0.0};           // stale_timeout_ms 原始配置 (周期数首拍校准)
+	double stale_decel_ms_cfg_{200.0};
+	uint32_t stale_cycles_{0};           // 断流判定阈值 (周期数; 0=关闭)
+	uint32_t stale_decel_cycles_{0};     // 刹停线性减速窗 (周期数)
+	unistackbot_common::StaleWatch watch_;
+	bool stream_stale_{false};           // 本周期断流态 (status.stream_stale 源)
+	bool was_stale_{false};              // 边沿检测 (转换即日志)
+	std::vector<double> prev_cmd_;       // 上拍命令快照 (速度估计基准)
+	std::vector<double> vel_;            // 上一完整周期的实际关节速度 (链序)
+	std::vector<double> decel_rate_;     // 断流进入时刻的每周期速度减量 (= vel/N)
+	bool rate_calibrated_{false};        // update_rate 校准 (16 拍中位数; Humble 坑见 cpp)
+	static constexpr uint32_t kPeriodSamples = 16u;
+	double period_samples_[kPeriodSamples] = {0};
+	uint32_t period_n_{0};
+	std::vector<double> vmax_;           // URDF max_velocity 原始值 (校准换算基准)
 
 	// ---- WCET 统计 (会话级, 停用时终报; rdtsc 级成本, 每拍两次时钟读取) ----
 	std::chrono::steady_clock::time_point update_enter_{};

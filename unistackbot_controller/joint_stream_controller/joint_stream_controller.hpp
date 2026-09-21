@@ -11,6 +11,7 @@
 #include "controller_interface/controller_interface.hpp"
 #include "realtime_tools/realtime_publisher.hpp"
 #include "sp_latest/sp_latest.hpp"
+#include "stale_watch/stale_watch.hpp"
 #include "unistackbot_interface/joint_capacity.hpp"
 #include "unistackbot_interface/msg/joint_command.hpp"
 
@@ -85,7 +86,7 @@ private:
 	std::vector<double> q_min_, q_max_, vmax_;   // URDF ros2_control 限位 + 速度限
 	std::vector<double> step_limits_;            // hold 档: 单拍步长上限 (max_velocity/hz)
 	std::vector<double> cmd_;                    // 上一拍输出 (关节序 = 接口序)
-	std::vector<double> target_;                 // 已采纳目标 (ruckig 档每拍喂 OtgStream)
+	std::vector<double> target_;                 // 已采纳目标 (hold/ruckig 每周期朝它推进)
 
 	// ---- 插值 ----
 	Interpolation interpolation_{Interpolation::HOLD};
@@ -94,9 +95,25 @@ private:
 	double max_jerk_{20.0};
 	bool otg_ready_{false};
 
+	// ---- StaleWatch 断流受控减速 (0c; 设计 §6.1: 过期→保持+受控减速, 与断流同路径) ----
+	double stale_ms_cfg_{0.0};        // stale_timeout_ms 原始配置 (周期数首拍校准)
+	double stale_decel_ms_cfg_{200.0};
+	uint32_t stale_cycles_{0};        // 断流判定阈值 (周期数; 0=关闭)
+	uint32_t stale_decel_cycles_{0};  // 刹停线性减速窗 (周期数)
+	unistackbot_common::StaleWatch watch_;
+	bool was_stale_{false};           // 边沿检测 (转换即日志, 无重复触发)
+	std::vector<double> prev_cmd_;    // 周期首快照 (速度估计基准)
+	std::vector<double> vel_;         // 上拍实际步长 (=关节速度估计)
+	std::vector<double> decel_rate_;  // 断流进入时刻的每周期速度减量 (= vel/N)
+	bool rate_calibrated_{false};     // update_rate 校准 (16 拍中位数; Humble 坑见 cpp)
+	static constexpr uint32_t kPeriodSamples = 16u;
+	double period_samples_[kPeriodSamples] = {0};
+	uint32_t period_n_{0};
+
 	// ---- 观测 ----
 	uint64_t dropped_mode_{0};       // 非 CSP 模式拒绝计数
 	uint64_t dropped_len_{0};        // 关节数不匹配拒绝计数
+	uint64_t stale_events_{0};       // 断流事件计数 (观测; 进入即 +1)
 
 };
 
