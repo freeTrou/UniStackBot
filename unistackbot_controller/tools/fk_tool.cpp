@@ -21,7 +21,7 @@
 
 int main(int argc, char ** argv)
 {
-	std::string joints_arg, tip = "link7";
+	std::string joints_arg, tip = "link7", base = "link_base";
 	for (int i = 1; i < argc; ++i)
 	{
 		const std::string a = argv[i];
@@ -33,10 +33,14 @@ int main(int argc, char ** argv)
 		{
 			tip = argv[++i];
 		}
+		else if (a == "--base" && i + 1 < argc)
+		{
+			base = argv[++i];
+		}
 	}
 	if (joints_arg.empty())
 	{
-		std::fprintf(stderr, "用法: fk_tool --joints j1=0.5,j2=-0.3,... [--tip link7]\n");
+		std::fprintf(stderr, "用法: fk_tool --joints j1=0.5,... [--base link_base] [--tip link7]\n");
 		return 2;
 	}
 
@@ -86,7 +90,7 @@ int main(int argc, char ** argv)
 
 	// 关节序按 URDF 链序对齐: fk_tool 按 FK 库的关节顺序出解, 名字顺序由参数给出
 	// ——这里要求给出的顺序即链序 (脚本端由 URDF 顺序保证)
-	const auto joints_param = get_param("/joint_trajectory_controller", "joints");
+	// (2026-09-21 去 JTC 参数依赖: 链上已无 joint_trajectory_controller, robot_description 已足够)
 	const auto urdf_param = get_param("/robot_state_publisher", "robot_description");
 	if (urdf_param.string_value.empty() && urdf_param.byte_array_value.empty())
 	{
@@ -98,7 +102,7 @@ int main(int argc, char ** argv)
 	const std::string urdf_text = urdf_param.string_value;
 	unistackbot_algorithm::UrdfFk fk;
 	std::string msg;
-	if (!fk.init(urdf_text, "link_base", tip, msg))
+	if (!fk.init(urdf_text, base, tip, msg))
 	{
 		std::fprintf(stderr, "%s\n", msg.c_str());
 		return 1;

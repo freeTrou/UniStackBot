@@ -4,7 +4,7 @@
 #       我们的 UrdfFk 用手搓链 —— 两套代码同源数据, 差值应到机器精度。
 #       错一处 (轴向/origin/旋转序) 就对不上 —— 这是 FK 正确性的工程裁判。
 # 流程: 起 mock 链 -> pause (JTC 保持命令不干扰瞬移) -> 10 个随机位姿:
-#       set_joint_state 瞬移 -> 读 /tf link7 位姿 vs fk_tool 算的位姿 -> 比对 <1e-9。
+#       set_joint_state 瞬移 -> 读 /tf 末端位姿 vs fk_tool 算的位姿 -> 比对 <1e-9。
 # 用法: bash test/check_fk_tf.sh <robot>    (需已 colcon build + source)
 set -u
 ROBOT="${1:?用法: check_fk_tf.sh <robot>}"
@@ -26,6 +26,15 @@ say() { echo "[$(date +%H:%M:%S)] $*"; }
 say "清理残留"
 ros2 run unistackbot_gazebo gz_clean.sh >/dev/null 2>&1
 
+# 末端 frame 从 CM 配置读 (机型通用; 2026-09-21 前硬编码 link_base/link7 只适用 xarm7)
+BRINGUP_SHARE="$(ros2 pkg prefix --share unistackbot_bringup 2>/dev/null)"
+CYAML="$BRINGUP_SHARE/config/${ROBOT}_controllers.yaml"
+read -r CM_BASE CM_TIP <<< "$(python3 -c "
+import yaml
+c = yaml.safe_load(open('$CYAML'))['cartesian_motion_controller']['ros__parameters']
+print(c['base_link'], c['tip_link'])")"
+export CM_BASE CM_TIP
+
 say "起 mock 链 ($ROBOT)"
 LOG=/tmp/check_fk_tf.log
 ros2 launch unistackbot_bringup control.launch.py "robot:=$ROBOT" > "$LOG" 2>&1 &
@@ -33,11 +42,11 @@ LPID=$!
 for _ in $(seq 1 40); do
 	C=$(timeout 5 ros2 control list_controllers 2>/dev/null)
 	echo "$C" | grep -q "joint_state_broadcaster.*active" && \
-	echo "$C" | grep -q "joint_trajectory_controller.*active" && break
+	echo "$C" | grep -q "joint_stream_controller.*active" && break
 	sleep 1
 done
 C=$(timeout 5 ros2 control list_controllers 2>/dev/null)
-if ! echo "$C" | grep -q "joint_trajectory_controller.*active"; then
+if ! echo "$C" | grep -q "joint_stream_controller.*active"; then
 	say "FAIL: 控制器未激活"; kill $LPID 2>/dev/null; exit 1
 fi
 
@@ -49,9 +58,11 @@ sleep 0.5
 # 10 个确定性随机位姿 (LCG, 覆盖限位 ±40% 区间)
 say "对拍 10 个随机位姿 (pause 下瞬移, 全精度 TF, 容差 1e-9)"
 RESULTS=$(python3 - "$ROBOT" <<'PYEOF'
-import subprocess, sys, time, re
+import os, subprocess, sys, time, re
 
 robot = sys.argv[1]
+CM_BASE = os.environ['CM_BASE']
+CM_TIP = os.environ['CM_TIP']
 SETSTATE = "unistackbot_sim_control/srv/SetJointState"
 
 # 与单测同源的 LCG 随机数 (确定性, 失败可复现)
@@ -73,6 +84,21 @@ for j in root.iter("joint"):
     if "min" in ps and "max" in ps:
         lim[j.get("name")] = (float(ps["min"]), float(ps["max"]))
 names = list(lim)
+
+# fk_tool 只吃链上关节 (严格数量校验): URDF 树回溯 base->tip 收集链关节
+# (gripper 等不在 base->tip 链上的命令关节只参与瞬移, 不进 FK 对拍)
+parent_of = {}
+for j in root.iter("joint"):
+    p, c = j.find("parent"), j.find("child")
+    if p is not None and c is not None:
+        parent_of[c.get("link")] = (j.get("name"), p.get("link"))
+chain, link = set(), CM_TIP
+while link != CM_BASE and link in parent_of:
+    jn, link = parent_of[link]
+    chain.add(jn)
+if link != CM_BASE:
+    print(f"URDF 树找不到 {CM_BASE} -> {CM_TIP} 链"); sys.exit(1)
+fk_names = [n for n in names if n in chain]
 
 results = []
 for trial in range(10):
@@ -103,8 +129,8 @@ for trial in range(10):
         "t = None\n"
         "while time.time() < end:\n"
         "    rclpy.spin_once(node, timeout_sec=0.2)\n"
-        "    if buf.can_transform('link_base', 'link7', rclpy.time.Time()):\n"
-        "        t = buf.lookup_transform('link_base', 'link7', rclpy.time.Time())\n"
+        f"    if buf.can_transform('{CM_BASE}', '{CM_TIP}', rclpy.time.Time()):\n"
+        f"        t = buf.lookup_transform('{CM_BASE}', '{CM_TIP}', rclpy.time.Time())\n"
         "        break\n"
         "if t is None:\n"
         "    raise SystemExit('NO TF')\n"
@@ -119,10 +145,10 @@ for trial in range(10):
         continue
     tx, ty, tz = map(float, vals)
 
-    # fk_tool 算同一位姿
-    joint_args = ",".join(f"{n}={t}" for n, t in zip(names, targets))
+    # fk_tool 算同一位姿 (只喂链上关节)
+    joint_args = ",".join(f"{n}={t}" for n, t in zip(names, targets) if n in chain)
     fk = subprocess.run(["timeout", "6", "ros2", "run", "unistackbot_controller",
-        "fk_tool", "--joints", joint_args], capture_output=True, text=True)
+        "fk_tool", "--joints", joint_args, "--base", os.environ["CM_BASE"], "--tip", os.environ["CM_TIP"]], capture_output=True, text=True)
     mf = re.search(r"position \[([-\d.e+]+), ([-\d.e+]+), ([-\d.e+]+)\]", fk.stdout)
     if not mf:
         results.append(("FAIL", trial + 1, f"fk_tool 无输出: {fk.stdout[:100]}"))

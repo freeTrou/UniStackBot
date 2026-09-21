@@ -26,9 +26,6 @@ find_package(unistackbot_interface REQUIRED)
 find_package(unistackbot_algorithm REQUIRED)
 find_package(interactive_markers REQUIRED)
 find_package(visualization_msgs REQUIRED)
-find_package(rclcpp_action REQUIRED)
-find_package(control_msgs REQUIRED)
-find_package(trajectory_msgs REQUIRED)
 
 # 算法库 (urdf_fk/dls_ik) 已拆至 unistackbot_algorithm (2026-09-17);
 # 本包 = 控制器集成包: 每控制器一个自包含文件夹 + tools/ 工具归拢。
@@ -87,7 +84,7 @@ target_include_directories(fk_tool PRIVATE
 # IK 交互演示节点 (RViz 6D 拖动标记)
 add_executable(ik_demo_node tools/ik_demo_node.cpp)
 target_compile_features(ik_demo_node PUBLIC cxx_std_17)
-ament_target_dependencies(ik_demo_node rclcpp unistackbot_interface unistackbot_algorithm interactive_markers visualization_msgs rclcpp_action control_msgs trajectory_msgs)
+ament_target_dependencies(ik_demo_node rclcpp unistackbot_interface interactive_markers visualization_msgs geometry_msgs)
 target_include_directories(ik_demo_node PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
