@@ -22,7 +22,7 @@ find_package(unistackbot_interface REQUIRED)
 
 # 纯算法库 (2026-09-17 自 unistackbot_controller 拆出): 运动学解算 + 数值 IK。
 # 目录 = 每算法一个文件夹 (与 unistackbot_common 组件三件套同构):
-#   urdf_fk/  dls_ik/  (后续新算法各起一个文件夹, 互不交叉)
+#   urdf_fk/  ik_solver/  dls_ik/  (后续新算法各起一个文件夹, 互不交叉)
 # include 基 = 包根, 消费方 #include "dls_ik/dls_ik.hpp"。
 # 零控制器生态依赖 —— 外部仓库/RL 训练侧只依赖本包即可复用算法。
 add_library(${PROJECT_NAME} SHARED
@@ -42,7 +42,7 @@ ament_target_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
 
 # 头文件随算法文件夹整体安装 (只装 .hpp, test/ 与 .cpp 不进 install)
-install(DIRECTORY urdf_fk dls_ik
+install(DIRECTORY urdf_fk ik_solver dls_ik
 	DESTINATION include
 	FILES_MATCHING PATTERN "*.hpp"
 )

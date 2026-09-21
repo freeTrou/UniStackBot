@@ -10,20 +10,18 @@
 
 #include <Eigen/Dense>
 
+#include "ik_solver/ik_solver.hpp"   // IkSolver 接口 + SolveMode/DlsIkStats (2026-09-21 移入接口层)
 #include "urdf_fk/urdf_fk.hpp"
-#include "unistackbot_interface/ik_result.hpp"
-#include "unistackbot_interface/robot_command.hpp"   // RedundancyPreference/RedundancyType
 
 namespace unistackbot_algorithm
 {
 
-// 契约类型来自 interface 包 (跨层共享); 本命名空间内直接使用
-using unistackbot_interface::IkResult;
-using unistackbot_interface::RedundancyPreference;
+// 契约类型来自 interface 包 (跨层共享); IkResult/RedundancyPreference 经 ik_solver.hpp 引入
 using unistackbot_interface::RedundancyType;
 
 /*
  * 数值 IK 求解器 (P1.4) —— 策略层自研, 数值层用库 (Eigen SVD + KDL 雅可比)。
+ * IkSolver 接口的参考实现 (2026-09-21 起继承接口; 新求解器对照本类实现)。
  *
  * 算法 = 种子阶梯 + DLS 主循环 + 零空间二级目标 (决策卡 §5.1):
  *   种子阶梯: 调用方种子 → 限位感知启发式 × N 随机重启 (TRAC-IK 配方) → 逐级启用
@@ -79,43 +77,13 @@ struct DlsIkConfig
 	                                 //  0=关闭分类; 分布账见 playbook §7)
 };
 
-/*
- * 求解模式 —— 粘性语义的场景化解耦 (2026-09-17 粘性误杀 31/90 冷启动样本后定稿):
- *   STREAMING  流式跟踪 (种子=上一解): 启用分支粘性 (解距种子 > jump_threshold
- *              视为跳分支拒绝输出, 拖动/伺服场景的连续性保证)。
- *   COLD_START 冷启动 (种子=分支代表/种子库): 禁用粘性 —— 解距种子远是常态
- *              不是错误 (实测失败样本的合法解距限位中心 9~11 rad)。
- * 调用方必须显式声明意图, 不从种子值隐式推断。
- */
-enum class SolveMode : uint8_t
-{
-	STREAMING = 0,
-	COLD_START = 1,
-};
+/* SolveMode / DlsIkStats 已移 ik_solver.hpp (接口层通用类型, 2026-09-21)。 */
 
-/*
- * 单次求解统计 (调用方可选消费; ulog/性能画像用)。
- */
-struct DlsIkStats
-{
-	bool ok{false};
-	int iterations{0};        // 成功种子的迭代数 (失败=0)
-	int restarts_used{0};    // 消耗的重启数 (0 = 调用方种子直接命中)
-	double solve_us{0.0};    // 总耗时 [µs]
-	double final_err{0.0};   // 失败时的最终误差范数 (成功=0)
-	bool timed_out{false};   // 失败是否因 timeout_ns 预算耗尽 (与迭代上限/局部极小区分:
-	                        // 超时 ≠ 不可解 —— 放宽预算或换种子仍可解, CM 降级策略据此分流)
-	double min_sigma{-1.0};  // 奇异接近度遥测: 最佳配置点的雅可比最小奇异值。
-	                        // 成功=解处 (倒数第二次迭代的 σ, 末步在信任邻域内差异可忽略);
-	                        // 失败=加权误差最低的失败尝试处; 粘性拒绝=被拒解处。
-	                        // <0 = 本轮未进入迭代 (NOT_READY/UNREACHABLE 几何预检等)
-};
-
-class DlsIk
+class DlsIk : public IkSolver
 {
 public:
 	// 构造即持有 FK 库 (限位/雅可比来源); 不成功 ready_=false, solve 返回 NOT_READY
-	[[nodiscard]] bool init(const UrdfFk * fk, std::string & message);
+	[[nodiscard]] bool init(const UrdfFk * fk, std::string & message) override;
 
 	/*
 	 * 求解 (点 IK, 上游 ~100Hz 消费)。
@@ -132,9 +100,9 @@ public:
 		const RedundancyPreference & red,
 		std::vector<double> & out_q,
 		DlsIkStats * stats = nullptr,
-		SolveMode mode = SolveMode::STREAMING) const;
+		SolveMode mode = SolveMode::STREAMING) const override;
 
-	[[nodiscard]] bool ready() const {return fk_ != nullptr;}
+	[[nodiscard]] bool ready() const override {return fk_ != nullptr;}
 
 	// 配置注入 (参数与 FK 无关, 可随时更换, 影响下一次 solve)
 	void setConfig(const DlsIkConfig & cfg) {cfg_ = cfg;}
@@ -146,10 +114,10 @@ public:
 	 * 加载时逐条做限位 + FK 一致性校验 (关节序错配在此当场暴露)。
 	 * 未加载 = 现行为 (分支代表 + 随机阶梯), 形态无关性不受影响。
 	 */
-	[[nodiscard]] bool loadSeedLibrary(const std::string & path, std::string & message);
+	[[nodiscard]] bool loadSeedLibrary(const std::string & path, std::string & message) override;
 	[[nodiscard]] bool seedLibraryLoaded() const {return !seed_lib_.empty();}
 	// 已加载条目数 (0 = 未加载)
-	[[nodiscard]] std::size_t seedLibrarySize() const {return seed_lib_.size();}
+	[[nodiscard]] std::size_t seedLibrarySize() const override {return seed_lib_.size();}
 
 private:
 	// 单次 DLS 求解 (给定种子, 无重启); deadline = 墙钟预算终点 (max()=不限时),

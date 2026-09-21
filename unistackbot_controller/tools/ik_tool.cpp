@@ -117,7 +117,11 @@ int main(int argc, char ** argv)
 	}
 
 	unistackbot_algorithm::CartesianPose back;
-	fk.fk(q, back);
+	if (!fk.fk(q, back))
+	{
+		std::fprintf(stderr, "解回代 FK 失败\n");
+		return 1;
+	}
 	const double err = std::sqrt(std::pow(back.x - target.x, 2) + std::pow(back.y - target.y, 2) +
 		std::pow(back.z - target.z, 2));
 

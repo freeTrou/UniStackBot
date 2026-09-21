@@ -21,12 +21,14 @@
 #include "unistackbot_interface/msg/cartesian_motion_status.hpp"
 
 #include "dls_ik/dls_ik.hpp"
+#include "ik_solver/ik_solver.hpp"
 #include "urdf_fk/urdf_fk.hpp"
 
 // 算法库住 unistackbot_algorithm 包 (2026-09-17 拆分: 算法与控制器集成解耦);
 // 控制器只消费类型, 命名空间仍属本包
 using unistackbot_algorithm::CartesianPose;
 using unistackbot_algorithm::DlsIk;
+using unistackbot_algorithm::IkSolver;
 using unistackbot_algorithm::DlsIkConfig;
 using unistackbot_algorithm::DlsIkStats;
 using unistackbot_algorithm::RedundancyPreference;
@@ -101,7 +103,8 @@ private:
 
 	// ---- 运动学 (update 线程私有; worker 侧实例第 3 步另建) ----
 	std::unique_ptr<UrdfFk> fk_;
-	std::unique_ptr<DlsIk> ik_;
+	std::unique_ptr<IkSolver> ik_;   // 接口指针 (2026-09-21): yaml ik_solver 参数选择实现
+	std::string ik_solver_name_{"dls"};
 	UrdfFk::Scratch fk_scratch_;
 
 	// ---- 接口映射: 接口名序 (CM 声明序) != 链序 (fk.jointNames), 按名映射 ----
@@ -175,7 +178,7 @@ private:
 	unistackbot_common::SpLatest<ColdRequest> cold_req_;   // update → worker
 	unistackbot_common::SpLatest<ColdResult> cold_res_;    // worker → update
 	uint64_t last_cold_req_seq_{0};   // 防重复请求 (同目标只求一次)
-	std::string worker_urdf_, worker_lib_;   // worker 线程自建实例的原料 (configure 期快照)
+	std::string worker_urdf_, worker_lib_, worker_solver_;   // worker 线程自建实例的原料 (configure 期快照)
 
 	// ---- 契约通道 (值通道 = sp_latest 自家组件, POD 覆盖写 + seq 变更检测;
 	//      事件通道 mode = 原子标志) ----

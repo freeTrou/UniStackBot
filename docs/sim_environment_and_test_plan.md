@@ -93,7 +93,7 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 | 层 | 机制 | 现状 | 验证路径 |
 |---|---|---|---|
 | **控制器插件**（链内 RT） | ControllerInterface + pluginlib：yaml 注册 + spawner | ✓ 零框架改动（JointStream/CM 即此形态） | mock 冒烟 → 三链回归 |
-| **IK 求解器**（CM 内 RT） | IkSolver 抽象接口 + `ik_solver` 参数选择（CM 现硬编 DlsIk） | 待做（**悬**：自研 IK 数值/解析类未定 → 决定"解析主路径 + DLS 奇异兜底"还是纯替换） | `docs/ik_validation_playbook.md` 六阶段 |
+| **IK 求解器**（CM 内 RT） | `IkSolver` 抽象接口 + `ik_solver` 参数选择 | **接口已就绪** (2026-09-21: DlsIk 已继承接口, CM/worker 走接口指针; 用户 7 轴数值解 = 实现接口加分支, 平级 AB 对比) | `docs/ik_validation_playbook.md` 六阶段 |
 | **上层算法节点**（链外 non-RT） | 订 §3.2 反馈流 → 发 §3.1 命令流（RL/VLA ingress，设计文档 §6.1）；断流减速已兜底 | ✓ 已支持 | fault_injection F6 场景 |
 | **仿真后端** | hardware_interface 插件（`sim_backend_factory` 预留多后端） | ✓ 预留 | 组件测试 + 链冒烟 |
 

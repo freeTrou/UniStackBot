@@ -100,6 +100,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_init()
 	// 参数面 (骨架期冻结; 名字与默认值即对外契约的一部分)
 	auto_declare<std::string>("base_link", "");
 	auto_declare<std::string>("tip_link", "");
+	auto_declare<std::string>("ik_solver", "dls");   // IkSolver 实现: dls | <后续新求解器>
 	auto_declare<std::string>("seed_library_package", "unistackbot_description");
 	auto_declare<std::string>("seed_library_relpath", "");
 	auto_declare<int64_t>("update_timeout_ns", update_timeout_ns_);
@@ -168,7 +169,19 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 		return CallbackReturn::ERROR;
 	}
-	auto ik = std::make_unique<DlsIk>();
+	// 求解器选择 (IkSolver 接口, 2026-09-21): 数值类实现平级替换/AB 对比;
+	// 新实现 = unistackbot_algorithm 加文件夹 + 此处加分支 (契约见 ik_solver.hpp)
+	ik_solver_name_ = get_node()->get_parameter("ik_solver").as_string();
+	std::unique_ptr<IkSolver> ik;
+	if (ik_solver_name_ == "dls")
+	{
+		ik = std::make_unique<DlsIk>();
+	}
+	else
+	{
+		ULOG_ERROR("cm: 未知 ik_solver '%s' (可选: dls)", ik_solver_name_.c_str());
+		return CallbackReturn::ERROR;
+	}
 	if (!ik->init(fk.get(), msg))
 	{
 		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
@@ -201,12 +214,17 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	// worker 原料快照 (第 3 步): worker 线程自建实例用, configure 期定死
 	worker_urdf_ = urdf;
 	worker_lib_ = lib;
+	worker_solver_ = ik_solver_name_;
 
 	// 流式求解配置 (防线1: 墙钟预算 + 迭代上限; 预算内实测 max 32µs, 富余 15 倍)
-	DlsIkConfig ikcfg;
-	ikcfg.timeout_ns = static_cast<uint64_t>(update_timeout_ns_);
-	ikcfg.max_iterations = ik_max_iterations_;
-	ik_->setConfig(ikcfg);
+	// DlsIkConfig 是 DLS 专属 —— 经具体类施加 (其他实现经各自构造参数配置)
+	if (auto * dls = dynamic_cast<DlsIk *>(ik_.get()))
+	{
+		DlsIkConfig ikcfg;
+		ikcfg.timeout_ns = static_cast<uint64_t>(update_timeout_ns_);
+		ikcfg.max_iterations = ik_max_iterations_;
+		dls->setConfig(ikcfg);
+	}
 	// 步长限幅: URDF <ros2_control> max_velocity 为单一事实源; /update_rate 的换算
 	// 延后到首拍校准 (Humble 坑: configure 期 get_update_rate() 取不到真实频率,
 	// 实测返回 1 —— 2026-09-21 排查 F6 断流不触发时实锤)。此处占位 = vmax
@@ -753,20 +771,33 @@ void CartesianMotionController::workerLoop()
 		ULOG_ERROR("cm worker: 建链失败 (%s)", msg.c_str());
 		return;
 	}
-	DlsIk ik;
-	if (!ik.init(&fk, msg))
+	std::unique_ptr<IkSolver> ik;
+	if (worker_solver_ == "dls")
+	{
+		ik = std::make_unique<DlsIk>();
+	}
+	else
+	{
+		ULOG_ERROR("cm worker: 未知 ik_solver '%s'", worker_solver_.c_str());
+		return;
+	}
+	if (!ik->init(&fk, msg))
 	{
 		ULOG_ERROR("cm worker: %s", msg.c_str());
 		return;
 	}
-	if (!worker_lib_.empty() && !ik.loadSeedLibrary(worker_lib_, msg))
+	// 种子库 = 可选能力 (接口默认不支持返回 false, 非致命 → 分支+随机阶梯)
+	if (!worker_lib_.empty() && !ik->loadSeedLibrary(worker_lib_, msg))
 	{
 		ULOG_WARN("cm worker: 种子库加载失败, 走分支+随机阶梯 (%s)", msg.c_str());
 	}
-	DlsIkConfig cfg;
-	cfg.timeout_ns = static_cast<uint64_t>(cold_timeout_ns_);
-	cfg.max_iterations = 200;   // 冷启动世界: 不限时档的配置 (阶梯自由磨)
-	ik.setConfig(cfg);
+	if (auto * dls = dynamic_cast<DlsIk *>(ik.get()))
+	{
+		DlsIkConfig cfg;
+		cfg.timeout_ns = static_cast<uint64_t>(cold_timeout_ns_);
+		cfg.max_iterations = 200;   // 冷启动世界: 不限时档的配置 (阶梯自由磨)
+		dls->setConfig(cfg);
+	}
 	// 预热: 本线程首条日志 (cached_tid 是线程私有的) + 一次假冷启动
 	{
 		std::vector<double> q2(fk.jointCount(), 0.0);
@@ -781,11 +812,11 @@ void CartesianMotionController::workerLoop()
 		{
 			std::vector<double> out = q2;
 			// 结果有意丢弃: 就绪探测只求触达求解路径 (页/分支), 不消费解
-			(void)ik.solve(t, q2, RedundancyPreference{}, out, nullptr,
+			(void)ik->solve(t, q2, RedundancyPreference{}, out, nullptr,
 				unistackbot_algorithm::SolveMode::COLD_START);
 		}
 		ULOG_INFO("cm worker: 就绪 (%u 关节, 库 %zu 条, 预算 %ldns)",
-			fk.jointCount(), ik.seedLibrarySize(), static_cast<long>(cold_timeout_ns_));
+			fk.jointCount(), ik->seedLibrarySize(), static_cast<long>(cold_timeout_ns_));
 	}
 	ColdRequest req;
 	uint64_t last = 0;
@@ -801,7 +832,7 @@ void CartesianMotionController::workerLoop()
 		std::vector<double> seed(req.q, req.q + req.n);
 		std::vector<double> out = seed;
 		DlsIkStats st;
-		const auto r = ik.solve(req.target, seed, RedundancyPreference{}, out, &st,
+		const auto r = ik->solve(req.target, seed, RedundancyPreference{}, out, &st,
 			unistackbot_algorithm::SolveMode::COLD_START);
 		ColdResult res{};
 		res.seq = req.seq;
