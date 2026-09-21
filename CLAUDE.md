@@ -9,6 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. 重点读 `p15-progress.md`（进行中项目的快照：已完成/验收数据/下一步/环境坑）
 3. 记忆是时点快照不是实时状态——引用的文件/参数先对照当前代码核实再用
 
+## 工作纪律：一切依据来自实际工程（用户规则，2026-09-21）
+
+- **任何结论下笔前读实际代码验证**——接口形态、参数名、行为、某实现是否存在，都以代码为准；文档（含本文件）、记忆、外部资料都是时点快照，可能与代码脱节，冲突时代码赢。
+- **有任何不确定 = 去读代码，不要猜**；代码里找不到实物 = 向用户确认所指，不要用推测补齐（反例教训 2026-09-21：用户说"我的 IK"，未核实所指即默认"外部新实现"凭空写了接入骨架——实际指工程内的 dls_ik）。
+
 ## Project Overview
 
 UniStackBot is a ROS 2 Humble workspace for a general-purpose, multi-morphology real-time robot control framework. It targets fixed-base arms, wheeled bases, quadrupeds, wheeled-arm humanoids, and bipedal humanoids from a single layered architecture. The first concrete robot is the **Piper arm**: URDF/Xacro description + the unified sim-control layer (`unistackbot_sim_control`, ros2_control hardware plugin with pluggable backends) + Gazebo integration. `unistackbot_controller` hosts the CartesianMotionController CM plugin (P1.5, IK servoing on the control loop) and JointStreamController (关节级 topic 流式控制器, 2026-09-18 取代 JTC action 层); `unistackbot_hardware` (real driver) is still a skeleton.
