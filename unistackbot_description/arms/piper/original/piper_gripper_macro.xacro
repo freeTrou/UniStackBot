@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:macro name="piper_gripper">
+
+        <link name="flange_link">
+            <inertial>
+                <origin xyz="1.151691e-03 0.782428e-03 4.798051e-03" rpy="0 0 0"/>
+                <mass value="0.04"/>
+                <inertia ixx="9.935389e-06" ixy="0.0" ixz="0.0" iyy="10.508003e-06" iyz="0.0" izz="19.652873e-06"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/visual/flange.dae"/>
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/collision/flange.stl"/>
+                </geometry>
+            </collision>
+        </link>
+        <joint name="flange_joint" type="fixed">
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <parent link="link6"/>
+            <child link="flange_link"/>
+        </joint>
+
+        <link name="gripper_base">
+            <inertial>
+                <origin xyz="-0.000183807162235591 8.05033155577911E-05 0.0321436689908876" rpy="0 0 0"/>
+                <mass value="0.45"/>
+                <inertia ixx="0.00092934" ixy="0.00000034" ixz="-0.00000738" iyy="0.00071447" iyz="0.00000005" izz="0.00039442"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/visual/gripper_base.dae"/>
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/collision/gripper_base.stl"/>
+                </geometry>
+            </collision>
+        </link>
+        <joint name="gripper_base_joint" type="fixed">
+            <origin xyz="0 0 0.0045" rpy="0 0 0"/>
+            <parent link="flange_link"/>
+            <child link="gripper_base"/>
+        </joint>
+
+        <link name="gripper_link"/>
+        <joint name="gripper" type="prismatic">
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <parent link="gripper_base"/>
+            <child link="gripper_link"/>
+            <axis xyz="0 0 1"/>
+            <limit lower="0" upper="0.1" effort="10" velocity="3"/>
+            <dynamics damping="0.1" friction="0.1"/>
+        </joint>
+
+        <link name="gripper_link1">
+            <inertial>
+                <origin xyz="0.00065123185041968 -0.0491929869131989 0.00972258769184025" rpy="0 0 0"/>
+                <mass value="0.025"/>
+                <inertia ixx="0.00007371" ixy="-0.00000113" ixz="0.00000021" iyy="0.00000781" iyz="-0.00001372" izz="0.0000747"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/visual/gripper_link1.dae"/>
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/collision/gripper_link1.stl"/>
+                </geometry>
+            </collision>
+        </link>
+        <joint name="gripper_joint1" type="prismatic">
+            <origin xyz="0 0 0.138" rpy="1.5707963 0 0"/>
+            <parent link="gripper_base"/>
+            <child link="gripper_link1"/>
+            <axis xyz="0 0 1"/>
+            <limit lower="0" upper="0.05" effort="10" velocity="3"/>
+            <mimic joint="gripper" multiplier="0.5" offset="0.0"/>
+            <dynamics damping="0.1" friction="0.1"/>
+        </joint>
+
+        <link name="gripper_link2">
+            <inertial>
+                <origin xyz="0.00065123185041968 -0.0491929869131989 0.00972258769184025" rpy="0 0 0"/>
+                <mass value="0.025"/>
+                <inertia ixx="0.00007371" ixy="-0.00000113" ixz="0.00000021" iyy="0.00000781" iyz="-0.00001372" izz="0.0000747"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/visual/gripper_link2.dae"/>
+                </geometry>
+            </visual>
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/piper/meshes/collision/gripper_link2.stl"/>
+                </geometry>
+            </collision>
+        </link>
+        <joint name="gripper_joint2" type="prismatic">
+            <origin xyz="0 0 0.138" rpy="1.5707963 0 -3.1415926"/>
+            <parent link="gripper_base"/>
+            <child link="gripper_link2"/>
+            <axis xyz="0 0 -1"/>
+            <limit lower="-0.05" upper="0" effort="10" velocity="3"/>
+            <mimic joint="gripper" multiplier="-0.5" offset="0.0"/>
+            <dynamics damping="0.1" friction="0.1"/>
+        </joint>
+
+    </xacro:macro>
+
+</robot>

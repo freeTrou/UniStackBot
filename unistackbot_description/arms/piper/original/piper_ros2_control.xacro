@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:macro name="piper_ros2_control" params="use_gripper:=true">
+
+        <ros2_control name="piper_system" type="system">
+
+            <hardware>
+                <plugin>unistackbot_hardware/PiperSystem</plugin>
+                <param name="device">/dev/piper_arm</param>
+                <param name="baudrate">2000000</param>
+                <param name="loop_rate">500</param>
+            </hardware>
+
+            <joint name="joint1">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.6179938</param>
+                <param name="max">2.6179938</param>
+            </joint>
+
+            <joint name="joint2">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">0</param>
+                <param name="max">3.1415926</param>
+            </joint>
+
+            <joint name="joint3">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.9670597</param>
+                <param name="max">0</param>
+            </joint>
+
+            <joint name="joint4">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-1.7453292</param>
+                <param name="max">1.7453292</param>
+            </joint>
+
+            <joint name="joint5">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-1.2217304</param>
+                <param name="max">1.2217304</param>
+            </joint>
+
+            <joint name="joint6">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.0943951</param>
+                <param name="max">2.0943951</param>
+            </joint>
+
+            <xacro:if value="$(arg use_gripper)">
+                <joint name="gripper">
+                    <command_interface name="position"/>
+                    <state_interface name="position"/>
+                    <state_interface name="velocity"/>
+                    <param name="min">0</param>
+                    <param name="max">0.1</param>
+                </joint>
+
+                <joint name="gripper_joint1">
+                    <param name="mimic">gripper</param>
+                    <param name="multiplier">0.5</param>
+                </joint>
+
+                <joint name="gripper_joint2">
+                    <param name="mimic">gripper</param>
+                    <param name="multiplier">-0.5</param>
+                </joint>
+            </xacro:if>
+
+        </ros2_control>
+
+    </xacro:macro>
+
+</robot>
