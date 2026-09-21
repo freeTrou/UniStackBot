@@ -4,6 +4,8 @@
     <xacro:arg name="use_ros2_control" default="false" />
     <xacro:arg name="use_world" default="true" />
     <xacro:arg name="use_gazebo" default="false" />
+    <!-- mujoco 链: 是否无头 (不拉 Simulate 渲染窗); 传给 ros2_control 块的 headless 硬件参数 -->
+    <xacro:arg name="headless" default="true" />
 
     <!-- 全局属性: 上游 common 宏依赖(mesh 路径前缀/后缀, YAML 加载方式) -->
     <xacro:property name="mesh_path" value="package://unistackbot_description/arms/xarm7/meshes" />
@@ -30,7 +32,7 @@
         kinematics_params_filename="$(find unistackbot_description)/arms/xarm7/config/kinematics/default/xarm7_default_kinematics.yaml"/>
 
     <xacro:if value="$(arg use_ros2_control)">
-        <xacro:xarm7_ros2_control use_gazebo="$(arg use_gazebo)"/>
+        <xacro:xarm7_ros2_control use_gazebo="$(arg use_gazebo)" headless="$(arg headless)"/>
     </xacro:if>
 
 </robot>

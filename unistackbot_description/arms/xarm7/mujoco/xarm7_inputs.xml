@@ -1,0 +1,32 @@
+<mujoco_inputs>
+
+  <!-- xarm7 URDF→MJCF 转换定制输入 (unistackbot), 管线同 piper/README.md。
+       - position 执行器 name == joint name (插件按名映射)
+       - xarm7 无 mimic 关节 (裸臂 + end_tool 固定), 无需 equality
+       - ctrlrange 取 URDF <ros2_control> min/max
+       - kp 起步值按 xarm7 量级 (连杆 ~2-3kg, effort 20-50 N·m), 离线验证后调 -->
+
+  <raw_inputs>
+    <option integrator="implicitfast"/>
+
+    <default>
+      <default class="visual">
+        <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+      </default>
+    </default>
+
+    <actuator>
+      <position name="joint1" joint="joint1" kp="15000" dampratio="1.0" ctrlrange="-6.2831853 6.2831853"/>
+      <position name="joint2" joint="joint2" kp="15000" dampratio="1.0" ctrlrange="-2.059 2.0944"/>
+      <position name="joint3" joint="joint3" kp="8000" dampratio="1.0" ctrlrange="-6.2831853 6.2831853"/>
+      <position name="joint4" joint="joint4" kp="5000" dampratio="1.0" ctrlrange="-0.19198 3.927"/>
+      <position name="joint5" joint="joint5" kp="3000" dampratio="1.0" ctrlrange="-6.2831853 6.2831853"/>
+      <position name="joint6" joint="joint6" kp="2000" dampratio="1.0" ctrlrange="-1.69297 3.1415926"/>
+      <position name="joint7" joint="joint7" kp="1000" dampratio="1.0" ctrlrange="-6.2831853 6.2831853"/>
+    </actuator>
+  </raw_inputs>
+
+</mujoco_inputs>

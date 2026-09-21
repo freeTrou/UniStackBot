@@ -20,12 +20,17 @@ bringup 的 `<robot>_controllers.yaml` (update_rate 500Hz + RT 线程官方参�
 命令通道与其他链一致:
 
 ```bash
-# 关节空间 (注意: mujoco 链手指为 passive, 只列 7 个主关节):
+# 关节空间 (注意: piper 的 mujoco 链手指为 passive, 只列 7 个主关节;
+# xarm7 裸臂 7 关节本来就全命令):
 ros2 topic pub -r 50 /joint_stream_controller/command unistackbot_interface/msg/JointCommand \
-  "{joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, gripper], mode: 0, position: [0.5, 1.0, -1.0, 0, 0, 0, 0.05]}"
+  "{joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, gripper], mode: 1, position: [0.5, 1.0, -1.0, 0, 0, 0, 0.05]}"
 # 笛卡尔空间 (base 系):
 ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped ...
 ```
+
+已有 MJCF 资产的机型: `piper` (2026-09-20), `xarm7` (2026-09-21, 管线同; xarm7 侧差异
+——关节 damping 10/5/2 来自 URDF 厂商值、零位零接触无需 exclude、无 mimic——见
+`arms/xarm7/mujoco/README.md`)。E2E: piper 跟踪 4.7mrad / xarm7 1.0mrad, CM 双机型收敛。
 
 ## 与其他链的差异
 

@@ -1,20 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <xacro:macro name="xarm7_ros2_control" params="use_gazebo:=false">
+    <xacro:macro name="xarm7_ros2_control" params="use_gazebo:=false headless:=true">
 
         <ros2_control name="xarm7_system" type="system">
 
             <hardware>
-                <!-- use_gazebo: 'ign'=Gazebo Sim(Fortress), 'true'/'classic'=Gazebo Classic, 其余=mock 插件.
+                <!-- use_gazebo: 'ign'=Gazebo Sim(Fortress), 'mujoco'=MuJoCo(mujoco_ros2_control),
+                     'true'/'classic'=Gazebo Classic, 其余=mock 插件.
                      注意: $(arg) 传参时 xacro 会把 true/false 解析成 Python 布尔, 条件需同时匹配 True -->
                 <xacro:if value="${use_gazebo == 'ign'}">
                     <plugin>gz_ros2_control/GazeboSimSystem</plugin>
                 </xacro:if>
+                <xacro:if value="${use_gazebo == 'mujoco'}">
+                    <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+                    <!-- MJCF 资产: 身体树由本 URDF 转换 + 手工策展, 见 arms/xarm7/mujoco/README.md -->
+                    <param name="mujoco_model">$(find unistackbot_description)/arms/xarm7/mujoco/xarm7.xml</param>
+                    <param name="sim_speed_factor">1.0</param>
+                    <!-- $(arg) 布尔坑: true 会变成 Python True, 归一回小写字符串 -->
+                    <param name="headless">${'true' if headless in [True, 'true'] else 'false'}</param>
+                </xacro:if>
                 <xacro:if value="${use_gazebo in [True, 'true', 'classic']}">
                     <plugin>gazebo_ros2_control/GazeboSystem</plugin>
                 </xacro:if>
-                <xacro:unless value="${use_gazebo in ['ign', True, 'true', 'classic']}">
+                <xacro:unless value="${use_gazebo in ['ign', 'mujoco', True, 'true', 'classic']}">
                     <plugin>unistackbot_sim_control/SimControlHardware</plugin>
                     <param name="backend">kinematic</param>
                 </xacro:unless>
