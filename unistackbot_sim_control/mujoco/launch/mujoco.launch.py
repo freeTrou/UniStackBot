@@ -87,7 +87,14 @@ def _launch_setup(context):
         **control_node_kwargs,
     )
 
-    nodes = [robot_state_publisher, mujoco_control]
+    # /sim_control 的 mujoco 适配器 (0d, 2026-09-21): 桥原生四服务; 诚实能力矩阵见其源码头
+    sim_control_mujoco = Node(
+        package='unistackbot_mujoco',
+        executable='sim_control_mujoco_node',
+        output='screen',
+    )
+
+    nodes = [robot_state_publisher, mujoco_control, sim_control_mujoco]
 
     if use_rviz:
         rviz_config = PathJoinSubstitution([
@@ -118,6 +125,11 @@ def _launch_setup(context):
         	package='controller_manager',
         	executable='spawner',
         	arguments=['ee_state_broadcaster', '--controller-manager', '/controller_manager'],
+        	output='screen',
+        ),
+        Node(
+        	package='unistackbot_bringup',
+        	executable='supervisor_node',
         	output='screen',
         ),
         # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, 与 JointStream 由 switch_controllers 切换)

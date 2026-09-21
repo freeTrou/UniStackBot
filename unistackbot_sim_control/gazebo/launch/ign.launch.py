@@ -142,6 +142,11 @@ def _launch_setup(context):
         	arguments=['ee_state_broadcaster', '--controller-manager', '/controller_manager'],
         	output='screen',
         ),
+        Node(
+        	package='unistackbot_bringup',
+        	executable='supervisor_node',
+        	output='screen',
+        ),
         # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, 与 JTC 由 switch_controllers 切换)
         Node(
             package='controller_manager',

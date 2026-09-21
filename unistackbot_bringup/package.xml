@@ -9,6 +9,13 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- 编排层最小版 supervisor_node (0d) -->
+  <depend>rclcpp</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>unistackbot_interface</depend>
+
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>rclpy</exec_depend>

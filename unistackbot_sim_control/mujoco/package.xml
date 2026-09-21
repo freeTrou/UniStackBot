@@ -9,6 +9,11 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- /sim_control 的 mujoco 适配器 (0d): 契约住 sim_control, 服务类型住 msgs -->
+  <depend>rclcpp</depend>
+  <depend>mujoco_ros2_control_msgs</depend>
+  <depend>unistackbot_sim_control</depend>
+
   <exec_depend>mujoco_ros2_control</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>xacro</exec_depend>

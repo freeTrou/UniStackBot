@@ -40,21 +40,22 @@ ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/Pose
 | mimic 手指 | 后端 step() 推导 | 插件 mimic 参数 | MJCF equality (手指 passive, 仅状态接口) |
 | JointStream 关节集 | 9 (含手指) | 9 (含手指) | **7 (主关节; 手指由 equality 跟随)** |
 | CM 宿主 | standalone ros2_control_node | gz 插件内 | mujoco 定制 ros2_control_node |
-| /sim_control | 插件内服务 | side-car 适配器 | 原生四服务 (适配器待接, 见下) |
+| /sim_control | 插件内服务 | side-car 适配器 (`sim_control_gz_node`) | **适配器已接 (0d, 2026-09-21)**: `sim_control_mujoco_node` 桥原生四服务 |
 | 清残留 | mock 双清 | `gz_clean.sh` | 无孤儿进程问题 (普通进程收场) |
 
-## /sim_control 语义 (阶段1 未接适配器)
+## /sim_control 语义 (适配器已接, 0d 2026-09-21, `sim_control_mujoco_node`)
 
-mujoco 定制节点自带四个服务, 与 `/sim_control` 契约的映射 (适配器后续立项, 先手工用):
+E2E 实测 (2026-09-21): pause 后 /clock 冻结 (Δ=0.000s) / resume 恢复行进 (Δ=1.2s);
+reset 后关节重力下垂值与首启逐位一致 (真复位)。
 
-| /sim_control | mujoco 原生 | 差异 |
+| /sim_control | mujoco 原生 | 状态 |
 |---|---|---|
-| reset | `/mujoco_ros2_control_node/reset_world` | 复位整个世界 (含时间) |
-| pause / resume | `/mujoco_ros2_control_node/set_pause` | 单服务布尔参数 |
-| step | `/mujoco_ros2_control_node/step_simulation` | |
-| set_joint_state | `override_start_position_file` / `set_free_joint_state` | 仅启动期 / 仅自由关节, **运行期关节设置无原生等价** (gz 链同样无) |
+| pause / resume | `set_pause(true/false)` | ✓ 实测时钟冻结/恢复 |
+| reset | `reset_world` (空 keyframe=启动初态; **原生支持, 比 gz 强**——Fortress 的 reset 有毒只能拒) | ✓ 注意: 世界级复位含时间回卷, 控制器命令保持位每拍拉回, **配合 pause 使用** |
+| step | `step_simulation(steps=1)` | ✓ 语义=暂停态推进一步 (调用者先 pause) |
+| set_joint_state | 无运行期等价 | ✗ 诚实拒绝 (reset_world 的 state_overrides 是世界级复位+时间回卷, 语义≠瞬移; MJCF keyframe 经 reset 用) |
 
-另有 `/mujoco_ros2_control_node/apply_external_wrench` (扰动力注入, gz 链没有的能力)。
+另有 `/mujoco_ros2_control_node/apply_external_wrench` (扰动力注入, gz 链没有; 力控批次接入)。
 
 ## 已知坑
 
