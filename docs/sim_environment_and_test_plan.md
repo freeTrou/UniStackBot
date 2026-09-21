@@ -74,7 +74,7 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 | `/joint_states` | 关节位置/速度/effort（**乱序，按名对齐**） | 控制频率 | ✓ |
 | `/tf` | 全身位姿（含 EE：link6/link7） | JSB 节拍 | ✓ |
 | `/cartesian_motion_controller/status` | 误差 + current_pose + min_sigma + stream_stale | 20Hz，**仅 CM active** | ✓ |
-| `/ee_state` | EE 位姿独立反馈流（与控制器选择无关） | 50Hz | **批次 2 落地** |
+| `/ee_state` | EE 位姿独立反馈流（与控制器选择无关; 话题全名 `/ee_state_broadcaster/ee_state`） | 50Hz | ✓ 2026-09-21 (mock 实测 47Hz, TF 对拍 4e-16) |
 | `/clock` | 仿真时间（gz/mujoco） | — | ✓ |
 
 `/ee_state` 设计（批次 2）：控制器插件 `ee_state_broadcaster`（ControllerInterface，读
@@ -138,8 +138,8 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 | 批次 | 内容 | 量级 | 状态 |
 |---|---|---|---|
 | 0 | 本文档入库 | 0.5h | ✓ |
-| 1 横切清理 | sim.launch.py 统一入口；verify_robot.sh 重写(+--with-mujoco)；check_fk_tf.sh 修；demo_motion.py 重写；ik_demo_node 改 CM target；fk_tool 去 JTC | ~1 天 | |
-| 2 ee_state_broadcaster | 新控制器插件 → `/ee_state` 50Hz（旋转表示决策挂起，先四元数） | ~0.5 天 | |
+| 1 横切清理 | sim.launch.py 统一入口；verify_robot.sh 重写(+--with-mujoco)；check_fk_tf.sh 修；demo_motion.py 重写；ik_demo_node 改 CM target；fk_tool 去 JTC | ~1 天 | ✓ (f20e439) |
+| 2 ee_state_broadcaster | 新控制器插件 → `/ee_state` 50Hz（旋转表示决策挂起，先四元数） | ~0.5 天 | ✓ |
 | 3 mujoco 测试接入 | fault_injection `--chain` 参数化 + mimic 断言；rt_chain_bench mujoco 档 | ~0.5 天 | |
 | 4 排后项 | gz gripper 回归（需 GitHub 代理查上游 0.7.21）；/sim_control mujoco 桥（0d 编排层）；IkSolver 接口（等数值/解析答复） | 各单开 | |
 

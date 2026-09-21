@@ -1,0 +1,7 @@
+<library path="ee_state_broadcaster">
+  <class name="unistackbot_controller/EeStateBroadcaster"
+         type="unistackbot_controller::EeStateBroadcaster"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>EE pose feedback stream broadcaster (~/ee_state PoseStamped; state-only, coexists with JS/CM; sim test plan batch 2, 2026-09-21)</description>
+  </class>
+</library>

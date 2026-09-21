@@ -53,7 +53,10 @@ pluginlib_export_plugin_description_file(controller_interface
 pluginlib_export_plugin_description_file(controller_interface
   joint_stream_controller/joint_stream_controller.xml
 )
-
+# 注意: 该宏每次调用只注册一个 xml (多参数被静默忽略 —— 2026-09-21 实测踩坑)
+pluginlib_export_plugin_description_file(controller_interface
+  ee_state_broadcaster/ee_state_broadcaster.xml
+)
 # 关节级 topic 流式控制器 (取代 JTC action 层, 2026-09-18 裁决)
 file(GLOB RUCKIG_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common/ruckig/src/ruckig/*.cpp)
 add_library(joint_stream_controller SHARED
@@ -72,6 +75,28 @@ ament_target_dependencies(joint_stream_controller
   geometry_msgs unistackbot_interface
 )
 target_link_libraries(joint_stream_controller ${TINYXML2_LIBRARY})
+
+# EE 位姿独立反馈流 (仿真测试方案批次2, 2026-09-21): 只读控制器, 与 JS/CM 共存
+add_library(ee_state_broadcaster SHARED
+  ee_state_broadcaster/ee_state_broadcaster.cpp
+)
+target_compile_features(ee_state_broadcaster PUBLIC cxx_std_17)
+target_include_directories(ee_state_broadcaster PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
+)
+ament_target_dependencies(ee_state_broadcaster
+  rclcpp controller_interface realtime_tools pluginlib
+  geometry_msgs unistackbot_interface unistackbot_algorithm
+)
+target_link_libraries(ee_state_broadcaster ${TINYXML2_LIBRARY})
+install(TARGETS ee_state_broadcaster
+  DESTINATION lib
+)
+install(FILES ee_state_broadcaster/ee_state_broadcaster.xml
+  DESTINATION share/${PROJECT_NAME}/ee_state_broadcaster
+)
 
 # FK 命令行工具 (调试 + TF 对拍)
 add_executable(fk_tool tools/fk_tool.cpp)
