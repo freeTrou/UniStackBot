@@ -145,7 +145,7 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 | 1 横切清理 | sim.launch.py 统一入口；verify_robot.sh 重写(+--with-mujoco)；check_fk_tf.sh 修；demo_motion.py 重写；ik_demo_node 改 CM target；fk_tool 去 JTC | ~1 天 | ✓ (f20e439) |
 | 2 ee_state_broadcaster | 新控制器插件 → `/ee_state` 50Hz（旋转表示决策挂起，先四元数） | ~0.5 天 | ✓ |
 | 3 mujoco 测试接入 | fault_injection `--chain` 参数化 + F7 mimic 断言；rt_chain_bench mujoco 档 | ~0.5 天 | ✓ (0917e44) |
-| 4 排后项 | gz gripper 回归（需 GitHub 代理查上游 0.7.21）；/sim_control mujoco 桥（0d 编排层）；IkSolver 接口（等数值/解析答复） | 各单开 | |
+| 4 排后项 | gz gripper 回归（需 GitHub 代理查上游 0.7.21）；/sim_control mujoco 桥（0d 编排层）；IkSolver 接口（等数值/解析答复）；CM warmup 多轮带预算求解（消 508µs 首拍冷签名, 用户裁定 2026-09-21 暂缓——机制/无害性已归因入档, 见 rt_mujoco_baseline.md） | 各单开 | |
 
 每批次独立提交；提交前三链回归（mock 必跑，涉及链加跑）。
 
