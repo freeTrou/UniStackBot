@@ -114,10 +114,10 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 
 | 用例 | 工具 | 断言 | 状态 |
 |---|---|---|---|
-| 激活 + 7 关节流跟踪 | `fault_injection.sh --chain mujoco`（参数化） | 50Hz 流跟踪 <10 mrad | 批次 3 |
-| 防线在动力学上的表现 | 同上 F2/F3/F5/F6 | NaN 零位移 / 限位截停 / 速度界内 / 断流刹停 | 批次 3 |
-| mimic equality | bed 加断言 | gj1 = 0.5×gripper (±0.005) | 批次 3 |
-| CM E2E（WCET/误差/收敛，隔离核） | `rt_chain_bench.sh` 扩 mujoco 档 | WCET p99 <20µs；误差 <1mm | 批次 3 |
+| 激活 + 7 关节流跟踪 | `fault_injection.sh --chain mujoco`（参数化） | 50Hz 流跟踪 <10 mrad | ✓ (实测 F5 位移界内/跟踪绿) |
+| 防线在动力学上的表现 | 同上 F2/F3/F5/F6 | NaN 零位移 / 限位截停 / 速度界内 / 断流刹停 | ✓ 8 场景全绿 (F6 刹停 1.945 rad 账面吻合) |
+| mimic equality | bed F7 | gj1 = 0.5×gripper (±0.005) | ✓ 偏差 0.0000 |
+| CM E2E（WCET/误差/收敛，隔离核） | `rt_chain_bench.sh <标签> mujoco` | WCET p99 <20µs；误差 <1mm | ✓ `rt_mujoco_baseline.md`: p99 3.8-55µs / 误差 0.74mm / 收敛 ~1s |
 | 扰动注入 | mujoco 原生 `apply_external_wrench` | 力矩阶跃不发散、恢复收敛 | 后续（力控批次） |
 
 ### 5.3 gz（gripper 回归修复后）
@@ -127,11 +127,14 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 | 激活 + 跟踪 | `verify_robot.sh --with-gazebo`（修 JTC 断言） | 控制器 active + 跟踪 | 批次 1（断言修）；gripper 修复排后 |
 | 仿真控制桥 | 同上 | /clock、RTF、pause/resume 端到端 | 已有段落保留 |
 
-### 5.4 RT 基准（跨链）
+### 5.4 RT 基准（跨链, 双基线已成）
 
-`rt_chain_bench.sh`：cyclictest 三档 + hwlatdetect + CM 链路 E2E。mujoco 档扩入后形成
-双基线：**mock=纯算法 WCET / mujoco=动力学仿真下 WCET**（物理线程与 CM RT 线程同机争用的
-真实代价）。
+`rt_chain_bench.sh <标签> [chain]`：cyclictest 三档 + hwlatdetect + CM 链路 E2E。
+- mock = 纯算法 WCET（权威基线 `rt_baseline_isolcpus.md`: p99 7.5µs / max 70µs）
+- mujoco = 动力学仿真下 WCET（`rt_mujoco_baseline.md` 2026-09-21: p50 <2µs,
+  p99 无负载 55µs / 负载档 4µs, **max 508µs 顶近 500µs 预算线** —— 物理线程
+  SCHED_OTHER 与 CM RT 线程同机争用的真实代价; max 超 solve 预算 8.6µs 属墙钟
+  测量含预算外开销, 未触发降级, 待观察项）
 
 ## 6. 实施批次
 
@@ -140,7 +143,7 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 | 0 | 本文档入库 | 0.5h | ✓ |
 | 1 横切清理 | sim.launch.py 统一入口；verify_robot.sh 重写(+--with-mujoco)；check_fk_tf.sh 修；demo_motion.py 重写；ik_demo_node 改 CM target；fk_tool 去 JTC | ~1 天 | ✓ (f20e439) |
 | 2 ee_state_broadcaster | 新控制器插件 → `/ee_state` 50Hz（旋转表示决策挂起，先四元数） | ~0.5 天 | ✓ |
-| 3 mujoco 测试接入 | fault_injection `--chain` 参数化 + mimic 断言；rt_chain_bench mujoco 档 | ~0.5 天 | |
+| 3 mujoco 测试接入 | fault_injection `--chain` 参数化 + F7 mimic 断言；rt_chain_bench mujoco 档 | ~0.5 天 | ✓ (0917e44) |
 | 4 排后项 | gz gripper 回归（需 GitHub 代理查上游 0.7.21）；/sim_control mujoco 桥（0d 编排层）；IkSolver 接口（等数值/解析答复） | 各单开 | |
 
 每批次独立提交；提交前三链回归（mock 必跑，涉及链加跑）。
