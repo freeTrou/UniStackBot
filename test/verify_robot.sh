@@ -141,9 +141,38 @@ run_motion() {
 	tally "$(timeout 40 python3 "$SCRIPT_DIR/verify_motion.py" cm --base "$CM_BASE" --tip "$CM_TIP" --tol "$3" --timeout 15 2>&1)"
 }
 
+# ---- 公共: 收集进程的传递后代 (精确 PID, 勿用 pkill 模式——会误杀宿主) ----
+descendants() {  # $1=root pid -> 逐行输出后代 pid
+	local frontier="$1" next
+	while [ -n "$frontier" ]; do
+		next=$(ps -eo pid,ppid --no-headers | awk -v f="$frontier" 'BEGIN{n=split(f,a," "); for(i=1;i<=n;i++) want[a[i]]=1} want[$2]{print $1}')
+		echo "$next"
+		frontier=$(echo $next)
+	done
+}
+
 cleanup_launch() {  # $1=launch pid
-	[ -n "${1:-}" ] && kill "$1" 2>/dev/null
-	[ -n "${1:-}" ] && wait "$1" 2>/dev/null
+	# ros2 launch 收到信号后不级联等孙进程: ros2_control_node/robot_state_publisher 实测慢退出 1-2min,
+	# 孤儿在场时下一链 spawner 集体 "Failed to find a free participant index" (2026-09-21 4/4 复现实锤,
+	# 受控实验: 孤儿在场必挂 / 手动无孤儿 6/6 全活)。故必须等家族真退场再放行下一节。
+	[ -n "${1:-}" ] || return 0
+	local FAM S alive
+	FAM="$(descendants "$1") $1"
+	kill -INT "$1" 2>/dev/null
+	for _ in $(seq 1 15); do
+		alive=""
+		for S in $FAM; do
+			ST=$(ps -o stat= -p "$S" 2>/dev/null)
+			[ -n "$ST" ] && [ "${ST:0:1}" != "Z" ] && alive="$alive $S"  # 僵尸=已死, 勿误判存活
+		done
+		[ -z "$alive" ] && break
+		sleep 1
+	done
+	for S in $FAM; do  # 仍有存活 -> 精确 PID SIGKILL 兜底
+		ST=$(ps -o stat= -p "$S" 2>/dev/null)
+		[ -n "$ST" ] && [ "${ST:0:1}" != "Z" ] && kill -KILL "$S" 2>/dev/null
+	done
+	sleep 2  # 端口/租约落定
 	ros2 run unistackbot_gazebo gz_clean.sh >/dev/null 2>&1
 }
 
