@@ -132,9 +132,10 @@ ros2 launch unistackbot_bringup sim.launch.py chain:=<mock|gz|mujoco> robot:=<pi
 `rt_chain_bench.sh <标签> [chain]`：cyclictest 三档 + hwlatdetect + CM 链路 E2E。
 - mock = 纯算法 WCET（权威基线 `rt_baseline_isolcpus.md`: p99 7.5µs / max 70µs）
 - mujoco = 动力学仿真下 WCET（`rt_mujoco_baseline.md` 2026-09-21: p50 <2µs,
-  p99 无负载 55µs / 负载档 4µs, **max 508µs 顶近 500µs 预算线** —— 物理线程
-  SCHED_OTHER 与 CM RT 线程同机争用的真实代价; max 超 solve 预算 8.6µs 属墙钟
-  测量含预算外开销, 未触发降级, 待观察项）
+  p99 无负载 55µs / 负载档 4µs, **max 508.6µs = 500µs 求解预算剪枝签名**
+  （机制实锤: 激活后首批冷 IK 烧穿 update_timeout 被剪 +8.6µs 迭代检查粒度;
+  冷因 = mujoco 物理线程 mj_step 冲刷 RT 核缓存; 三档 max 逐位相同 = 确定性机制;
+  worker 3 拍自愈 35µs 解出, 周期 2000µs 未超, 无害。详见基线文档归因段）
 
 ## 6. 实施批次
 
