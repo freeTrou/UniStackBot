@@ -1,6 +1,6 @@
 # IgH EtherCAT 后端 · 完整设计方案(形态 B 线程1,EC 分支)
 
-> 配套:`docs/hardware_framework_design.md`(§4 多主站矩阵 / master.hpp 五要素 / v3 语义 / 协议层)、`docs/linux_rt_guide.md`(§2.1 线程模板、§2.5 SpLatest)、`docs/socketcan_master_design.md`(CAN FD 分支,结构平行)。
+> 配套:`docs/architecture/hardware_framework_design.md`(§4 多主站矩阵 / master.hpp 五要素 / v3 语义 / 协议层)、`docs/guides/linux_rt_guide.md`(§2.1 线程模板、§2.5 SpLatest)、`docs/bus/socketcan_master_design.md`(CAN FD 分支,结构平行)。
 > 定位:master.hpp 接口的 EC 后端;IgH ecrt 用户态 API,主站线程内跑总线循环,1kHz + DC。
 > 状态:错误处理(§1–§3)为完整定稿;DC/预算/验收为设计要点,随实测回填;§8 坑点清单为调研定稿(出处随附)。
 

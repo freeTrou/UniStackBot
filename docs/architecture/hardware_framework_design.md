@@ -8,7 +8,7 @@
 >   ②**讨论定稿** = 讨论中形成的倾向方案, 未经用户逐条确认 (标"讨论定稿");
 >   ③**讨论稿/待拍板/建议** = 开放问题。
 > 凡未标①的条目一律按讨论稿对待, 不得作为实现依据; 实现若与本文冲突, **以用户裁决和代码现状为准** (本文仅参考)。
-> 配套:`docs/linux_rt_guide.md`(Linux 实时调优手册)、`docs/socketcan_master_design.md`(CAN FD 后端完整设计)、`docs/ethercat_master_design.md`(EtherCAT 后端完整设计)。
+> 配套:`docs/guides/linux_rt_guide.md`(Linux 实时调优手册)、`docs/bus/socketcan_master_design.md`(CAN FD 后端完整设计)、`docs/bus/ethercat_master_design.md`(EtherCAT 后端完整设计)。
 > 相关包:`unistackbot_hardware`(真机驱动,现为空壳)、`unistackbot_controller`(算法层,现为空壳)。
 
 ## 1. 定位
@@ -150,7 +150,7 @@ CM 掉拍/写停止 → 主站 seq 看门狗 → QUICK_STOP(0x02)
 **统一总线接口(master.hpp)契约五要素(2026-09-07 讨论定稿)**:①生命周期 start/stop + `state()` 健康出口(插件据此映射 ros2_control ERROR),调度参数(核/优先级/周期)配置化;②语义状态词汇中立 + 能力声明(窄核心);③**快照语义为接口、双缓冲为内部实现**——`take_state()/publish_cmd()` 类型化,契约类型定义在总线抽象之外,SpLatest 可升级不破接口;④安全面统一:quick_stop 原子旗 + fault 查询跨后端同形;⑤零协议类型泄漏(P8)。三陷阱:最小公分母化(解药=能力声明)、协议词汇泄漏(解药=中立词汇)、一接口多路复用(解药=每总线一实例,CM 聚合)。**验收:fake master 是接口的第一个实现**——不带协议知识能实现完整,接口才算干净(P14/fake 先行)。
 > **③ 的落地修订 (2026-09-17, 用户裁决)**: 契约类型已落地为 `unistackbot_interface` 的 **RobotFeedback/RobotCommand**(原草拟名 RobotStateSnapshot/JointCmd 弃用), 含冗余偏好/MIT 模式/分层结果码; 命名与分层均经用户逐轮裁决, 详见 unistackbot_interface/README.md。本文早期草拟名以落地为准。
 
-**EtherCAT 错误面(八类,协议原生)**:WKC 每拍每从站归因 / 断链拓扑定位到段 / AL 状态码 / ESC 端口计数器(EMI+段定位)/ SM watchdog(P2 原生)/ DC 偏差 / 自锅 / mailbox abort;处理分级与 CAN 同构;双平台错误面测绘为装机自检。**完整设计独立成文:`docs/ethercat_master_design.md`**(与 socketcan_master_design.md 平行,共享 master.hpp/协议层/三通道结构)。能力声明的差异(WKC/DC/拓扑定位 vs 心跳/无DC/收帧级ts)是两种总线真实能力的镜子,不是谦虚。
+**EtherCAT 错误面(八类,协议原生)**:WKC 每拍每从站归因 / 断链拓扑定位到段 / AL 状态码 / ESC 端口计数器(EMI+段定位)/ SM watchdog(P2 原生)/ DC 偏差 / 自锅 / mailbox abort;处理分级与 CAN 同构;双平台错误面测绘为装机自检。**完整设计独立成文:`docs/bus/ethercat_master_design.md`**(与 socketcan_master_design.md 平行,共享 master.hpp/协议层/三通道结构)。能力声明的差异(WKC/DC/拓扑定位 vs 心跳/无DC/收帧级ts)是两种总线真实能力的镜子,不是谦虚。
 
 **协议层(形态无关设备语义, 2026-09-07 讨论定稿)**
 

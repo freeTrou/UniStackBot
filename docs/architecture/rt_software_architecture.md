@@ -1,7 +1,7 @@
 # Linux 实时软件架构 · 完整说明
 
 > 定位:回答"实时软件架构需要什么"的系统性展开——**七根支柱,每根从"需求 → 理论 → Linux 机制 → 代码模式 → 失败形态 → 验收 → 我们栈的落点"七个面写全**。
-> 配套:`docs/linux_rt_guide.md`(系统级装机与排查)、`docs/hardware_framework_design.md`(架构定稿)、`docs/socketcan_master_design.md` / `docs/ethercat_master_design.md`(总线后端)、`docs/control_course/`(理论基础课)。
+> 配套:`docs/guides/linux_rt_guide.md`(系统级装机与排查)、`docs/architecture/hardware_framework_design.md`(架构定稿)、`docs/bus/socketcan_master_design.md` / `docs/bus/ethercat_master_design.md`(总线后端)、`docs/control_course/`(理论基础课)。
 > 价值观先行:**普通软件优化平均值(吞吐、均值延迟),实时软件只优化尾部(最坏情况、抖动)。实时 ≠ 快;实时 = 有界(bounded)且可预测(predictable)。一个平均 10µs 但最坏 5ms 的系统,不是"99% 实时"的系统——是 0% 实时的系统。**
 
 ---
@@ -398,7 +398,7 @@ CM 周期 p99 < 周期 10% · 命令年龄 p99 < 5ms · 总线抖动 p99 < 周�
 
 ## 附 A · 底座配置索引
 
-七支柱的全部内核/硬件前提(PREEMPT_RT 前置、启动参数全量、governor、C-state、THP、irqbalance、watchdog、Orin/RK 专页、装机 checklist)→ `docs/linux_rt_guide.md` 第一部分。**PREEMPT_RT 对 1kHz 是前置条件,不是优化项**(不可抢占区消不掉,支柱全是空中楼阁)。
+七支柱的全部内核/硬件前提(PREEMPT_RT 前置、启动参数全量、governor、C-state、THP、irqbalance、watchdog、Orin/RK 专页、装机 checklist)→ `docs/guides/linux_rt_guide.md` 第一部分。**PREEMPT_RT 对 1kHz 是前置条件,不是优化项**(不可抢占区消不掉,支柱全是空中楼阁)。
 
 ## 附 B · 两个学科对照(与控制理论课的接缝)
 

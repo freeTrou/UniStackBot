@@ -1,6 +1,6 @@
 # Linux 实时调优手册(RT 装机 + 抖动排查)
 
-> 配套文档:`docs/hardware_framework_design.md`(§3 线程模型、§3.5 时序预算与验收线)、`docs/rt_software_architecture.md`(七支柱总纲:本文的系统级配置是它的落地)。
+> 配套文档:`docs/architecture/hardware_framework_design.md`(§3 线程模型、§3.5 时序预算与验收线)、`docs/architecture/rt_software_architecture.md`(七支柱总纲:本文的系统级配置是它的落地)。
 > 适用平台:x86 控制机 + NVIDIA Orin(Jetson)两条线。
 > 结构:**第一部分 系统优化**(装机配置,代码之外)/ **第二部分 代码中的写法**(RT 线程纪律)/ **第三部分 抖动检查专项**(诊断方法论)。
 > 心法:**没有测量的实时是信仰** —— 每项配置都要有对应的验证手段。

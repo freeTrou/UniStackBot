@@ -1,6 +1,6 @@
 # SocketCAN 实时主站 · 完整设计方案(CAN FD 后端,形态 B 线程1)
 
-> 配套:`docs/hardware_framework_design.md`(形态 B / master.hpp 五要素 / v3 语义 / 协议层)、`docs/linux_rt_guide.md`(§2.1 线程模板、§2.5 SpLatest)、`docs/ethercat_master_design.md`(EC 分支,结构平行)。
+> 配套:`docs/architecture/hardware_framework_design.md`(形态 B / master.hpp 五要素 / v3 语义 / 协议层)、`docs/guides/linux_rt_guide.md`(§2.1 线程模板、§2.5 SpLatest)、`docs/bus/ethercat_master_design.md`(EC 分支,结构平行)。
 > 纯 C++17 + POSIX + SocketCAN;目标平台 NVIDIA Orin + RK3576 双平台,用户态代码同源,平台差异收进配置与自检。
 > 定位:master.hpp 接口的第二个真实后端(fake 为第一个)。
 
