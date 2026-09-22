@@ -2,7 +2,7 @@
 
 > 状态： 定稿（2026-09-15）
 > 背景： 公司或立项 7 轴机械臂，UniStackBot 承担大部分开发。本文沉淀 IK 路线的全部裁决与实测依据——每条结论都有本仓库的实测数据或生产级实现背书，无一条来自教科书惯性。机械团队出第一版构型草案时直接引用 §5.4。
-> 关联： 构型数据见本目录 `config/`；框架侧分层裁决见 `docs/hardware_framework_design.md` §14。
+> 关联： 构型数据见本目录 `config/`；框架侧分层裁决见 `docs/architecture/hardware_framework_design.md` §14。
 
 ## 0. 一句话结论
 

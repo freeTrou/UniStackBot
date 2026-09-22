@@ -22,7 +22,7 @@ IDLE ──首条消息──> LIVE ──阈值拍无变化──> STALE
 - 只在 RT 消费线程使用 (单线程假设, 与 SpLatest 读者契约一致)。
 - `reset()` 在 `on_activate` 调用——重激活不继承断流态。
 - 消费策略 (断流→受控减速) 住调用方控制器, 本类只做判定。设计依据
-  `docs/hardware_framework_design.md` §6.1: "过期 → 保持 + 受控减速, 与命令断流同路径,
+  `docs/architecture/hardware_framework_design.md` §6.1: "过期 → 保持 + 受控减速, 与命令断流同路径,
   不新增安全机制"。
 
 ## 消费者

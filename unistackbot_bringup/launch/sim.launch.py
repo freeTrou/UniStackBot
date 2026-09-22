@@ -9,7 +9,7 @@ import os
 # 三链统一入口 (2026-09-21, 仿真测试方案 §2):
 #   ros2 launch unistackbot_bringup sim.launch.py chain:=mock|gz|mujoco robot:=<机型> ...
 # 只做编排+参数转发——三链各自的 launch 是规范实现 (控制台提示与差异见
-# docs/sim_environment_and_test_plan.md §2)。未知 chain/robot fail-fast 列合法值。
+# docs/sim/sim_environment_and_test_plan.md §2)。未知 chain/robot fail-fast 列合法值。
 _CHAINS = {
 	'mock': ('unistackbot_bringup', 'control.launch.py', ['robot', 'use_rviz']),
 	'gz': ('unistackbot_gazebo', 'ign.launch.py', ['robot', 'gui', 'use_rviz']),

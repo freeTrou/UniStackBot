@@ -10,6 +10,6 @@
 
 实现前先读设计文档（均已按 `master.hpp` 五要素契约撰写，讨论中未收口）：
 
-- `docs/hardware_framework_design.md` —— 分层架构、线程模型、协议后端契约、v3 语义状态机
-- `docs/socketcan_master_design.md` —— SocketCAN CAN FD 主站后端
-- `docs/ethercat_master_design.md` —— IgH ecrt EtherCAT 主站后端（1 kHz + DC）
+- `docs/architecture/hardware_framework_design.md` —— 分层架构、线程模型、协议后端契约、v3 语义状态机
+- `docs/bus/socketcan_master_design.md` —— SocketCAN CAN FD 主站后端
+- `docs/bus/ethercat_master_design.md` —— IgH ecrt EtherCAT 主站后端（1 kHz + DC）

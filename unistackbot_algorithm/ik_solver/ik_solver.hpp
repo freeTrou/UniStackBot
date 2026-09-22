@@ -35,7 +35,7 @@ using unistackbot_interface::RedundancyPreference;
  * 接入新求解器 (如用户的 7 轴数值解):
  *   ① 本包新建 <你的求解器>/ 文件夹, 实现 IkSolver (对照 dls_ik/ 为范本)
  *   ② CM on_configure 的选择分支加一行 (yaml 参数 ik_solver: <名字>)
- *   ③ 验证走 docs/ik_validation_playbook.md 六阶段 (Oracle 基准 → 三链回归)
+ *   ③ 验证走 docs/guides/ik_validation_playbook.md 六阶段 (Oracle 基准 → 三链回归)
  *   数值类实现与 DlsIk 平级替换/AB 对比; 解析类实现需另议组合策略 (主路径+兜底)。
  */
 /*

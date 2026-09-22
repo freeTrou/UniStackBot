@@ -27,7 +27,7 @@ namespace unistackbot_controller
  *
  * 载体 = PoseStamped (四元数): **旋转表示决策挂起** (用户待定四元数/RPY/矩阵)——
  * 四元数与 TF 兼容且任何表示可导出; 决策后升自定义 EeState.msg 加并行字段,
- * PoseStamped 消费者不受影响 (docs/sim_environment_and_test_plan.md §3.2)。
+ * PoseStamped 消费者不受影响 (docs/sim/sim_environment_and_test_plan.md §3.2)。
  *
  * 契约:
  *   ~/ee_state  geometry_msgs/PoseStamped (base 系, FK(关节状态), 默认 50Hz)

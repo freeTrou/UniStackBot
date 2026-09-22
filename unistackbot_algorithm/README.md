@@ -11,7 +11,7 @@
 | `ik_solver/` | **IkSolver 抽象接口**（CM 可插拔求解层，5 硬契约在 hpp）。新求解器 = 实现接口 + yaml `ik_solver:` 参数 + playbook 六阶段 | 由实现方测试覆盖 |
 | `dls_ik/test/` 工具链 | 种子库生成/增量 + Oracle 基准；库资产在 `unistackbot_description/arms/<robot>/ik/` | — |
 
-验证方法论 SOP（六阶段 + 参数审计 + 换臂流程）：`docs/ik_validation_playbook.md`。
+验证方法论 SOP（六阶段 + 参数审计 + 换臂流程）：`docs/guides/ik_validation_playbook.md`。
 
 ## 纪律
 

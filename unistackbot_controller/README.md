@@ -37,4 +37,4 @@ EE 位姿独立反馈流：`~/ee_state` PoseStamped（base 系，FK(关节状态
 
 ## 范围
 
-本包承载通用基础设施控制器（OTG ingest gate 等）+ 自研算法控制器 + 插件模板。边界分析见 `docs/hardware_framework_design.md` §14。
+本包承载通用基础设施控制器（OTG ingest gate 等）+ 自研算法控制器 + 插件模板。边界分析见 `docs/architecture/hardware_framework_design.md` §14。

@@ -1,6 +1,6 @@
 # SpLatest · 双缓冲覆盖写/取最新原语
 
-> 组件库第一个成员。名字沿自 `docs/linux_rt_guide.md` §2.5 与 `docs/hardware_framework_design.md`
+> 组件库第一个成员。名字沿自 `docs/guides/linux_rt_guide.md` §2.5 与 `docs/architecture/hardware_framework_design.md`
 > 中"交换原语(覆盖写+取最新)"的既有命名,与 `SpscRing` 同族(两者将来同居本库)。
 > 状态:**设计定稿,待实现**。
 
