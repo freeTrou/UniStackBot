@@ -56,6 +56,25 @@ XACRO="$DESC_SHARE/arms/$ROBOT/urdf/$ROBOT.urdf.xacro"
 CYAML="$BRINGUP_SHARE/config/${ROBOT}_controllers.yaml"
 [ -f "$XACRO" ] || { echo "未知机型 '$ROBOT': $XACRO 不存在 (可用: $(ls "$DESC_SHARE/arms" | tr '\n' ' '))"; exit 1; }
 [ -f "$CYAML" ] || { echo "机型 '$ROBOT' 缺控制器配置: $CYAML"; exit 1; }
+# 机型验收登记表 (§5.7 定义判据的登记值单一事实源): 形态指纹 + 容差/mimic/软关节收口于此
+AYAML="$BRINGUP_SHARE/config/${ROBOT}_acceptance.yaml"
+[ -f "$AYAML" ] || { echo "机型 '$ROBOT' 缺验收登记表: $AYAML (建表见 piper_acceptance.yaml 同型)"; exit 1; }
+IFS='|' read -r SUBCHAIN_EXP JM_EXP JI_EXP JJ_EXP TJS_MOCK TCM_MOCK TJS_GZ TCM_GZ TJS_MJ TCM_MJ SOFT_GZ MIM_PAIRS <<< "$(python3 - "$AYAML" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+fp, tol = d.get('fingerprint') or {}, d.get('tolerance') or {}
+jb = fp.get('joints_by_chain') or {}
+print('|'.join([
+    str(fp.get('subchain_count', -1)),
+    ','.join(jb.get('mock') or []), ','.join(jb.get('ign') or []), ','.join(jb.get('mujoco') or []),
+    str(tol.get('js_mock', 0)), str(tol.get('cm_mock', 0)),
+    str(tol.get('js_gz', 0)), str(tol.get('cm_gz', 0)),
+    str(tol.get('js_mujoco', 0)), str(tol.get('cm_mujoco', 0)),
+    (d.get('soft_joints') or {}).get('gz') or '',
+    (d.get('mimic') or {}).get('pairs') or '',
+]))
+PY
+)"
 
 # ================= 1. 静态检查 =================
 say "== [1] 静态: xacro 展开 + check_urdf =="
@@ -66,10 +85,16 @@ else
 	bad "xacro 展开失败: $(cat /tmp/verify_xacro_err.txt | tail -3)"
 	exit 1
 fi
-check_urdf "$URDF" >/tmp/verify_urdf_tree.txt 2>&1 \
-	&& grep -q "Successfully Parsed" /tmp/verify_urdf_tree.txt \
-	&& ok "check_urdf 解析通过 ($(grep -c 'child' /tmp/verify_urdf_tree.txt) 个子链)" \
-	|| bad "check_urdf 失败: $(head -2 /tmp/verify_urdf_tree.txt)"
+if check_urdf "$URDF" >/tmp/verify_urdf_tree.txt 2>&1 && grep -q "Successfully Parsed" /tmp/verify_urdf_tree.txt; then
+	NCHAIN=$(grep -c 'child' /tmp/verify_urdf_tree.txt)
+	if [ "$NCHAIN" -eq "$SUBCHAIN_EXP" ]; then
+		ok "check_urdf 解析通过 + 形态指纹② ($NCHAIN 子链 = 登记值)"
+	else
+		bad "形态指纹②: 子链数=$NCHAIN ≠ 登记值 $SUBCHAIN_EXP (结构漂移: 查 xacro 或更新登记表)"
+	fi
+else
+	bad "check_urdf 失败: $(head -2 /tmp/verify_urdf_tree.txt)"
+fi
 
 # 各链关节集+目标推算: <ros2_control> 带 position 命令接口的关节 (与 JointStream 解析口径一致)。
 # 目标: 有限位关节 = min + 0.3*(max-min); mimic 关节 (mock 链手指, 无 min/max) =
@@ -101,6 +126,18 @@ print(','.join(names), ','.join(str(targ[n]) for n in names))" 2>&1
 read -r JOINS TARGS <<< "$(derive false)"
 if [[ "$JOINS" == ERROR* ]]; then bad "mock 目标推算失败: $JOINS"; exit 1; fi
 ok "mock 关节集目标推算 ($JOINS)"
+
+# 静态判据③: 各形态命令关节集 = 登记值 (结构漂移在这里拦)
+jointset_check() {  # $1=use_gazebo 值 $2=登记集(逗号串)
+	local actual
+	read -r actual _ <<< "$(derive "$1")"
+	if [[ "$actual" == ERROR* ]]; then bad "形态指纹③[$1]: 推算失败 ($actual)"; return; fi
+	[ "$actual" = "$2" ] && ok "形态指纹③[$1]: 关节集 = 登记值" \
+		|| bad "形态指纹③[$1]: 实际[$actual] ≠ 登记[$2]"
+}
+jointset_check false "$JM_EXP"
+jointset_check ign "$JI_EXP"
+jointset_check mujoco "$JJ_EXP"
 
 # CM 链名 (切换检查用, 从 yaml 读)
 read -r CM_BASE CM_TIP <<< "$(python3 -c "
@@ -192,7 +229,7 @@ C=$(timeout 5 ros2 control list_controllers 2>/dev/null)
 echo "$C" | grep -q "cartesian_motion_controller.*inactive" && ok "CM 以 inactive 注册 (三件套齐)" || bad "CM 未注册为 inactive"
 SVCN=$(timeout 5 ros2 service list 2>/dev/null | grep -c "/sim_control/")
 [ "$SVCN" -ge 5 ] && ok "/sim_control 服务齐全 (${SVCN}个)" || bad "/sim_control 服务缺 ($SVCN/5+)"
-run_motion false 0.01 0.002
+run_motion false "$TJS_MOCK" "$TCM_MOCK"
 cleanup_launch "$LPID"
 
 # ================= 4. Fortress 链 (可选) =================
@@ -225,10 +262,8 @@ print(f'{d[\"real_time_factor\"]:.3f} {d[\"paused\"]}' if d else 'NONE True')")"
 	sleep 1
 	P2=$(timeout 6 ros2 topic echo /stats --once 2>/dev/null | grep -m1 "^paused:" | grep -io "true\|false" | head -1)
 	[ "$P1" = "true" ] && [ "$P2" = "false" ] && ok "/sim_control pause/resume 经桥接真实生效 (true->false)" || bad "pause/resume 未生效: $P1 -> $P2"
-	# piper 的 gripper 在 gz 0.7.21 有已知回归 (不响应) —— soft 不计失败; xarm7 无夹爪不受影响
-	GZSOFT=""
-	[ "$ROBOT" = "piper" ] && GZSOFT="gripper"
-	run_motion ign 0.05 0.005 "$GZSOFT"
+	# piper 的 gripper 在 gz 有已知回归 (不响应) —— soft 不计失败 (登记表 soft_joints.gz); xarm7 登记为空
+	run_motion ign "$TJS_GZ" "$TCM_GZ" "$SOFT_GZ"
 	cleanup_launch "$LPID"
 fi
 
@@ -250,10 +285,8 @@ if [ "$WITH_MJ" -eq 1 ]; then
 		cleanup_launch "$LPID"; exit 1
 	fi
 	timeout 6 ros2 topic echo /clock --once >/dev/null 2>&1 && ok "/clock 仿真时间在流" || bad "/clock 无数据"
-	# piper: 手指 passive 由 MJCF equality 耦合 —— mimic 断言 (gj1=+0.5g, gj2=-0.5g)
-	MJMIM=""
-	[ "$ROBOT" = "piper" ] && MJMIM="gripper:gripper_joint1:0.5,gripper:gripper_joint2:-0.5"
-	run_motion mujoco 0.02 0.003 "" "$MJMIM"
+	# mimic 断言对登记 (§5.7: 被动关节=主关节×multiplier, 对来自登记表 mimic.pairs)
+	run_motion mujoco "$TJS_MJ" "$TCM_MJ" "" "$MIM_PAIRS"
 	cleanup_launch "$LPID"
 	fi
 fi

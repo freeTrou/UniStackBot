@@ -1,0 +1,20 @@
+# piper 机型验收登记表 —— §5.7 测试定义判据的登记值单一事实源 (verify_robot.sh 消费)
+# 定义依据: docs/sim/sim_environment_and_test_plan.md §5.7
+# 纪律: 改模型/改判据阈值 → 先改这里 (登记值变更要说明理由), verify 按此断言
+fingerprint:                # 静态判据 (2026-09-22 实测登记)
+  subchain_count: 13        # 判据②: check_urdf child 数 (use_world + use_ros2_control 展开)
+  joints_by_chain:          # 判据③: 各形态命令关节集 (顺序=URDF <ros2_control> 序)
+    mock:   [joint1, joint2, joint3, joint4, joint5, joint6, gripper, gripper_joint1, gripper_joint2]
+    ign:    [joint1, joint2, joint3, joint4, joint5, joint6, gripper]
+    mujoco: [joint1, joint2, joint3, joint4, joint5, joint6, gripper]
+tolerance:                  # 测试容差登记 (链上运动断言阈值, 初始=历史常数)
+  js_mock: 0.01
+  cm_mock: 0.002
+  js_gz: 0.05
+  cm_gz: 0.005
+  js_mujoco: 0.02
+  cm_mujoco: 0.003
+mimic:                      # mimic 契约登记 (mujoco equality 断言用)
+  pairs: "gripper:gripper_joint1:0.5,gripper:gripper_joint2:-0.5"
+soft_joints:                # 已知回归不计失败 (gz gripper 0.7.21 prismatic 不响应)
+  gz: "gripper"
