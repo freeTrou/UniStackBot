@@ -21,6 +21,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -30,6 +32,8 @@
 
 #include "rcl_interfaces/msg/parameter.hpp"
 #include "rcl_interfaces/srv/get_parameters.hpp"
+#include <ament_index_cpp/get_package_share_directory.hpp>
+
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "unistackbot_interface/msg/joint_command.hpp"
@@ -143,6 +147,7 @@ int main(int argc, char ** argv)
 	auto node = rclcpp::Node::make_shared("demo_joint_fullrate");
 	node->declare_parameter<double>("duration", 8.0);
 	node->declare_parameter<double>("hz", 0.0);
+	node->declare_parameter<std::string>("robot", "");   // 机型名 (多份配置时必填)
 
 	// ① robot_description (经参数服务读 robot_state_publisher, 同 py demo) + 关节表解析
 	std::vector<JointInfo> joints;
@@ -195,6 +200,7 @@ int main(int argc, char ** argv)
 	//    (~4% 低读, 500→480.5Hz 实测); stamp 是发布侧打的, 与消费侧轮询无关。
 	const double duration = node->get_parameter("duration").as_double();
 	double hz = node->get_parameter("hz").as_double();
+	const std::string robot = node->get_parameter("robot").as_string();
 	std::vector<double> home(joints.size(), 0.0);
 	std::vector<bool> seen(joints.size(), false);
 	std::vector<double> periods;
@@ -249,45 +255,96 @@ int main(int argc, char ** argv)
 	const char * hz_src = "显式指定";
 	if (hz <= 0.0)
 	{
-		// 权威源 = controller_manager 的 update_rate 参数 (2026-09-24 用户裁决: 读配置比从
-		// 消息流反推合理——yaml /** 通配节单一事实源, 且无 RTF/时域歧义; 仿真链 stamp 是
-		// 仿真时间, RTF≠1 时实测值≠控制频率)
+		// 权威源 = bringup 配置文件的 /**.update_rate 直读 (2026-09-24 用户裁决: 不调参数
+		// 服务, 直接读配置内容——链上服务在 RT 负载下对 demo 超时, 文件即单一事实源。
+		// 注意: launch bus_hz:= 是运行期覆盖, 文件读不到——矩阵测试时显式 -p hz:=N)
 		bool got = false;
 		{
-			auto cli = node->create_client<rcl_interfaces::srv::GetParameters>(
-				"/controller_manager/get_parameters");
-			if (cli->wait_for_service(std::chrono::seconds(3)))
+			namespace fs = std::filesystem;
+			std::string cfg_dir;
+			try
 			{
-				auto req = std::make_shared<rcl_interfaces::srv::GetParameters::Request>();
-				req->names = {"update_rate"};
-				auto fut = cli->async_send_request(req);
-				if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(3)) ==
-					rclcpp::FutureReturnCode::SUCCESS)
+				cfg_dir = ament_index_cpp::get_package_share_directory("unistackbot_bringup") + "/config";
+			}
+			catch (const std::exception &)
+			{
+				std::printf("WARN: unistackbot_bringup 包不可解析, 走实测兜底\n");
+			}
+			if (!cfg_dir.empty())
+			{
+				std::vector<fs::path> cands;
+				std::error_code ec;
+				constexpr char kCfgSuffix[] = "_controllers.yaml";
+				for (const auto & e : fs::directory_iterator(cfg_dir, ec))
 				{
-					const auto & v = fut.get()->values[0];
-					if (v.type == rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER &&
-						v.integer_value > 0)
+					const auto n = e.path().filename().string();
+					if (n.rfind(kCfgSuffix) == n.size() - sizeof(kCfgSuffix) + 1)
 					{
-						hz = static_cast<double>(v.integer_value);
-						hz_src = "CM 配置 (update_rate 参数)";
-						got = true;
+						if (!robot.empty())
+						{
+							if (n == robot + kCfgSuffix) {cands = {e.path()};}
+						}
+						else
+						{
+							cands.push_back(e.path());
+						}
+					}
+				}
+				if (!robot.empty() && cands.empty())
+				{
+					std::printf("FAIL: 机型 '%s' 无配置 %s/%s_controllers.yaml\n",
+						robot.c_str(), cfg_dir.c_str(), robot.c_str());
+					return 1;
+				}
+				if (cands.size() > 1)
+				{
+					std::printf("FAIL: 多份 *_controllers.yaml 且未指定 -p robot:= (机型无默认纪律):\n");
+					for (const auto & c : cands) {std::printf("  %s\n", c.string().c_str());}
+					return 1;
+				}
+				if (cands.size() == 1)
+				{
+					// 直读 /**: ros__parameters: update_rate: N —— 文件内首个
+					// "行首剥离空白后以 update_rate: 开头"的行即通配节值 (人工解析免 regex)
+					std::ifstream f(cands[0]);
+					std::string line;
+					while (std::getline(f, line))
+					{
+						const auto first = line.find_first_not_of(" \t");
+						if (first == std::string::npos ||
+							line.compare(first, 12, "update_rate:") != 0)
+						{
+							continue;
+						}
+						const auto num = std::strtoul(line.c_str() + first + 12, nullptr, 10);
+						if (num > 0)
+						{
+							hz = static_cast<double>(num);
+							hz_src = "配置文件直读 (bringup config, 单一事实源)";
+							got = true;
+							break;
+						}
+					}
+					if (!got)
+					{
+						std::printf("WARN: %s 无 update_rate 行, 走实测兜底\n", cands[0].string().c_str());
 					}
 				}
 			}
 		}
 		if (!got)
 		{
-			// 兜底: /joint_states stamp 差分中位数 (CM 参数服务不可达时)
+			// 兜底: /joint_states stamp 差分中位数 (配置不可读时; 1000Hz 流会被 2ms 轮询
+			// 欠采样低读到 ~500, 权威路径不可用时的最后手段)
 			if (periods.size() < 20)
 			{
-				std::printf("FAIL: CM update_rate 参数不可达且 /joint_states 采样不足 (%zu)\n",
-					periods.size());
+				std::printf("FAIL: 配置不可读且 /joint_states 采样不足 (%zu)\n", periods.size());
 				return 1;
 			}
 			std::vector<double> srt = periods;
 			std::sort(srt.begin(), srt.end());
 			hz = 1.0 / srt[srt.size() / 2];
-			hz_src = "实测中位数兜底 (CM 参数不可达)";
+			hz_src = "实测中位数兜底 (高流会低读)";
 		}
 	}
 	// 校准/显式值一致性钳位 (审查补, 2026-09-23): 仿真时间跳变/暂停会让 stamp 差分

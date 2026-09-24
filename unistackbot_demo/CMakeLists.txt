@@ -12,6 +12,7 @@ find_package(rclcpp REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(unistackbot_interface REQUIRED)
 # Ubuntu libtinyxml2-dev 不带 CMake config; tinyxml2_vendor 提供 Find 模块 (同 controller 包)
 list(APPEND CMAKE_MODULE_PATH /opt/ros/humble/share/tinyxml2_vendor/cmake/Modules)
@@ -22,7 +23,7 @@ find_package(TinyXML2 REQUIRED)
 add_executable(demo_joint_fullrate src/demo_joint_fullrate.cpp)
 target_compile_features(demo_joint_fullrate PUBLIC cxx_std_17)
 ament_target_dependencies(demo_joint_fullrate
-  rclcpp rcl_interfaces geometry_msgs sensor_msgs unistackbot_interface
+  rclcpp rcl_interfaces geometry_msgs sensor_msgs unistackbot_interface ament_index_cpp
 )
 target_link_libraries(demo_joint_fullrate ${TINYXML2_LIBRARY})
 

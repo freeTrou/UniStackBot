@@ -199,8 +199,9 @@ ros2 bag record -s mcap /joint_states /joint_stream_controller/command \
 # ③ 演示 1a 关节慢流 —— 等脚本退出再下一条
 ros2 run unistackbot_demo demo_motion.py
 
-# ④ 演示 1b 关节满速 —— 达成率 ≥99% 为过
-ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0
+# ④ 演示 1b 关节满速 —— 达成率 ≥99% 为过; 频率源=配置文件直读 (多机型须 -p robot:=piper;
+#    bus_hz:= 运行期覆盖文件读不到, 1000Hz 档显式加 -p hz:=1000.0)
+ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0 -p robot:=piper
 
 # ⑤ 演示 2 末端位姿流 (sweep) —— 物理链稳态 0.7-1.1mm, 骑 1mm 线的腿判"稳态未达容差"属预期
 ros2 run unistackbot_demo demo_cartesian.py --pattern sweep
@@ -231,8 +232,9 @@ ros2 bag record -s mcap /joint_states /joint_stream_controller/command \
 # ③ 演示 1a 关节慢流 —— 等脚本退出再下一条
 ros2 run unistackbot_demo demo_motion.py
 
-# ④ 演示 1b 关节满速 —— 达成率 ≥99% 为过
-ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0
+# ④ 演示 1b 关节满速 —— 达成率 ≥99% 为过; 频率源=配置文件直读 (多机型须 -p robot:=piper;
+#    bus_hz:= 运行期覆盖文件读不到, 1000Hz 档显式加 -p hz:=1000.0)
+ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0 -p robot:=piper
 
 # ⑤ 演示 2 末端位姿流 (sweep) —— 手指不耦合为已知回归, 曲线里属预期
 ros2 run unistackbot_demo demo_cartesian.py --pattern sweep

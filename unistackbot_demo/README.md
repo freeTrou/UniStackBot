@@ -18,7 +18,8 @@ ros2 run unistackbot_demo demo_cartesian.py                 # ① 末端 (默认
 ros2 run unistackbot_demo demo_motion.py                    # ② 关节慢流 (默认 50Hz)
 ros2 run unistackbot_demo demo_joint_fullrate               # ③ 关节满速 (自校准频率)
 ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0 -p hz:=0.0
-#   hz=0 (默认) 自校准: /joint_states 到达周期中位数 ≈ update_rate (机型/链无关)
+#   hz=0 (默认) 读 bringup 配置文件 /**.update_rate (单一事实源; -p robot:=<机型> 多配置时必填)
+#   bus_hz:= 起链属运行期覆盖, 文件读不到 —— 矩阵测试 1000Hz 档须显式 -p hz:=1000.0
 #   结束时如实报告实际达成率 (mock 实测: 校准 500.0Hz (stamp 差分), 定时器下发 99.9% 达成)
 ```
 
