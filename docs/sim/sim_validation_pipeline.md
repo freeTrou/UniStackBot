@@ -138,8 +138,7 @@ bash test/rt_chain_bench.sh piper_first_0922 --robot piper --chain mujoco
   （拒绝不污染链路状态; 上层不完美是常态, 拒绝路径也是验收面）。判读：诚实拒 N/N、
   恢复收敛 err ≈ 账地板、单发终点到位 err ≈ 账地板、命令流频率 ≈ update_rate
 
-先起录包再跑演示（慢流/满速/末端/OTG 门四路命令流都进包——`/joint_stream_controller/command`
-是关节慢流+满速+OTG 门共用入口，`/cartesian_motion_controller/target` 是末端流）；**仿真链必须带
+先起录包再跑演示（关节命令流都进包——`/joint_stream_controller/command` 是关节慢流+满速共用入口，`/cartesian_motion_controller/target` 是末端/终点流）；**仿真链必须带
 /clock**（跨链按仿真时间对齐的前提）。
 
 **链 1/3 mock（本阶段必录）**——按序执行，每步等上一步收尾：
