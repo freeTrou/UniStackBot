@@ -44,6 +44,10 @@ print(d.get('$1', 'nan'))
 
 say "清理残留进程"
 ros2 run unistackbot_gazebo gz_clean.sh >/dev/null 2>&1
+# 精确模式清扫 (launch 不级联等孙进程的坑, 2026-09-22 实锤: 孤儿 mujoco 适配器抢答同名
+# /sim_control 服务, mock 链收到 'mujoco adapter' 拒绝消息 → 断言全歪)
+for p in $(ps -eo pid,args | grep -E "[s]im_control_mujoco_node|[r]os2_control_node|[r]obot_state_publisher" | awk '{print $1}'); do kill "$p" 2>/dev/null; done
+sleep 2
 
 say "启动 mock 链路"
 ros2 launch unistackbot_bringup control.launch.py robot:=piper > "$LOG" 2>&1 &
@@ -99,8 +103,8 @@ P=$(joint_pos joint1); python3 -c "exit(0 if abs($P)<1e-6 else 1)" \
 
 # ---- 演示轨迹回归 ----
 say "演示轨迹回归 (约 12s)"
-DEMO=$(timeout 30 ros2 run unistackbot_bringup demo_motion.py 2>&1)
-echo "$DEMO" | grep -q "状态码 4" && ok "演示轨迹执行成功" || bad "演示轨迹失败: $DEMO"
+DEMO=$(timeout 30 ros2 run unistackbot_demo demo_motion.py 2>&1)
+echo "$DEMO" | grep -q "演示流结束" && ok "演示轨迹执行成功" || bad "演示轨迹失败: $DEMO"
 
 # ---- 收尾 ----
 kill "$LAUNCH_PID" 2>/dev/null

@@ -29,6 +29,32 @@ otg.reset(current_q);                       // 激活/重激活时
 auto r = otg.update(target_q, out_q);       // 每拍; Hold = 保持
 ```
 
+## CartesianShaper 笛卡尔位姿流整形器 (2026-09-23, 组合 OtgStream)
+
+社区版 Ruckig 无 SE(3) 插值 (Pro 功能)。本类用两个 OtgStream<3> 组合出笛卡尔整形,
+**零新数学** (Ruckig 管平滑, Eigen 管旋转):
+
+- **位置通道**: OtgStream<3> 直接整形 (x, y, z)
+- **姿态通道**: 锚点切空间整形 —— `r = log(anchor⁻¹·q)` 映射到 R³ 线性空间后与位置
+  通道完全同构; anchor = reset 时姿态 (激活内恒定); 恒定/已到位姿态 r=0 直通
+
+```cpp
+unistackbot_common::CartesianShaper s;
+CartesianShaper::Limits lim;   // 逐轴语义 (同关节 OTG): 合成速度可达 √3·max_velocity
+s.init(0.002, lim);
+s.reset(current_pose);                        // 激活/重激活; anchor 在此刻定格
+auto r = s.update(target_pose, out_pose);     // 每拍; Hold = 保持 (契约同 OtgStream)
+```
+
+契约/观测面/错误码与 OtgStream 完全同款 (Ok/Hold 两结局、Hold 输出恒有效、
+updateCount/errorCount/lastError)。**边界**: ① 目标姿态与 anchor 夹角近 π 时
+rotation vector 方向退化 (对跖点), 大范围重定向先 reset 换锚; ② 姿态噪声流上层先滤。
+
+**设计教训 (v1 否决案存档)**: "每拍 reset 注入实测剩余角" 的闭环方案不可行 ——
+OtgStream `reset()` 强制下拍重算且首个 update 输出 t=0 状态, 每拍 reset = 推进/停滞
+交替、速度永远建不起来 (实测 d_theta 交替 6.7e-8/0)。流式整形必须保持底座状态
+延续, 切空间正是为此。
+
 ## RT 补丁 (vendored 修改, 版本前进时重查)
 
 `trajectory.hpp` 的 `state_to_integrate_from`: 原版 `SetIntegrate = std::function` 每次
@@ -45,6 +71,9 @@ g++ -std=c++17 -O2 -pthread -Wall -Wextra -I include test_otg_stream.cpp src/ruc
 # 封装级: NaN拒绝/跳变限幅/错误自愈/init校验/观测 (22 断言)
 g++ -std=c++17 -O2 -pthread -Wall -Wextra -I include test_ruckig_stress.cpp src/ruckig/*.cpp -o /tmp/test_stress && /tmp/test_stress
 # 压测: 攻击社区版已知数值失败模式 (2026-09-18, 12 断言)
+g++ -std=c++17 -O2 -Wall -Wextra -I.. -Iinclude -I/usr/include/eigen3 \
+    test_cartesian_shaper.cpp src/ruckig/*.cpp -o /tmp/test_cs && /tmp/test_cs
+# CartesianShaper: 双通道到位/直通/消毒/重定向逐轴限/大转角/观测 (2026-09-23, 9 组)
 ```
 
 **压测结论 (2026-09-18, 5 场景)**: S2 极端跳变 (限幅关闭放野输入) **实测触发 Ruckig 原生

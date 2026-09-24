@@ -54,12 +54,15 @@ source install/setup.bash
 ros2 launch unistackbot_bringup sim.launch.py chain:=mock robot:=piper
 
 # 或分别起链
+ros2 launch unistackbot_description display.launch.py \
+    model:=$(ros2 pkg prefix --share unistackbot_description)/arms/xarm7/urdf/xarm7.urdf.xacro  # 可视化（换机型改 model 路径）
 ros2 launch unistackbot_bringup control.launch.py robot:=piper      # mock（算法迭代）
 ros2 run unistackbot_gazebo gz_clean.sh                             # gz 前清残留，永远单独执行
 ros2 launch unistackbot_gazebo ign.launch.py robot:=piper gui:=false  # Gazebo Fortress
 ros2 launch unistackbot_mujoco mujoco.launch.py robot:=piper          # MuJoCo（真实动力学）
 
-ros2 run unistackbot_bringup demo_motion.py    # 演示轨迹（前置: 任一链已启动）
+ros2 run unistackbot_demo demo_motion.py      # 关节空间演示（前置: 任一链已启动）
+ros2 run unistackbot_demo demo_cartesian.py   # 笛卡尔空间演示（切 CM 往返, 机型无关）
 ```
 
 命令通道：关节空间 `/joint_stream_controller/command`（`unistackbot_interface/JointCommand` 点流）；笛卡尔空间 `/cartesian_motion_controller/target`（PoseStamped, base 系）。双控制器经 `ros2 control switch_controllers` 互切。
@@ -68,10 +71,10 @@ ros2 run unistackbot_bringup demo_motion.py    # 演示轨迹（前置: 任一�
 
 ```bash
 bash test/verify_robot.sh piper --with-gazebo --with-mujoco   # 链路级验收（一条命令）
-bash test/fault_injection.sh                                  # 故障注入（F1-F7, --chain mock|mujoco）
+bash test/fault_injection.sh --robot piper --chain mujoco     # 故障注入（F1-F7; --robot 选机型）
 bash test/smoke_sim_control.sh                                # /sim_control 服务语义
 sudo bash test/rt_tune_boot.sh                                # 开机 RT 调优（先于一切基准）
-bash test/rt_chain_bench.sh <标签> [mock|mujoco]              # RT 基准套件
+bash test/rt_chain_bench.sh <标签> --robot piper [--chain mock|mujoco]  # RT 基准套件
 ```
 
 组件库不进 colcon，g++ 直编（规范命令见 `unistackbot_common/ulog/README.md`）。

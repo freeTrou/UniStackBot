@@ -8,9 +8,11 @@
                        [--soft-joints gripper] [--hz 50] [--dur 4]
       (--soft-joints: 已知回归关节只 WARN 不 FAIL, 如 gz 链 gripper)
 
-  cm: 切换 JointStream→CM → TF 取当前 EE → 目标=当前+x偏移 → 收敛断言 → 切回
+  cm: 切换 JointStream→CM → TF 取当前 EE → 目标=当前+轴向偏移 → 收敛断言 → 切回
       verify_motion.py cm --base base_link --tip link6 [--tol 0.002]
-                       [--offset 0.03] [--timeout 10]
+                       [--axis z] [--offset 0.03] [--timeout 10]
+      (--axis 默认 z: 零位邻域 +x 无限位内解析解 (analytic 诚实拒), 会让收敛断言
+       假失败 —— 2026-09-23; DLS 下 x/z 均可收敛)
 """
 import subprocess
 import sys
@@ -132,11 +134,13 @@ def mode_cm(args):
 			if tfbuf.can_transform(args['base'], args['tip'], rclpy.time.Time()):
 				break
 		tf = tfbuf.lookup_transform(args['base'], args['tip'], rclpy.time.Time())
+		axis = str(args.get('axis', 'z'))   # 默认 z: 零位邻域 +x 解析无解会假失败 (见模块注释)
+		off = float(args.get('offset', 0.03))
 		t = PoseStamped()
 		t.header.frame_id = args['base']
-		t.pose.position.x = tf.transform.translation.x + float(args.get('offset', 0.03))
-		t.pose.position.y = tf.transform.translation.y
-		t.pose.position.z = tf.transform.translation.z
+		t.pose.position.x = tf.transform.translation.x + (off if axis == 'x' else 0.0)
+		t.pose.position.y = tf.transform.translation.y + (off if axis == 'y' else 0.0)
+		t.pose.position.z = tf.transform.translation.z + (off if axis == 'z' else 0.0)
 		t.pose.orientation = tf.transform.rotation
 		pub.publish(t)
 

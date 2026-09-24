@@ -1,0 +1,7 @@
+<library path="otg_gate_controller">
+  <class name="unistackbot_controller/OtgGateController"
+         type="unistackbot_controller::OtgGateController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>OTG ingest gate (设计 §16.4 路线 A): 笛卡尔终点 → 一次 IK → OtgStream 关节整形流 → JointStream; 关节 C2 平滑与加速度界的框架服务</description>
+  </class>
+</library>

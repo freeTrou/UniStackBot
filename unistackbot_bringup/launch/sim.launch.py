@@ -63,7 +63,7 @@ def generate_launch_description():
 		                      description='是否启动 RViz2 (三链通用)'),
 		DeclareLaunchArgument('gui', default_value='true',
 		                      description='[仅 gz 链] Gazebo GUI 客户端'),
-		DeclareLaunchArgument('headless', default_value='true',
-		                      description='[仅 mujoco 链] 无头模式(默认开); false 拉渲染窗'),
+		DeclareLaunchArgument('headless', default_value='false',
+		                      description='[仅 mujoco 链] 无头模式; 默认带界面(与 gz gui 默认对齐), true 关渲染窗(基准/录制)'),
 		OpaqueFunction(function=_launch_setup),
 	])

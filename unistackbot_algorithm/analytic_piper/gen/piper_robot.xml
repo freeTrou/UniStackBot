@@ -1,0 +1,1 @@
+<robot file="piper_canonical.dae"><manipulator name="arm"><base>base_link</base><effector>link6</effector></manipulator></robot>

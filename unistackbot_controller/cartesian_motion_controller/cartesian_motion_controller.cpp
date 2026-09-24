@@ -31,11 +31,10 @@ double rotationError(const CartesianPose & a, const CartesianPose & b)
 	return 2.0 * std::acos(std::clamp(qd, 0.0, 1.0));
 }
 
-// 解析 URDF <ros2_control> 块每关节 max_velocity → 单拍步长上限。
+// 解析 URDF <ros2_control> 块每关节 max_velocity。
 // 单一事实源: 与 BackendKinematic 同参数同缺省 (5 rad/s); 控制器拿不到
-// HardwareInfo (那是硬件插件的), 只能自行解 XML
-// 输出原始 max_velocity (vmax; 不做 /update_rate —— Humble 坑: configure 期
-// get_update_rate() 取不到真实频率, 步长换算延后到首拍校准, 见 update())
+// HardwareInfo (那是硬件插件的), 只能自行解 XML。
+// 用途 (§16.6 改版): OtgStream Limits 的 max_velocity 源 + 安全钳位步长基准。
 bool parseStepLimits(const std::string & urdf, const std::vector<std::string> & chain_names,
 	std::vector<double> & vmax_out, std::string & err)
 {
@@ -97,22 +96,17 @@ void poseToMsg(const CartesianPose & p, geometry_msgs::msg::Pose & out)
 
 controller_interface::CallbackReturn CartesianMotionController::on_init()
 {
-	// 参数面 (骨架期冻结; 名字与默认值即对外契约的一部分)
+	// 参数面 (名字即对外契约的一部分; §16.6 改版: 旧 RT 预算/worker 族参数退役,
+	// OTG 机型资产 + 回调 IK 预算为必填无默认族)
 	auto_declare<std::string>("base_link", "");
 	auto_declare<std::string>("tip_link", "");
-	auto_declare<std::string>("ik_solver", "dls");   // IkSolver 实现: dls | <后续新求解器>
+	auto_declare<std::string>("ik_solver", "");     // IkSolver 实现: 必填无默认 (算法选择显式手动)
 	auto_declare<std::string>("seed_library_package", "unistackbot_description");
 	auto_declare<std::string>("seed_library_relpath", "");
-	auto_declare<int64_t>("update_timeout_ns", update_timeout_ns_);
-	auto_declare<int64_t>("cold_timeout_ns", cold_timeout_ns_);
-	auto_declare<int>("cold_after_fails", cold_after_fails_);
-	// max_cart_step: 保留位, 本步未用 —— 笛卡尔预限幅实测制造不可解中间位姿
-	// (2026-09-18 探针复现), 运动限幅由 jump_threshold + 关节步长饱和承担
-	auto_declare<double>("max_cart_step", max_cart_step_);
+	auto_declare<double>("ik_timeout_ms", 0.0);     // 回调线程单次 IK 墙钟预算 (必填)
+	auto_declare<double>("max_acceleration", 0.0);  // OTG 关节加速度界 (机型资产, 必填)
+	auto_declare<double>("max_jerk", 0.0);          // OTG 关节加加速度界 (必填)
 	auto_declare<int>("degraded_n", degraded_n_);
-	auto_declare<int>("ik_max_iterations", ik_max_iterations_);
-	auto_declare<int>("worker_cpu", worker_cpu_);
-	auto_declare<int>("worker_nice", worker_nice_);
 	auto_declare<double>("converge_pos_tol", converge_pos_tol_);
 	auto_declare<double>("converge_rot_tol", converge_rot_tol_);
 	// 断流受控减速 (0c): 0=关闭 (默认, --once 单发目标语义); 流式跟踪场景 yaml 开启
@@ -139,14 +133,10 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	tip_link_ = get_node()->get_parameter("tip_link").as_string();
 	seed_lib_package_ = get_node()->get_parameter("seed_library_package").as_string();
 	seed_lib_relpath_ = get_node()->get_parameter("seed_library_relpath").as_string();
-	update_timeout_ns_ = get_node()->get_parameter("update_timeout_ns").as_int();
-	cold_timeout_ns_ = get_node()->get_parameter("cold_timeout_ns").as_int();
-	max_cart_step_ = get_node()->get_parameter("max_cart_step").as_double();
+	ik_timeout_ms_ = get_node()->get_parameter("ik_timeout_ms").as_double();
+	max_acceleration_ = get_node()->get_parameter("max_acceleration").as_double();
+	max_jerk_ = get_node()->get_parameter("max_jerk").as_double();
 	degraded_n_ = get_node()->get_parameter("degraded_n").as_int();
-	cold_after_fails_ = get_node()->get_parameter("cold_after_fails").as_int();
-	ik_max_iterations_ = get_node()->get_parameter("ik_max_iterations").as_int();
-	worker_cpu_ = get_node()->get_parameter("worker_cpu").as_int();
-	worker_nice_ = get_node()->get_parameter("worker_nice").as_int();
 	converge_pos_tol_ = get_node()->get_parameter("converge_pos_tol").as_double();
 	converge_rot_tol_ = get_node()->get_parameter("converge_rot_tol").as_double();
 	if (base_link_.empty() || tip_link_.empty())
@@ -154,8 +144,16 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 		ULOG_ERROR("cartesian_motion_controller: base_link/tip_link 必填");
 		return CallbackReturn::ERROR;
 	}
+	if (ik_timeout_ms_ <= 0.0 || max_acceleration_ <= 0.0 || max_jerk_ <= 0.0)
+	{
+		ULOG_ERROR("cm: OTG 机型资产/IK 预算缺显式配置或非法 (ik_timeout_ms=%.3g, "
+			"max_acceleration=%.3g, max_jerk=%.3g; 均须 > 0, yaml 显式声明)",
+			ik_timeout_ms_, max_acceleration_, max_jerk_);
+		return CallbackReturn::ERROR;
+	}
 
-	// 运动学链 (update 线程私有实例; worker 侧第 3 步另建 —— KDL 实例不跨线程)
+	// 运动学 (实例线程归属 §16.6: fk_=RT 侧 status 误差, ik_=回调线程侧求解;
+	// init 均在 configure 期单线程完成, 激活后两侧各用各的 —— KDL 暂存不跨线程)
 	std::string urdf;
 	if (!get_node()->get_parameter("robot_description", urdf) || urdf.empty())
 	{
@@ -169,28 +167,38 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 		return CallbackReturn::ERROR;
 	}
-	// 求解器选择 (IkSolver 接口, 2026-09-21): 数值类实现平级替换/AB 对比;
-	// 新实现 = unistackbot_algorithm 加文件夹 + 此处加分支 (契约见 ik_solver.hpp)
+	// 求解器选择 (IkSolver 接口): 数值类实现平级替换/AB 对比; 选择必须显式
+	// (yaml 声明, 代码无默认 —— 算法↔机型对应永远是人手动定的, 2026-09-22)
 	ik_solver_name_ = get_node()->get_parameter("ik_solver").as_string();
+	if (ik_solver_name_.empty())
+	{
+		ULOG_ERROR("cm: 缺 ik_solver 显式配置 (算法选择必须显式手动; 当前可选: dls | analytic_piper)");
+		return CallbackReturn::ERROR;
+	}
 	std::unique_ptr<IkSolver> ik;
 	if (ik_solver_name_ == "dls")
 	{
 		ik = std::make_unique<DlsIk>();
 	}
+	else if (ik_solver_name_ == "analytic_piper")
+	{
+		ik = std::make_unique<AnalyticPiper>();
+	}
 	else
 	{
-		ULOG_ERROR("cm: 未知 ik_solver '%s' (可选: dls)", ik_solver_name_.c_str());
+		ULOG_ERROR("cm: 未知 ik_solver '%s' (可选: dls | analytic_piper)", ik_solver_name_.c_str());
 		return CallbackReturn::ERROR;
 	}
+	ULOG_INFO("cm: IK 求解器 = '%s' (显式配置, 回调线程逐条解)", ik_solver_name_.c_str());
 	if (!ik->init(fk.get(), msg))
 	{
 		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 		return CallbackReturn::ERROR;
 	}
 	// 种子库 (可选; relpath 空 = 不加载, 走分支+随机阶梯)
-	std::string lib;
 	if (!seed_lib_relpath_.empty())
 	{
+		std::string lib;
 		try
 		{
 			lib = ament_index_cpp::get_package_share_directory(seed_lib_package_) +
@@ -206,52 +214,46 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 			ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 			return CallbackReturn::ERROR;
 		}
-		ULOG_INFO("cartesian_motion_controller: 种子库 %zu 条",
-			ik->seedLibrarySize());
+		ULOG_INFO("cartesian_motion_controller: 种子库 %zu 条", ik->seedLibrarySize());
+	}
+	// 回调线程求解配置 (旧 worker 档整编: 不限时档 —— 大预算 + 高迭代上限;
+	// DlsIkConfig 是 DLS 专属, 经具体类施加)
+	if (auto * dls = dynamic_cast<DlsIk *>(ik.get()))
+	{
+		DlsIkConfig ikcfg;
+		ikcfg.timeout_ns = static_cast<uint64_t>(ik_timeout_ms_ * 1e6);
+		ikcfg.max_iterations = 200;
+		dls->setConfig(ikcfg);
 	}
 	fk_ = std::move(fk);
 	ik_ = std::move(ik);
-	// worker 原料快照 (第 3 步): worker 线程自建实例用, configure 期定死
-	worker_urdf_ = urdf;
-	worker_lib_ = lib;
-	worker_solver_ = ik_solver_name_;
 
-	// 流式求解配置 (防线1: 墙钟预算 + 迭代上限; 预算内实测 max 32µs, 富余 15 倍)
-	// DlsIkConfig 是 DLS 专属 —— 经具体类施加 (其他实现经各自构造参数配置)
-	if (auto * dls = dynamic_cast<DlsIk *>(ik_.get()))
-	{
-		DlsIkConfig ikcfg;
-		ikcfg.timeout_ns = static_cast<uint64_t>(update_timeout_ns_);
-		ikcfg.max_iterations = ik_max_iterations_;
-		dls->setConfig(ikcfg);
-	}
-	// 步长限幅: URDF <ros2_control> max_velocity 为单一事实源; /update_rate 的换算
-	// 延后到首拍校准 (Humble 坑: configure 期 get_update_rate() 取不到真实频率,
-	// 实测返回 1 —— 2026-09-21 排查 F6 断流不触发时实锤)。此处占位 = vmax
+	// vmax (URDF max_velocity 单一事实源): OtgStream Limits 源 + 安全钳位基准;
+	// /update_rate 换算延后到首拍定源 (权威参数优先, 见 update())
 	if (!parseStepLimits(urdf, fk_->jointNames(), vmax_, msg))
 	{
 		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 		return CallbackReturn::ERROR;
 	}
-	step_limits_ = vmax_;   // 占位 (hz=1); 首拍校准为 vmax/真实hz
-	// StaleWatch: 存 ms 配置, 周期数首拍校准
+	step_limits_ = vmax_;   // 占位; 首拍定源后为 vmax/hz
+	// StaleWatch: 存 ms 配置, 周期数首拍定源
 	stale_ms_cfg_ = get_node()->get_parameter("stale_timeout_ms").as_double();
 	stale_decel_ms_cfg_ = get_node()->get_parameter("stale_decel_ms").as_double();
 	stale_cycles_ = 0u;
-	stale_decel_cycles_ = 1u;
 	watch_ = unistackbot_common::StaleWatch(0u);
 	rate_calibrated_ = false;
 	period_n_ = 0;
+	otg_ready_ = false;
 
 	// 契约通道 (先装配通道再建订阅, 回调无未初始化竞态)。
-	// rt_target_ 不 init: 零态 = "从未发布" (seq=0), read() 的 false 即"无目标" ——
-	// 若 init(初值) 会把初值当已发布目标, IDLE 判定失效 (2026-09-17 实测踩中)
-	// QoS 裁决 (2026-09-18): 值通道 = reliable + KeepLast(1) —— 可靠到达且只留最新
-	// (排队送旧目标无意义, 深度 1 让新目标即时顶替)。best_effort 发布方将不兼容,
-	// 这是控制命令通道的应有代价
+	// QoS 裁决 (2026-09-18): 值通道 = reliable + KeepLast(1) —— 可靠到达且只留最新。
+	// §16.6: 回调内联一次 IK (种子=实测通道), 结果关节终点入值通道 —— RT 环零求解
+	const std::uint32_t chain_n = fk_->jointCount();
+	cb_seed_.assign(chain_n, 0.0);
+	cb_q_.assign(chain_n, 0.0);
 	target_sub_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
 		"~/target", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
-		[this](const geometry_msgs::msg::PoseStamped::SharedPtr m)
+		[this, chain_n](const geometry_msgs::msg::PoseStamped::SharedPtr m)
 		{
 			// v1 只收 base 系; 跨系变换是上层职责 (RViz/规划器)。非本帧丢弃,
 			// 每个帧名单次警告 (warned_frame_ 仅本回调线程读写, 无竞态)
@@ -266,8 +268,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 				}
 				return;
 			}
-			// 四元数契约 = 单位模长; 归一化入口兜底 (实测踩坑: 消费方发两位舍入的
-			// 非单位四元数, 位置到位后姿态误差地板 0.03 rad, converged 永假)
+			// 四元数契约 = 单位模长; 归一化入口兜底
 			CartesianPose p;
 			p.x = m->pose.position.x;
 			p.y = m->pose.position.y;
@@ -283,7 +284,53 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 				return;
 			}
 			p.qw /= qn; p.qx /= qn; p.qy /= qn; p.qz /= qn;
-			rt_target_.publish(p);   // 值通道: 覆盖写, seq 变更即"新目标"
+
+			SolvedTarget sol{};
+			sol.target = p;
+			sol.n = chain_n;
+			// 几何预检: 超臂展上界 → 诚实 UNREACHABLE (不烧求解预算)
+			const double dist = std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+			if (dist > fk_->maxReach())
+			{
+				sol.ok = false;
+				sol.result = static_cast<uint8_t>(unistackbot_algorithm::IkResult::UNREACHABLE);
+				sol.min_sigma = -1.0;
+				solved_ch_.publish(sol);
+				return;
+			}
+			// 种子 = 最新实测 (RT 每拍覆盖写; 激活前通道空 → 零位回退) ——
+			// 每条消息重解 = 闭环补偿 (物理链下垂按消息率追回)
+			MeasJoints mj;
+			uint64_t mseq = 0;
+			for (std::size_t i = 0; i < cb_seed_.size(); ++i) {cb_seed_[i] = 0.0;}
+			if (meas_ch_.read(mj, mseq) && mj.n == chain_n)
+			{
+				for (std::uint32_t i = 0; i < chain_n; ++i) {cb_seed_[i] = mj.q[i];}
+			}
+			cb_q_ = cb_seed_;
+			DlsIkStats st;
+			const RedundancyPreference preserve;
+			const auto result = ik_->solve(p, cb_seed_, preserve, cb_q_, &st,
+				unistackbot_algorithm::SolveMode::COLD_START);
+			sol.ok = (result == unistackbot_algorithm::IkResult::OK);
+			sol.result = static_cast<uint8_t>(result);
+			sol.timed_out = st.timed_out;
+			sol.min_sigma = st.min_sigma;
+			for (std::uint32_t i = 0; i < chain_n && i < unistackbot_interface::kMaxJoints; ++i)
+			{
+				sol.q[i] = cb_q_[i];
+			}
+			solved_ch_.publish(sol);
+			if (!sol.ok)
+			{
+				// 诚实拒绝要可见但不刷屏 (流式上游持续不可达时按条数限流)
+				static thread_local uint64_t rej_n = 0;
+				if (rej_n++ % 50 == 0)
+				{
+					ULOG_WARN("cm: IK 未解出 (result=%u, 第 %lu 条不可达类目标; 保持上一目标)",
+						sol.result, static_cast<unsigned long>(rej_n));
+				}
+			}
 		});
 	control_sub_ = get_node()->create_subscription<unistackbot_interface::msg::CartesianControl>(
 		"~/control", rclcpp::QoS(1).transient_local(),
@@ -296,9 +343,10 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	rt_status_ = std::make_shared<realtime_tools::RealtimePublisher<
 		unistackbot_interface::msg::CartesianMotionStatus>>(status_pub_);
 
-	ULOG_INFO("cartesian_motion_controller: 链 %s -> %s (%u 关节, update 预算 %ldns)",
+	ULOG_INFO("cartesian_motion_controller: 链 %s -> %s (%u 关节, 回调 IK 预算 %.0fms, "
+		"OTG a=%.1f j=%.1f)",
 		base_link_.c_str(), tip_link_.c_str(), fk_->jointCount(),
-		static_cast<long>(update_timeout_ns_));
+		ik_timeout_ms_, max_acceleration_, max_jerk_);
 	return CallbackReturn::SUCCESS;
 }
 
@@ -306,7 +354,7 @@ controller_interface::InterfaceConfiguration CartesianMotionController::command_
 {
 	controller_interface::InterfaceConfiguration conf;
 	conf.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-	// 只认领 FK 链关节 (臂) 的 position 命令 —— gripper/mimic 归 JTC 与硬件 mimic 语义
+	// 只认领 FK 链关节 (臂) 的 position 命令 —— gripper/mimic 归硬件 mimic 语义
 	if (fk_)
 	{
 		for (const auto & name : fk_->jointNames())
@@ -366,39 +414,58 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	// 命令初始化 = 当前状态 (激活瞬间零跳变); RT 缓冲一次定容 (周期零分配)
 	cmd_.assign(n, 0.0);
 	q_meas_.assign(n, 0.0);
-	q_out_.assign(n, 0.0);
 	for (std::size_t i = 0; i < state_interfaces_.size(); ++i)
 	{
 		cmd_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
 	}
-	prev_cmd_ = cmd_;
-	vel_.assign(n, 0.0);
-	decel_rate_.assign(n, 0.0);
 	watch_.reset();   // 重激活不继承断流态
 	stream_stale_ = false;
 	was_stale_ = false;
+	// 重激活防重放 (同 OTG 门/worker 先例): SpLatest 留着上一次激活期的解算结果,
+	// 预读残值记 seq 水位并弃用 —— 重激活不追陈旧目标 (臂可能已被别处动过)
+	SolvedTarget residual;
+	(void)solved_ch_.read(residual, target_seq_);
+	has_target_ = false;
+	have_goal_ = false;
+	consecutive_fail_ = 0;
+	goal_.fill(0.0);
+	rate_calibrated_ = false;
+	period_n_ = 0;
+	otg_ready_ = false;
 	// 预热: 进 RT 前触达全部首触路径 (缺页/惰性绑定/线程私有 syscall), 见设计 §3
 	warmup();
-	// worker (防线2): 低优冷启动线程 —— 激活起、停用收
-	worker_run_.store(true, std::memory_order_release);
-	worker_ = std::thread([this]() { workerLoop(); });
 	last_status_time_ = rclcpp::Time(0, 0, get_node()->get_clock()->get_clock_type());
 	publishStatus(unistackbot_interface::msg::CartesianMotionStatus::IDLE);
-	ULOG_INFO("cartesian_motion_controller: 激活 (命令保持)");
+	ULOG_INFO("cartesian_motion_controller: 激活 (命令保持; 等待 update_rate 定源)");
 	return CallbackReturn::SUCCESS;
 }
 
 controller_interface::return_type CartesianMotionController::update(
 	const rclcpp::Time & time, const rclcpp::Duration & period)
 {
-	// RT 线程调优: 我们经预留的 yaml 参数接口设置 (thread_priority/cpu_affinity,
-	// 参数名是 ros2_control 暴露的接口, 值是我们定的 —— 见 <robot>_controllers.yaml);
-	// 控制器层不自设 (撞车: update 与全部控制器共用 CM 的同一条 RT 线程)
 	const auto wcet_t0 = std::chrono::steady_clock::now();
 	const std::size_t n = cmd_.size();
 
-	// update_rate 校准 (Humble 坑, 见 on_configure 注释): 首拍 period 非稳态,
-	// 收 16 拍取中位数 (定长数组零分配; 16 拍 @500Hz = 32ms, 窗内由 write 层钳位兜底)
+	// ⓪ 实测关节态 (接口序 → 链序) —— 先读: 定源后 OTG 基准/回调种子/status 误差三用
+	for (std::size_t i = 0; i < state_interfaces_.size(); ++i)
+	{
+		q_meas_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
+	}
+	// 回调 IK 种子通道 (每拍覆盖写, wait-free; 撕裂时回调沿用旧值 = sp_latest 契约)
+	{
+		MeasJoints mj{};
+		mj.n = static_cast<uint32_t>(n);
+		for (std::size_t i = 0; i < n && i < unistackbot_interface::kMaxJoints; ++i)
+		{
+			mj.q[i] = q_meas_[i];
+		}
+		meas_ch_.publish(mj);
+	}
+
+	// ⓪½ update_rate 定源 (2026-09-23, Humble 2.54.2 源码核实): yaml 的 /** 通配节把
+	// update_rate 覆盖到控制器节点, configure 期即读入 → get_update_rate() 权威值。
+	// 首 16 拍中位数降为交叉校验 + 无覆盖时兜底。定源完成同拍装配 OTG 输出级
+	// (init 后必须 reset 才有安全基准 —— OtgStream 契约, JS 冻结 bug 同族防线)。
 	if (!rate_calibrated_)
 	{
 		const double p = period.seconds();
@@ -410,35 +477,70 @@ controller_interface::return_type CartesianMotionController::update(
 		{
 			rate_calibrated_ = true;
 			std::sort(period_samples_, period_samples_ + kPeriodSamples);
-			const double hz = 1.0 / period_samples_[kPeriodSamples / 2];
+			const double hz_med = 1.0 / period_samples_[kPeriodSamples / 2];
+			double hz = hz_med;
+			const unsigned int hz_auth = get_update_rate();
+			if (hz_auth > 0)
+			{
+				hz = static_cast<double>(hz_auth);
+				if (std::fabs(hz_med - hz) / hz > 0.2)
+				{
+					ULOG_WARN("cm: 实测中位数 %.0fHz 偏离权威 update_rate %.0fHz"
+						" (激活期 period 污染), 以参数为准", hz_med, hz);
+				}
+			}
 			for (std::size_t i = 0; i < step_limits_.size(); ++i)
 			{
 				step_limits_[i] = vmax_[i] / hz;
 			}
 			stale_cycles_ = (stale_ms_cfg_ > 0.0)
 				? static_cast<uint32_t>(stale_ms_cfg_ * hz / 1000.0) : 0u;
-			stale_decel_cycles_ = (stale_decel_ms_cfg_ > 0.0)
-				? static_cast<uint32_t>(std::max(stale_decel_ms_cfg_ * hz / 1000.0, 1.0)) : 1u;
 			watch_ = unistackbot_common::StaleWatch(stale_cycles_);
-			ULOG_INFO("cm: update_rate 校准 %.0f Hz (步长 %.4f rad/拍, 断流判定 %u 拍)",
-				hz, step_limits_.empty() ? 0.0 : step_limits_[0], stale_cycles_);
+			// OTG 输出级装配 (§16.6): vmax=URDF 单一事实源; a/j=机型资产;
+			// max_target_jump 0.3 = 关节目标跳变容忍 (每条消息一解, 分支翻转界)
+			unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::Limits lim;
+			for (std::size_t i = 0; i < lim.max_velocity.size(); ++i)
+			{
+				lim.max_velocity[i] = (i < vmax_.size()) ? vmax_[i] : 3.0;
+			}
+			lim.max_acceleration.fill(max_acceleration_);
+			lim.max_jerk.fill(max_jerk_);
+			if (!otg_.init(1.0 / hz, lim, 0.3))
+			{
+				ULOG_ERROR("cm: OtgStream init 失败 (限值/dt 非法)");
+				return controller_interface::return_type::ERROR;
+			}
+			std::array<double, unistackbot_interface::kMaxJoints> q0{};
+			for (std::size_t i = 0; i < n; ++i) {q0[i] = q_meas_[i];}
+			otg_.reset(q0);   // 实测位锚定: 激活零跳变
+			otg_ready_ = true;
+			if (hz_auth > 0)
+			{
+				ULOG_INFO("cm: update_rate %.0f Hz (权威参数; OTG 就绪, 步长 %.4f rad/拍)",
+					hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
+			}
+			else
+			{
+				// 兜底路径必须显眼 (中位数可被激活期 µs period 污染 = 35 倍减速 bug 根)
+				ULOG_WARN("cm: update_rate %.0f Hz (实测中位数兜底 —— yaml 缺 /**.update_rate;"
+					" OTG 就绪, 步长 %.4f rad/拍)", hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
+			}
 		}
 	}
 
-	// ⓪ 断流看门狗 (~/target 值通道 seq 零拷贝轮询; stale_cycles_=0 → 恒 LIVE 零成本)。
-	//    速度估计 = 上一完整周期的实际命令步长 (快照口径: 各分支零维护, 冻结拍自然归零)
-	for (std::size_t i = 0; i < n; ++i) {vel_[i] = cmd_[i] - prev_cmd_[i];}
-	prev_cmd_ = cmd_;
-	const auto wst = watch_.tick(rt_target_.seq());
+	// ① 实测 FK (status 误差基准; gz 链命令≠实际, 用命令算误差是自欺)
+	CartesianPose meas;
+	const bool meas_ok = fk_->fk(q_meas_, meas, fk_scratch_);
+
+	// ② 断流看门狗 (解算通道 seq 零拷贝轮询; stale_cycles_=0 → 恒 LIVE)。
+	//     断流处置 = OtgStream 自目标刹停 (C2; JS ruckig 档同款) —— 旧线性减速窗机制
+	//     随速度估计族 (vel_/decel_rate_) 一并退役
+	const auto wst = watch_.tick(solved_ch_.seq());
 	stream_stale_ = (wst == unistackbot_common::StaleWatch::State::STALE);
 	if (stream_stale_ && !was_stale_)
 	{
-		ULOG_WARN("cm: ~/target 断流 (静默 %u 拍), 受控减速刹停 (%u 拍线性窗)",
-			watch_.cyclesSinceUpdate(), stale_decel_cycles_);
-		for (std::size_t i = 0; i < n; ++i)
-		{
-			decel_rate_[i] = vel_[i] / static_cast<double>(stale_decel_cycles_);
-		}
+		ULOG_WARN("cm: ~/target 断流 (静默 %u 拍), OtgStream 自目标刹停 (C2)",
+			watch_.cyclesSinceUpdate());
 	}
 	else if (!stream_stale_ && was_stale_)
 	{
@@ -446,40 +548,45 @@ controller_interface::return_type CartesianMotionController::update(
 	}
 	was_stale_ = stream_stale_;
 
-	// ① 实测关节态 (接口序 → 链序); 误差基准 = 实测 FK
-	//    (gz 链命令≠实际, 用命令算误差是自欺; mock 链两者相等)
-	for (std::size_t i = 0; i < state_interfaces_.size(); ++i)
-	{
-		q_meas_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
-	}
-	CartesianPose meas;
-	const bool meas_ok = fk_->fk(q_meas_, meas, fk_scratch_);
-
-	// ②③ 取目标: 值通道快照 (撕裂/无发布 → read false, 沿用旧值 = sp_latest 契约);
-	//     HOLD 期间新目标被忽略 (事件通道语义: 冻结就是冻结)
+	// ③ 取最新解算 (值通道; 撕裂/无发布 → read false 沿用旧值)。HOLD 期间新目标被
+	//     忽略 (事件通道语义: 冻结就是冻结); 失败载荷保持上一关节终点 (连续性根)
 	const bool hold = control_mode_.load(std::memory_order_acquire) ==
 		unistackbot_interface::msg::CartesianControl::HOLD;
 	{
-		CartesianPose tgt;
+		SolvedTarget sol;
 		uint64_t seq = 0;
-		if (rt_target_.read(tgt, seq) && seq != target_seq_)
+		if (solved_ch_.read(sol, seq) && seq != target_seq_)
 		{
 			target_seq_ = seq;
-			give_up_ = false;   // 新目标 → 重启求解尝试 (旧目标的"物理不可解"结论不继承)
+			last_result_ = sol.result;
+			last_timed_out_ = sol.timed_out;
+			last_min_sigma_ = sol.min_sigma;
+			if (sol.n == static_cast<uint32_t>(n) && sol.ok)
+			{
+				consecutive_fail_ = 0;
+				for (std::size_t i = 0; i < n; ++i) {goal_[i] = sol.q[i];}
+				have_goal_ = true;
+			}
+			else
+			{
+				++consecutive_fail_;
+			}
 			if (!hold)
 			{
 				has_target_ = true;
-				target_pose_ = tgt;
+				target_pose_ = sol.target;
 			}
 		}
 	}
 	const uint8_t mode = hold
 		? unistackbot_interface::msg::CartesianMotionStatus::HOLD
-		: (has_target_ ? unistackbot_interface::msg::CartesianMotionStatus::TRACKING
-				: unistackbot_interface::msg::CartesianMotionStatus::IDLE);
+		: (!has_target_ ? unistackbot_interface::msg::CartesianMotionStatus::IDLE
+			: (consecutive_fail_ >= degraded_n_
+				? unistackbot_interface::msg::CartesianMotionStatus::DEGRADED
+				: unistackbot_interface::msg::CartesianMotionStatus::TRACKING));
 
-	// 保持分支: HOLD / 无目标 / 实测 FK 异常 —— 都不伺服, 写上一拍命令
-	if (hold || !has_target_ || !meas_ok)
+	// ④ 输出级: OTG 塑形 → 安全钳位 → 写接口。定源前 (32ms 窗) 保持命令。
+	if (!otg_ready_)
 	{
 		for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
 		{
@@ -489,169 +596,49 @@ controller_interface::return_type CartesianMotionController::update(
 		publishStatusRt(time, mode, meas, meas_ok);
 		return controller_interface::return_type::OK;
 	}
-
-	// ③½ 断流受控减速 (0c; 仅流式跟踪场景启用): 上游流死 → 关节速度线性衰减到停。
-	//     提前出口跳过 IK (= 省 update_timeout_ns 预算); 恢复后流式从 cmd_ (已减速位)
-	//     无缝续解 —— 种子即命令, 连续性不破
-	if (stream_stale_)
 	{
-		const auto & lo = fk_->qMin();
-		const auto & hi = fk_->qMax();
-		for (std::size_t i = 0; i < n; ++i)
+		// 目标选择: HOLD/断流/无解算目标/FK 异常 → 自目标 (= 保持/刹停, C2 停在原地);
+		// 正常 → 最新关节终点 goal_ (每拍重规划 = 可打断原生语义, §16.6)
+		std::array<double, unistackbot_interface::kMaxJoints> tgt{};
+		const bool servo = !hold && !stream_stale_ && have_goal_ && meas_ok;
+		if (servo)
 		{
-			if (std::abs(vel_[i]) <= std::abs(decel_rate_[i]))
-			{
-				vel_[i] = 0.0;
-			}
-			else
-			{
-				vel_[i] -= decel_rate_[i];
-			}
-			cmd_[i] = std::clamp(cmd_[i] + vel_[i], lo[i], hi[i]);
-		}
-		for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
-		{
-			command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
-		}
-		recordWcet(wcet_t0);
-		publishStatusRt(time, mode, meas, true);
-		return controller_interface::return_type::OK;
-	}
-
-	// ④ 几何预检: 原始目标超臂展上界 → UNREACHABLE 保持 (诚实失败, 不烧预算;
-	//     步长限幅版曾把目标钳到 2cm 中间点, 反而绕过了这个检查 —— 一并修正)
-	const double raw_dist = std::sqrt(
-		target_pose_.x * target_pose_.x + target_pose_.y * target_pose_.y +
-		target_pose_.z * target_pose_.z);
-	if (raw_dist > fk_->maxReach())
-	{
-		++consecutive_fail_;
-		last_result_ = static_cast<uint8_t>(unistackbot_algorithm::IkResult::UNREACHABLE);
-		last_timed_out_ = false;
-		last_min_sigma_ = -1.0;
-		for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
-		{
-			command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
-		}
-		recordWcet(wcet_t0);
-		publishStatusRt(time, mode, meas, true);
-		return controller_interface::return_type::OK;
-	}
-
-	// 分流停重试 (第 4 步): NEAR_SINGULAR×非超时 = 物理跟不动 (playbook §7 标定),
-	// 已降级后每拍烧 500µs 重试是无用功 —— 目标变化前短路 (保持命令, 事实码保留)
-	if (give_up_)
-	{
-		for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
-		{
-			command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
-		}
-		recordWcet(wcet_t0);
-		publishStatusRt(time, mode, meas, true);
-		return controller_interface::return_type::OK;
-	}
-
-	// ⑤ 流式 IK: 全目标直解, 种子 = 上一拍命令 (连续性根), 预算 = update_timeout_ns_。
-	//     不做笛卡尔预限幅 (2026-09-18 探针裁决): nlerp 中间姿态会制造 DLS 解不动
-	//     的中间位姿 (实测把求解拖进腕奇异, 全目标反而 24 迭代收敛) —— 运动限幅
-	//     由 STREAMING 的 jump_threshold (关节空间连续性) + ⑦ 的步长饱和承担
-	DlsIkStats st;
-	const RedundancyPreference preserve;
-	const auto result = ik_->solve(target_pose_, cmd_, preserve, q_out_, &st,
-		unistackbot_algorithm::SolveMode::STREAMING);
-	last_result_ = static_cast<uint8_t>(result);
-	last_timed_out_ = st.timed_out;
-	last_min_sigma_ = st.min_sigma;
-
-	if (result == unistackbot_algorithm::IkResult::OK)
-	{
-		if (applySolution(q_out_.data()))
-		{
-			consecutive_fail_ = 0;
+			tgt = goal_;
 		}
 		else
 		{
-			++consecutive_fail_;   // NaN 门: 整拍保持 (dls_ik 契约已保证, 此为皮带扣)
+			for (std::size_t i = 0; i < n; ++i) {tgt[i] = cmd_[i];}
 		}
+		std::array<double, unistackbot_interface::kMaxJoints> out{};
+		(void)otg_.update(tgt, out);   // Hold 时 out 恒有效 (OtgStream 契约)
+		(void)applySolution(out.data());   // 皮带扣: NaN 门+限位+步长 (Limits 之上)
 	}
-	else
-	{
-		// 冷启动回灌 (防线2 收口): worker 为**当前目标** (seq 对账) 解出的分支解,
-		// 采纳为本拍解走同一安全层 —— 步长饱和保证物理运动仍在速度界内 (无跳变);
-		// 采纳后 cmd_ 已挪近解, 下拍流式从新 cmd_ 起通常自行接管
-		ColdResult res;
-		uint64_t res_seq = 0;
-		if (cold_res_.read(res, res_seq) && res.ok && res.seq == target_seq_ &&
-			res.n == static_cast<uint32_t>(n) && applySolution(res.q))
-		{
-			consecutive_fail_ = 0;
-			last_result_ = static_cast<uint8_t>(unistackbot_algorithm::IkResult::OK);
-			last_min_sigma_ = res.min_sigma;
-			last_timed_out_ = false;
-		}
-		else
-		{
-			// 失败不改输出 (dls_ik 契约) → 保持上一拍命令
-			++consecutive_fail_;
-			// 分流停重试: 已降级 (consecutive_fail_ ≥ degraded_n_) 且失败原因是
-			// NEAR_SINGULAR×非超时 (物理不可解, 冷启动也救不了) → 放弃直至目标变化
-			if (consecutive_fail_ >= degraded_n_ &&
-				result == unistackbot_algorithm::IkResult::NEAR_SINGULAR && !st.timed_out)
-			{
-				give_up_ = true;
-				ULOG_WARN("cm: 物理不可解 (NEAR_SINGULAR, 冷启动亦无解), 停止重试直至目标变化");
-			}
-			// 升级 (防线2 触发): 流式连续失败达阈值 → 请求 worker 冷启动
-			// (同目标只求一次, last_cold_req_seq_ 去重; 种子 = 实测关节)
-			if (consecutive_fail_ >= cold_after_fails_ && target_seq_ != last_cold_req_seq_)
-			{
-				ColdRequest rq{};
-				rq.target = target_pose_;
-				rq.n = static_cast<uint32_t>(n);
-				rq.seq = target_seq_;
-				for (std::size_t i = 0; i < n; ++i)
-				{
-					rq.q[i] = q_meas_[i];
-				}
-				cold_req_.publish(rq);
-				last_cold_req_seq_ = target_seq_;
-				ULOG_INFO("cm: 流式连续失败 %d 拍, 请求冷启动 (预算 %ldns)",
-					consecutive_fail_, static_cast<long>(cold_timeout_ns_));
-			}
-		}
-	}
-
-	// ⑧ 写命令 + 状态发布
 	for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
 	{
 		command_interfaces_[i].set_value(cmd_[chain_from_iface_[i]]);
 	}
 	recordWcet(wcet_t0);
-	publishStatusRt(time, mode, meas, true);
+	publishStatusRt(time, mode, meas, meas_ok);
 	return controller_interface::return_type::OK;
 }
 
 controller_interface::CallbackReturn CartesianMotionController::on_deactivate(const rclcpp_lifecycle::State & /*previous_state*/)
 {
-	worker_run_.store(false, std::memory_order_release);
-	if (worker_.joinable())
-	{
-		worker_.join();   // 循环 2ms 一拍, join 有界
-	}
-	// WCET 终报 (第 5 步验收证据): 预算 2ms, 防线1 的生效证据
+	// WCET 终报 (验收证据): RT 环只剩 OTG+FK+发布, 预算余量应显著大于旧 IK 环
 	if (update_count_ > 0 && !wcet_samples_.empty())
 	{
 		std::vector<double> srt = wcet_samples_;
 		std::sort(srt.begin(), srt.end());
 		const double p50 = srt[srt.size() / 2];
 		const double p99 = srt[srt.size() * 99 / 100];
-		ULOG_INFO("cm: WCET 终报 %lu 拍: p50=%.1fµs p99=%.1fµs max=%.1fµs (预算 2000µs)",
+		ULOG_INFO("cm: WCET 终报 %lu 拍: p50=%.1fµs p99=%.1fµs max=%.1fµs (OTG 输出级)",
 			static_cast<unsigned long>(update_count_), p50, p99, wcet_max_us_);
 	}
 	wcet_samples_.clear();
+	update_count_ = 0;   // 拍数随样本同清 (跨激活累计曾把 538+510 报成"1048 拍")
 	has_target_ = false;   // 重激活不追陈旧目标 (防跳变); 失败计数同步清零
+	have_goal_ = false;
 	consecutive_fail_ = 0;
-	give_up_ = false;
 	publishStatus(unistackbot_interface::msg::CartesianMotionStatus::INACTIVE);
 	ULOG_INFO("cartesian_motion_controller: 停用 (接口释放, 硬件保持)");
 	return CallbackReturn::SUCCESS;
@@ -668,7 +655,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_cleanup(const
 	return CallbackReturn::SUCCESS;
 }
 
-// WCET 记账: 每拍两次 steady_clock + 会话样本 (停用时算分位, 第 5 步验收工具)
+// WCET 记账: 每拍两次 steady_clock + 会话样本 (停用时算分位, 验收工具)
 void CartesianMotionController::recordWcet(
 	const std::chrono::steady_clock::time_point & t0)
 {
@@ -725,8 +712,8 @@ void CartesianMotionController::publishStatusRt(
 	rt_status_->tryPublish(m);
 }
 
-// IK 解走安全层 (流式/冷启动回灌共用): NaN 门 → 限位 clamp → 步长饱和。
-// 「不论 IK 怎么算, 下发的命令必须合法保守」—— 与 IK 实现解耦的保证
+// 输出安全钳位 (皮带扣): NaN 门 → 限位 clamp → 步长饱和。「不论上游怎么算, 下发的
+// 命令必须合法保守」—— OtgStream Limits 已是主约束 (vmax/a/j), 此层防通道撕裂
 bool CartesianMotionController::applySolution(const double * q)
 {
 	const std::size_t n = cmd_.size();
@@ -756,107 +743,12 @@ bool CartesianMotionController::applySolution(const double * q)
 	return true;
 }
 
-// worker 线程 (第 3 步, 防线2): 冷启动出环。2ms 轮询值通道 (冷路径延迟预算是
-// ms 级, 轮询够用且免掉 condvar 复杂度); 自建一套 UrdfFk+DlsIk —— KDL 求解器
-// 持有迭代暂存成员, 跨线程并发互踩 (urdf_fk.hpp 用法契约), 实例必须线程私有。
-// 种子库在本线程加载: 解析线性读全文件, 页天然全触 (加载即预热)。
-void CartesianMotionController::workerLoop()
-{
-	// worker 调优全参数化 (yaml: worker_cpu/worker_nice): 默认 nice+10 让路姿态
-	unistackbot_common::rt_tune::apply(worker_cpu_, 0, worker_nice_, "cm_cold");
-	UrdfFk fk;
-	std::string msg;
-	if (!fk.init(worker_urdf_, base_link_, tip_link_, msg))
-	{
-		ULOG_ERROR("cm worker: 建链失败 (%s)", msg.c_str());
-		return;
-	}
-	std::unique_ptr<IkSolver> ik;
-	if (worker_solver_ == "dls")
-	{
-		ik = std::make_unique<DlsIk>();
-	}
-	else
-	{
-		ULOG_ERROR("cm worker: 未知 ik_solver '%s'", worker_solver_.c_str());
-		return;
-	}
-	if (!ik->init(&fk, msg))
-	{
-		ULOG_ERROR("cm worker: %s", msg.c_str());
-		return;
-	}
-	// 种子库 = 可选能力 (接口默认不支持返回 false, 非致命 → 分支+随机阶梯)
-	if (!worker_lib_.empty() && !ik->loadSeedLibrary(worker_lib_, msg))
-	{
-		ULOG_WARN("cm worker: 种子库加载失败, 走分支+随机阶梯 (%s)", msg.c_str());
-	}
-	if (auto * dls = dynamic_cast<DlsIk *>(ik.get()))
-	{
-		DlsIkConfig cfg;
-		cfg.timeout_ns = static_cast<uint64_t>(cold_timeout_ns_);
-		cfg.max_iterations = 200;   // 冷启动世界: 不限时档的配置 (阶梯自由磨)
-		dls->setConfig(cfg);
-	}
-	// 预热: 本线程首条日志 (cached_tid 是线程私有的) + 一次假冷启动
-	{
-		std::vector<double> q2(fk.jointCount(), 0.0);
-		const auto & lo = fk.qMin();
-		const auto & hi = fk.qMax();
-		for (std::size_t i = 0; i < q2.size(); ++i)
-		{
-			q2[i] = std::clamp((lo[i] + hi[i]) / 2 + 0.1, lo[i], hi[i]);
-		}
-		CartesianPose t;
-		if (fk.fk(q2, t))
-		{
-			std::vector<double> out = q2;
-			// 结果有意丢弃: 就绪探测只求触达求解路径 (页/分支), 不消费解
-			(void)ik->solve(t, q2, RedundancyPreference{}, out, nullptr,
-				unistackbot_algorithm::SolveMode::COLD_START);
-		}
-		ULOG_INFO("cm worker: 就绪 (%u 关节, 库 %zu 条, 预算 %ldns)",
-			fk.jointCount(), ik->seedLibrarySize(), static_cast<long>(cold_timeout_ns_));
-	}
-	ColdRequest req;
-	uint64_t last = 0;
-	uint64_t seq = 0;
-	while (worker_run_.load(std::memory_order_acquire))
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(2));
-		if (!cold_req_.read(req, seq) || seq == last)
-		{
-			continue;
-		}
-		last = seq;
-		std::vector<double> seed(req.q, req.q + req.n);
-		std::vector<double> out = seed;
-		DlsIkStats st;
-		const auto r = ik->solve(req.target, seed, RedundancyPreference{}, out, &st,
-			unistackbot_algorithm::SolveMode::COLD_START);
-		ColdResult res{};
-		res.seq = req.seq;
-		res.n = req.n;
-		res.ok = (r == unistackbot_algorithm::IkResult::OK);
-		res.min_sigma = st.min_sigma;
-		for (uint32_t i = 0; i < req.n && i < unistackbot_interface::kMaxJoints; ++i)
-		{
-			res.q[i] = out[i];
-		}
-		cold_res_.publish(res);
-		ULOG_INFO("cm worker: 冷启动%s (σ=%.3f, %.0fµs)",
-			res.ok ? "成功" : "失败", st.min_sigma, st.solve_us);
-	}
-	ULOG_INFO("cm worker: 退出");
-}
-
 // 激活末尾预热: 把首触成本全部留在非 RT 阶段 (RT 线程纪律 = 零意外)。
-// 诚实边界: 失败阶梯 (重启路径/求解 WARN) 不预热 —— 仅失败后触达,
-// 首现成本已被 timeout 封顶; 缺页验收 (1000 拍 Δminflt==0) 在第 5 步工具侧
+// 注: IK 在回调线程 (与生命周期回调同 executor 线程串行, 无竞态); 预热触达 COLD_START
+// 路径 (= 回调真实路径) + RealtimePublisher 首拍
 void CartesianMotionController::warmup()
 {
 	// 1) 日志四级: 触达 cached_tid 首 syscall / 环首触 / 四级格式化路径
-	//    (直接打 DEBUG 在 info 级下会被宏首句过滤, 什么也触不到 —— 先临时调级)
 	unistackbot_common::ulog_set_level(unistackbot_common::ulog_level::debug);
 	ULOG_DEBUG("cm warmup: debug 路径");
 	ULOG_INFO("cm warmup: info 路径");
@@ -864,8 +756,7 @@ void CartesianMotionController::warmup()
 	ULOG_ERROR("cm warmup: error 路径");
 	unistackbot_common::ulog_set_level(unistackbot_common::ulog_level::info);
 
-	// 2) 可达假目标真 solve: FK(cmd_+小扰动) 为目标 → 必经迭代/SVD/入口分配
-	//    (拿 FK(cmd_) 原值作目标会在迭代前收敛, 触不到 SVD)。结果丢弃, 不改 cmd_
+	// 2) 可达假目标真 solve (FK(cmd_+小扰动) 为目标 → 必经迭代/SVD); 结果丢弃
 	{
 		std::vector<double> q2 = cmd_;
 		const auto & lo = fk_->qMin();
@@ -879,9 +770,8 @@ void CartesianMotionController::warmup()
 		{
 			std::vector<double> q_out = cmd_;
 			const RedundancyPreference preserve;
-			// 结果有意丢弃: 预热只求触达路径, 不消费解
 			(void)ik_->solve(t, cmd_, preserve, q_out, nullptr,
-				unistackbot_algorithm::SolveMode::STREAMING);
+				unistackbot_algorithm::SolveMode::COLD_START);
 		}
 	}
 	// 3) 不可达假目标: 几何预检路径 (结果丢弃)
@@ -891,9 +781,8 @@ void CartesianMotionController::warmup()
 		far.qw = 1.0;
 		std::vector<double> q_out = cmd_;
 		const RedundancyPreference preserve;
-		// 结果有意丢弃: 预热只求触达路径, 不消费解
 		(void)ik_->solve(far, cmd_, preserve, q_out, nullptr,
-			unistackbot_algorithm::SolveMode::STREAMING);
+			unistackbot_algorithm::SolveMode::COLD_START);
 	}
 	// 4) RealtimePublisher 首拍 (内部互斥与发布路径)
 	{

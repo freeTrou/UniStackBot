@@ -2,10 +2,11 @@
  * fk_tool —— FK 命令行工具 (调试与 TF 对拍的弹药)。
  *
  * 用法:
- *   ros2 run unistackbot_controller fk_tool --joints j1=0.5,j2=-0.3,...
+ *   ros2 run unistackbot_controller fk_tool --joints j1=0.5,j2=-0.3,... \
+ *       --base <基座link名> --tip <末端link名>
  * 关节表由 --joints 名=值 表命令行给出 (内部按 URDF 链序重排); URDF 读自
- * /robot_state_publisher 参数 (链路活着时始终可用); 拓扑默认 link_base -> link7
- * (--base/--tip 可覆盖)。
+ * /robot_state_publisher 参数 (链路活着时始终可用); --base/--tip 必填
+ * (机型拓扑无默认值, 2026-09-22 纪律)。
  * 输出行格式 (对拍脚本解析):
  *   position [x, y, z]
  *   quaternion [w, x, y, z]
@@ -21,7 +22,7 @@
 
 int main(int argc, char ** argv)
 {
-	std::string joints_arg, tip = "link7", base = "link_base";
+	std::string joints_arg, tip, base;   // 机型拓扑无默认值 (2026-09-22 纪律): 必须显式指定
 	for (int i = 1; i < argc; ++i)
 	{
 		const std::string a = argv[i];
@@ -38,9 +39,12 @@ int main(int argc, char ** argv)
 			base = argv[++i];
 		}
 	}
-	if (joints_arg.empty())
+	if (joints_arg.empty() || tip.empty() || base.empty())
 	{
-		std::fprintf(stderr, "用法: fk_tool --joints j1=0.5,... [--base link_base] [--tip link7]\n");
+		std::fprintf(stderr,
+			"用法: fk_tool --joints j1=0.5,... --base <基座link名> --tip <末端link名>\n"
+			"  拓扑无默认值, 必须显式指定 (例 piper: --base base_link --tip link6;"
+			" xarm7: --base link_base --tip link7)\n");
 		return 2;
 	}
 

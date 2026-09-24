@@ -9,6 +9,7 @@ from launch.actions import (
     IncludeLaunchDescription,
     OpaqueFunction,
     SetEnvironmentVariable,
+    TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
@@ -26,6 +27,10 @@ def _launch_setup(context):
     gui = LaunchConfiguration('gui').perform(context) == 'true'
     use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
     robot = LaunchConfiguration('robot').perform(context)
+    # bus_hz (mock/mujoco 链的频率矩阵参数) 在 gz 链**忽略不报错** (用户裁决 2026-09-23:
+    # 三链各有各端功能, gz 不走换频) —— CM 住在 gz_ros2_control 插件进程内, launch 级
+    # -p 覆盖本就不可达; gz 真要换频改 yaml /**.update_rate
+    _ = LaunchConfiguration('bus_hz').perform(context)
 
     desc_share = get_package_share_directory('unistackbot_description')
     xacro_path = os.path.join(desc_share, 'arms', robot, 'urdf', f'{robot}.urdf.xacro')
@@ -123,36 +128,30 @@ def _launch_setup(context):
         output='screen',
     )
 
-    spawners = [
+    # spawner 竞态防御 (2026-09-23, 官方依据 ros2_control issue #2071):
+    #   根因不是"没重试"(spawner 内建 3 次, max_attempts=3), 而是 10s service-call 窗口内
+    #   CM 忙(硬件 on_init 占 executor)响应未归 → 盲目重试撞半途状态。官方两方向:
+    #   ①delay the spawners(TimerAction 2s) ②launch_utils/example_13 模式 = 一个 spawner
+    #   进程传控制器列表收拢并发风暴。--service-call-timeout 30s 让内建重试变耐心。
+    #   RMW 层 wait 卡死无解, 由流水线 ⓪ 残留检查兜底; supervisor 即时拉起(纯订阅容忍迟到)。
+    controller_spawners = [
+        # 激活组: 一个 spawner 进程按序 load/configure/activate (官方 example_13 模式)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+            arguments=['joint_state_broadcaster', 'joint_stream_controller',
+                       'ee_state_broadcaster',
+                       '--controller-manager', '/controller_manager',
+                       '--service-call-timeout', '30'],
             output='screen',
         ),
+        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, switch_controllers 切换)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_stream_controller', '--controller-manager', '/controller_manager'],
-            output='screen',
-        ),
-        Node(
-        	package='controller_manager',
-        	executable='spawner',
-        	arguments=['ee_state_broadcaster', '--controller-manager', '/controller_manager'],
-        	output='screen',
-        ),
-        Node(
-        	package='unistackbot_bringup',
-        	executable='supervisor_node',
-        	output='screen',
-        ),
-        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, 与 JTC 由 switch_controllers 切换)
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['cartesian_motion_controller', '--controller-manager',
-                       '/controller_manager', '--inactive'],
+            arguments=['cartesian_motion_controller',
+                       '--controller-manager', '/controller_manager',
+                       '--service-call-timeout', '30', '--inactive'],
             output='screen',
         ),
     ]
@@ -165,7 +164,13 @@ def _launch_setup(context):
         gz_bridge,
         sim_control_gz,
         spawn_entity,
-    ] + spawners
+        Node(
+        	package='unistackbot_bringup',
+        	executable='supervisor_node',
+        	output='screen',
+        ),
+        TimerAction(period=2.0, actions=controller_spawners),
+    ]
 
     # RViz 可选 (与 mock 链 control.launch.py 对齐; use_world:=true 时固定系为 world)
     if use_rviz:
@@ -193,5 +198,7 @@ def generate_launch_description():
                               description='是否启动 Gazebo GUI 客户端'),
         DeclareLaunchArgument('use_rviz', default_value='false',
                               description='是否启动 RViz2 (gui:=false 无头模式下也可用)'),
-        OpaqueFunction(function=_launch_setup), # 启动py函数 
+        DeclareLaunchArgument('bus_hz', default_value='',
+                              description='gz 链忽略此参数 (mock/mujoco 专用; 三链各有各端功能)'),
+        OpaqueFunction(function=_launch_setup), # 启动py函数
     ])

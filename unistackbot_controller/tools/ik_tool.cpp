@@ -19,17 +19,21 @@
 
 int main(int argc, char ** argv)
 {
-	std::string pos_arg, quat_arg, tip = "link7";
+	std::string pos_arg, quat_arg, tip, base;
 	for (int i = 1; i < argc; ++i)
 	{
 		const std::string a = argv[i];
 		if (a == "--pos" && i + 1 < argc) {pos_arg = argv[++i];}
 		else if (a == "--quat" && i + 1 < argc) {quat_arg = argv[++i];}
 		else if (a == "--tip" && i + 1 < argc) {tip = argv[++i];}
+		else if (a == "--base" && i + 1 < argc) {base = argv[++i];}
 	}
-	if (pos_arg.empty() || quat_arg.empty())
+	// 机型/拓扑参数无默认值纪律 (2026-09-23 修: 旧默认 link_base/link7 是 xarm7
+	// 约定的隐性硬编码, piper 消费者撞默认即建链失败)
+	if (pos_arg.empty() || quat_arg.empty() || base.empty() || tip.empty())
 	{
-		std::fprintf(stderr, "用法: ik_tool --pos x,y,z --quat w,x,y,z [--tip link7]\n");
+		std::fprintf(stderr, "用法: ik_tool --pos x,y,z --quat w,x,y,z --base <基座link> --tip <末端link>\n"
+			"  (拓扑无默认, 必填; 例 piper: --base base_link --tip link6; xarm7: --base link_base --tip link7)\n");
 		return 2;
 	}
 	const auto parse3or4 = [](const std::string & s, std::vector<double> & out)
@@ -82,7 +86,7 @@ int main(int argc, char ** argv)
 
 	unistackbot_algorithm::UrdfFk fk;
 	std::string msg;
-	if (!fk.init(urdf_text, "link_base", tip, msg))
+	if (!fk.init(urdf_text, base, tip, msg))
 	{
 		std::fprintf(stderr, "%s\n", msg.c_str());
 		return 1;

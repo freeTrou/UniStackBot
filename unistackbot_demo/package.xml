@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>unistackbot_demo</name>
+  <version>0.1.0</version>
+  <description>控制 demo 独立包 (2026-09-23): 三命令域演示程序——末端位姿流 / 关节慢流 / 关节满速流(=总线频率, C++)。demo 是链路契约的独立外部消费者, 不寄生 bringup/controller</description>
+  <maintainer email="wangjianfeng@todo.todo">wangjianfeng</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>unistackbot_interface</depend>
+  <depend>tinyxml2_vendor</depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

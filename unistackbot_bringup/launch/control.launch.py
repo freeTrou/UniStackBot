@@ -2,7 +2,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
@@ -12,6 +12,7 @@ from launch_ros.substitutions import FindPackageShare
 def _launch_setup(context):
     use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
     robot = LaunchConfiguration('robot').perform(context)
+    bus_hz = LaunchConfiguration('bus_hz').perform(context)
 
     desc_share = get_package_share_directory('unistackbot_description')
     xacro_path = os.path.join(desc_share, 'arms', robot, 'urdf', f'{robot}.urdf.xacro')
@@ -46,14 +47,20 @@ def _launch_setup(context):
         available = sorted(f for f in os.listdir(os.path.dirname(controllers_yaml))
                            if f.endswith('_controllers.yaml'))
         raise RuntimeError(f'机型 {robot!r} 缺控制器配置: 找不到 {controllers_yaml}. 现有配置: {available}')
+    # bus_hz (频率矩阵测试, 2026-09-23): 运行期覆盖 update_rate (yaml /** 通配节的
+    # 单一事实源被 launch 的 -p 全局覆盖压过) —— CM RT 循环与全部控制器节点同拍切换。
+    # 空 = 不覆盖, yaml 值生效。gz 链 CM 在 gz 插件进程内, 此机制不可达 (ign launch 会拒)。
+    cm_parameters = [
+        {'robot_description': ParameterValue(robot_description_content, value_type=str)},
+        controllers_yaml,
+    ]
+    if bus_hz:
+        cm_parameters.append({'update_rate': int(bus_hz)})
     ros2_control_node = Node(
         package='controller_manager',
         executable='ros2_control_node',
         # 同上: 裸字符串会被 launch_ros 当 YAML 解析, 必须 ParameterValue(str)
-        parameters=[
-            {'robot_description': ParameterValue(robot_description_content, value_type=str)},
-            controllers_yaml,
-        ],
+        parameters=cm_parameters,
         output='screen',
     )
 
@@ -71,41 +78,44 @@ def _launch_setup(context):
             output='screen',
         ))
 
-    spawners = [
+    # spawner 竞态防御 (2026-09-23, 官方依据 ros2_control issue #2071):
+    #   根因不是"没重试"(spawner 内建 3 次, controller_manager_services.py max_attempts=3),
+    #   而是 10s service-call 窗口内 CM 忙(硬件 on_init 占 executor)响应未归 → 盲目重试
+    #   撞进首个请求已执行的半途状态 ("already loaded"+"no controller with this name")。
+    #   官方维护者两方向: ①delay the spawners(TimerAction 2s) ②launch_utils/example_13
+    #   模式 = 一个 spawner 进程传控制器列表, 收拢并发服务调用风暴。--service-call-timeout
+    #   30s 让 3 次内建重试变耐心(实测疲劳机硬件 init >4s)。--controller-manager-timeout
+    #   默认 0.0 已是永远等服务, 不调。RMW 层 wait 卡死无解, 由流水线 ⓪ 残留检查兜底。
+    controller_spawners = [
+        # 激活组: 一个 spawner 进程按序 load/configure/activate (官方 example_13 模式)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+            arguments=['joint_state_broadcaster', 'joint_stream_controller',
+                       'ee_state_broadcaster',
+                       '--controller-manager', '/controller_manager',
+                       '--service-call-timeout', '30'],
             output='screen',
         ),
+        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, switch_controllers 切换)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_stream_controller', '--controller-manager', '/controller_manager'],
+            arguments=['cartesian_motion_controller',
+                       '--controller-manager', '/controller_manager',
+                       '--service-call-timeout', '30', '--inactive'],
             output='screen',
         ),
-        Node(
-        	package='controller_manager',
-        	executable='spawner',
-        	arguments=['ee_state_broadcaster', '--controller-manager', '/controller_manager'],
-        	output='screen',
-        ),
+    ]
+
+    return nodes + [
         Node(
         	package='unistackbot_bringup',
         	executable='supervisor_node',
         	output='screen',
         ),
-        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, 与 JTC 由 switch_controllers 切换)
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['cartesian_motion_controller', '--controller-manager',
-                       '/controller_manager', '--inactive'],
-            output='screen',
-        ),
+        TimerAction(period=2.0, actions=controller_spawners),
     ]
-
-    return nodes + spawners
 
 
 def generate_launch_description():
@@ -115,5 +125,7 @@ def generate_launch_description():
                               description='机型名(必填), 对应 unistackbot_description/arms/<robot>/ 与 bringup config/<robot>_controllers.yaml'),
         DeclareLaunchArgument('use_rviz', default_value='false',
                               description='是否启动 RViz2'),
+        DeclareLaunchArgument('bus_hz', default_value='',
+                              description='总线/CM 频率覆盖 (Hz, 如 500/1000); 空=yaml update_rate 生效'),
         OpaqueFunction(function=_launch_setup),
     ])

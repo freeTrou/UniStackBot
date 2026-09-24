@@ -4,6 +4,9 @@
 #include <urdf_model/model.h>
 #include <urdf_parser/urdf_parser.h>
 
+#include <map>
+#include <string>
+
 namespace unistackbot_algorithm
 {
 
@@ -109,6 +112,53 @@ bool UrdfFk::init(
 		return false;
 	}
 
+	// 链序关节轴 (base 系, 零位): 沿父链累计 origin 变换; 轴 = 累计旋转 * 关节 axis
+	// (urdf 语义: axis 表述在关节系)。结构指纹判定用 (球腕三轴共点等)。
+	axes_.clear();
+	axes_.reserve(n);
+	std::map<std::string, urdf::JointSharedPtr> joint_by_child;
+	for (const auto & kv : model->joints_)
+	{
+		joint_by_child[kv.second->child_link_name] = kv.second;
+	}
+	for (const auto & name : joint_names_)
+	{
+		const auto it = model->joints_.find(name);
+		if (it == model->joints_.end())
+		{
+			message = "链关节不在 URDF: " + name;
+			return false;
+		}
+		const auto & j = it->second;
+		std::vector<urdf::JointSharedPtr> up;   // 父链: j.parent_link -> base (自上而下回放)
+		std::string cur = j->parent_link_name;
+		while (cur != base)
+		{
+			const auto pit = joint_by_child.find(cur);
+			if (pit == joint_by_child.end())
+			{
+				message = "URDF 链断裂: " + cur;
+				return false;
+			}
+			up.push_back(pit->second);
+			cur = pit->second->parent_link_name;
+		}
+		KDL::Frame w = KDL::Frame::Identity();
+		for (auto rit = up.rbegin(); rit != up.rend(); ++rit)
+		{
+			const auto & t = (*rit)->parent_to_joint_origin_transform;
+			w = w * KDL::Frame(
+				KDL::Rotation::Quaternion(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w),
+				KDL::Vector(t.position.x, t.position.y, t.position.z));
+		}
+		const auto & t = j->parent_to_joint_origin_transform;
+		const KDL::Frame jf = w * KDL::Frame(
+			KDL::Rotation::Quaternion(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w),
+			KDL::Vector(t.position.x, t.position.y, t.position.z));
+		const KDL::Vector d = jf.M * KDL::Vector(j->axis.x, j->axis.y, j->axis.z);
+		axes_.push_back(JointAxis{jf.p.x(), jf.p.y(), jf.p.z(), d.x(), d.y(), d.z()});
+	}
+
 	// 链长上界: 相邻段原点距离累加 (IK 几何预检用, 保守粗上界非精确工作空间)
 	max_reach_ = 0.0;
 	for (unsigned int i = 0; i < chain_.getNrOfSegments(); ++i)
@@ -202,6 +252,16 @@ bool UrdfFk::jacobian(
 		}
 	}
 	return true;
+}
+
+bool UrdfFk::jointAxesAtZero(std::vector<JointAxis> & out) const
+{
+	if (!ready_)
+	{
+		return false;
+	}
+	out = axes_;
+	return out.size() == joint_names_.size();
 }
 
 }  // namespace unistackbot_algorithm

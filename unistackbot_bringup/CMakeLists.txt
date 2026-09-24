@@ -30,9 +30,8 @@ install(TARGETS supervisor_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/demo_motion.py
-  DESTINATION lib/${PROJECT_NAME}
-)
+# 控制 demo 已独立成包 unistackbot_demo (2026-09-23): 三命令域演示程序 (末端/关节慢/关节满速)
+# scripts/ 目录随之退役 (空目录不保留)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

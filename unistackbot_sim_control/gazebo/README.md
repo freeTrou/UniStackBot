@@ -18,7 +18,8 @@ ros2 launch unistackbot_gazebo ign.launch.py robot:=xarm7 gui:=false
 
 # 终端 2 —— 让机械臂动（等终端 1 出现两行 "Configured and activated"）
 source install/setup.bash
-ros2 run unistackbot_bringup demo_motion.py
+ros2 run unistackbot_demo demo_motion.py       # 关节空间
+ros2 run unistackbot_demo demo_cartesian.py    # 笛卡尔空间 (切 CM, 机型无关)
 ```
 
 常用变体（只换参数）：`gui:=true` 开 Gazebo 图形界面；`use_rviz:=true` 无头仿真加 RViz；`robot:=piper` 换机型。

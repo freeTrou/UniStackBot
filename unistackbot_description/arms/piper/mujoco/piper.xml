@@ -16,7 +16,11 @@
         (URDF mimic: gripper_joint1 = 0.5*gripper, gripper_joint2 = -0.5*gripper);
         ros2_control 侧手指无 command_interface → JointStream 自动只管 7 个主关节
       - timestep 默认 0.002 (500Hz) 与控制器 update_rate 对齐
-      - kp/dampratio 为 piper 量级起步值 (连杆 0.4-1.2kg), 首跑后按跟踪调
+      - kp/dampratio 起步值已按首跑跟踪调过 (2026-09-23 两轮): sag ∝ τ_g/kp 账。
+        第一轮 ×4 (j2/j3/j4 1500/1000/500→6000/4000/2000): 部署位下垂 1.58→1.14mm,
+        圆周最深扇区 (+x 前伸, 重力臂最长) 骑 1mm 容差线 → 第二轮再 ×4
+        (→24000/16000/8000), 预期全圆周 0.1-0.3mm; 若数值不稳退 ×2 或改 gravcomp;
+        连杆 0.4-1.2kg, dampratio=1.0 自动抬阻尼为稳定性护城河
   -->
   <compiler angle="radian" meshdir="../meshes/collision/"/>
 
@@ -124,9 +128,9 @@
 
   <actuator>
     <position name="joint1" joint="joint1" kp="1500" dampratio="1.0" ctrlrange="-2.6179938 2.6179938"/>
-    <position name="joint2" joint="joint2" kp="1500" dampratio="1.0" ctrlrange="0 3.1415926"/>
-    <position name="joint3" joint="joint3" kp="1000" dampratio="1.0" ctrlrange="-2.9670597 0"/>
-    <position name="joint4" joint="joint4" kp="500" dampratio="1.0" ctrlrange="-1.7453292 1.7453292"/>
+    <position name="joint2" joint="joint2" kp="24000" dampratio="1.0" ctrlrange="0 3.1415926"/>
+    <position name="joint3" joint="joint3" kp="16000" dampratio="1.0" ctrlrange="-2.9670597 0"/>
+    <position name="joint4" joint="joint4" kp="8000" dampratio="1.0" ctrlrange="-1.7453292 1.7453292"/>
     <position name="joint5" joint="joint5" kp="300" dampratio="1.0" ctrlrange="-1.2217304 1.2217304"/>
     <position name="joint6" joint="joint6" kp="200" dampratio="1.0" ctrlrange="-2.0943951 2.0943951"/>
     <position name="gripper" joint="gripper" kp="200" dampratio="1.0" ctrlrange="0 0.1"/>

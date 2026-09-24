@@ -9,85 +9,13 @@
 
 #include <pluginlib/class_list_macros.hpp>
 
+#include "controller_common/urdf_command_joints.hpp"
 #include "ulog/ulog.hpp"
 
 namespace
 {
 
 constexpr char kPluginName[] = "joint_stream_controller";
-
-// 解析 URDF <ros2_control> 块: position 命令关节表 + min/max/max_velocity。
-// 单一事实源: 限位与 BackendKinematic / CM 控制器同参数同缺省。
-bool parseJointsFromUrdf(
-	const std::string & urdf, std::vector<std::string> & names,
-	std::vector<double> & qmin, std::vector<double> & qmax,
-	std::vector<double> & vmax, std::string & err)
-{
-	tinyxml2::XMLDocument doc;
-	if (doc.Parse(urdf.c_str(), urdf.size()) != tinyxml2::XML_SUCCESS)
-	{
-		err = "URDF XML 解析失败";
-		return false;
-	}
-	const tinyxml2::XMLElement * root = doc.RootElement();
-	if (root == nullptr)
-	{
-		err = "URDF 无根元素";
-		return false;
-	}
-	for (const tinyxml2::XMLElement * rc = root->FirstChildElement("ros2_control"); rc != nullptr;
-		rc = rc->NextSiblingElement("ros2_control"))
-	{
-		for (const tinyxml2::XMLElement * j = rc->FirstChildElement("joint"); j != nullptr;
-			j = j->NextSiblingElement("joint"))
-		{
-			const char * jn = j->Attribute("name");
-			if (jn == nullptr)
-			{
-				continue;
-			}
-			bool has_cmd = false;
-			double mn = 0.0, mx = 0.0, vm = 5.0;
-			for (const tinyxml2::XMLElement * prm = j->FirstChildElement("param"); prm != nullptr;
-				prm = prm->NextSiblingElement("param"))
-			{
-				const char * pn = prm->Attribute("name");
-				const char * txt = prm->GetText();
-				if (pn == nullptr || txt == nullptr)
-				{
-					continue;
-				}
-				if (std::strcmp(pn, "min") == 0) {mn = std::atof(txt);}
-				else if (std::strcmp(pn, "max") == 0) {mx = std::atof(txt);}
-				else if (std::strcmp(pn, "max_velocity") == 0) {vm = std::atof(txt);}
-			}
-			for (const tinyxml2::XMLElement * ci = j->FirstChildElement("command_interface"); ci != nullptr;
-				ci = ci->NextSiblingElement("command_interface"))
-			{
-				const char * nm = ci->Attribute("name");
-				if (nm != nullptr && std::strcmp(nm, "position") == 0)
-				{
-					has_cmd = true;
-					break;
-				}
-			}
-			if (!has_cmd)
-			{
-				continue;   // mimic / 无 position 命令的关节不归本控制器
-			}
-			names.push_back(jn);
-			qmin.push_back(mn);
-			qmax.push_back(mx);
-			vmax.push_back(vm > 0.0 ? vm : 5.0);
-		}
-	}
-	if (names.empty())
-	{
-		err = "URDF <ros2_control> 无 position 命令关节";
-		return false;
-	}
-	return true;
-}
 
 }  // namespace
 
@@ -147,14 +75,16 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 		return controller_interface::CallbackReturn::ERROR;
 	}
 	const double hz = std::max<double>(static_cast<double>(get_update_rate()), 1.0);
-	// update_rate 坑 (Humble 实测, 2026-09-21): get_update_rate() 在 configure 期取不到
-	// CM 的真实频率 (返回 0/1), 而 update 首拍的 period 也不是稳态周期 (激活残余片段,
-	// 实测 0.4ms → 校准出 2500Hz 的荒唐值) —— 真实 hz 由首 16 拍 period 的中位数定。
-	// 占位取 500Hz 先验 (链上实际值; 偏差由 write 层速度钳位兜底, 校准窗仅 32ms)。
+	// update_rate 定源 (2026-09-23, Humble 2.54.2 源码核实): yaml /** 通配节把
+	// update_rate 覆盖到控制器节点, configure 期 get_update_rate() 即权威值 (旧注释
+	// "configure 期取不到"的真身 = 参数只写在 controller_manager 节名下, 控制器节点
+	// 匹配不到 → 0)。拿不到时占位 500Hz 先验, 激活后首 16 拍中位数兜底 (该中位数会被
+	// 激活瞬间 switch 服务同步 update 的 µs period 污染, 实测 0.4ms → 2500Hz 荒唐值,
+	// 故校准完成时以权威参数优先, 见 update())。
 	step_limits_.clear();
 	for (double v : vmax_)
 	{
-		step_limits_.push_back(v / (hz > 1.0 ? hz : 500.0));   // 占位 500Hz; 16 拍后中位数校准
+		step_limits_.push_back(v / (hz > 1.0 ? hz : 500.0));   // 占位; 16 拍后权威/兜底定源
 	}
 	cmd_.assign(joint_names_.size(), 0.0);
 	target_.assign(joint_names_.size(), 0.0);
@@ -307,8 +237,8 @@ controller_interface::return_type JointStreamController::update(
 {
 	const std::size_t n = joint_names_.size();
 
-	// update_rate 校准 (Humble 坑, 见 on_configure 注释): 首拍 period 非稳态,
-	// 收 16 拍取中位数 (定长数组零分配; 16 拍 @500Hz = 32ms, 窗内由 write 层钳位兜底)
+	// update_rate 定源 (同 on_configure 注释): 首 16 拍中位数会被激活期 switch 服务
+	// 同步 update 的 µs period 污染 —— 权威参数 (/** 通配节覆盖) 优先, 中位数兜底+交叉校验
 	if (!rate_calibrated_)
 	{
 		const double p = period.seconds();
@@ -320,7 +250,18 @@ controller_interface::return_type JointStreamController::update(
 		{
 			rate_calibrated_ = true;
 			std::sort(period_samples_, period_samples_ + kPeriodSamples);
-			const double hz = 1.0 / period_samples_[kPeriodSamples / 2];
+			const double hz_med = 1.0 / period_samples_[kPeriodSamples / 2];
+			double hz = hz_med;
+			const unsigned int hz_auth = get_update_rate();
+			if (hz_auth > 0)
+			{
+				hz = static_cast<double>(hz_auth);
+				if (std::fabs(hz_med - hz) / hz > 0.2)
+				{
+					ULOG_WARN("%s: 实测中位数 %.0fHz 偏离权威 update_rate %.0fHz"
+						" (激活期 period 污染), 以参数为准", kPluginName, hz_med, hz);
+				}
+			}
 			for (std::size_t i = 0; i < step_limits_.size(); ++i)
 			{
 				step_limits_[i] = vmax_[i] / hz;
@@ -341,9 +282,29 @@ controller_interface::return_type JointStreamController::update(
 				lim.max_acceleration.fill(max_acceleration_);
 				lim.max_jerk.fill(max_jerk_);
 				otg_ready_ = otg_.init(1.0 / hz, lim, 0.3);
+				// init 会清 initialized_ (OtgStream 契约: init 后必须 reset 才有安全基准)
+				// —— 不重锚 = 校准后 update 恒 Hold = ruckig 永久冻结 (2026-09-23 A/B 实测
+				// 实锤, 激活首 32ms 后死; F6 的 ruckig 刹停从冻结态出发属空洞通过)。
+				// 以当前命令位重锚, v/a 归零 —— 32ms 窗口内速度微小, 连续性无损。
+				std::array<double, unistackbot_interface::kMaxJoints> q{};
+				for (std::size_t i = 0; i < n; ++i)
+				{
+					q[i] = cmd_[i];
+				}
+				otg_.reset(q);
 			}
-			ULOG_INFO("%s: update_rate 校准 %.0f Hz (步长 %.4f rad/拍, 断流判定 %u 拍)",
-				kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0], stale_cycles_);
+			if (hz_auth > 0)
+			{
+				ULOG_INFO("%s: update_rate %.0f Hz (权威参数; 步长 %.4f rad/拍, 断流判定 %u 拍)",
+					kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0], stale_cycles_);
+			}
+			else
+			{
+				// 兜底路径必须显眼 (中位数可被激活期 µs period 污染 = 35 倍减速 bug 根)
+				ULOG_WARN("%s: update_rate %.0f Hz (实测中位数兜底 —— yaml 缺 /**.update_rate;"
+					" 步长 %.4f rad/拍, 断流判定 %u 拍)",
+					kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0], stale_cycles_);
+			}
 		}
 	}
 

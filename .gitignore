@@ -20,3 +20,5 @@ unistackbot_common/**/test_sp_latest
 unistackbot_common/**/test_sp_ring
 unistackbot_common/**/test_ulog
 unistackbot_common/**/bench_ulog
+__pycache__/
+*.pyc

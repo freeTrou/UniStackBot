@@ -10,7 +10,7 @@ MuJoCo 仿真链: 真实动力学回归验证, 对照 mock 链 (理想执行器)
 
 ```bash
 ros2 launch unistackbot_mujoco mujoco.launch.py robot:=piper
-# 可选: headless:=false 拉起 MuJoCo Simulate 渲染窗 (需 DISPLAY); use_rviz:=true
+# 默认带 MuJoCo Simulate 渲染窗 (需 DISPLAY); 基准/录制显式 headless:=true; use_rviz:=true
 ```
 
 与 mock/gz 链同款三件套: `joint_state_broadcaster` + `joint_stream_controller` (active)
@@ -60,7 +60,9 @@ reset 后关节重力下垂值与首启逐位一致 (真复位)。
 ## 已知坑
 
 - **headless**: apt 0.1.2 无 `MUJOCO_HEADLESS` 环境变量支持 (PR #157 未随发布),
-  走 URDF `headless` 硬件参数; 默认无头。GUI 模式需可用 DISPLAY, 收场时渲染线程
+  走 URDF `headless` 硬件参数; **默认带界面** (2026-09-23 翻转, 与 gz 链 gui 默认对齐;
+  verify/fault/rt_chain_bench 均已显式 `headless:=true`, 自动路径不受影响)。
+  GUI 模式需可用 DISPLAY, 收场时渲染线程
   有已知段错误 (GL 析构顺序, demo 同款, 无害——控制器已全部干净关闭)。
 - **单链互斥**: 节点与其他链同名 (robot_state_publisher / controller_manager),
   起链前确认无残留 (同 CLAUDE.md 通用规则)。

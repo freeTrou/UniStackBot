@@ -6,13 +6,13 @@
 #     → j5 x 0.0775, y -0.3425 (rpy 90°x) → j6 (rpy 90°x) → j7 x 0.076, y 0.097 (rpy -90°x)
 #   逐段在"旋转后的父系"里平移, 复合结果 = (0.206, 0, 0.1205) —— 与构型判定
 #   实测的 j7 轴点一致 (零位时 link7 原点与 j7 轴点重合, rpy 全为 ±90° 互抵)。
-# 用法: bash test/run_urdf_fk_test.sh <robot> [tip] [base] [strict]
-#   tip 默认 link7 (piper 用 link6); base 默认 link_base (piper 用 base_link);
+# 用法: bash test/run_urdf_fk_test.sh <robot> <tip> <base> [strict]
+#   tip/base 必填无默认 (机型拓扑纪律, 2026-09-22): piper 用 link6/base_link, xarm7 用 link7/link_base;
 #   strict=零位手算真值断言 (仅 xarm7 有真值)
 set -euo pipefail
-ROBOT="${1:?用法: run_urdf_fk_test.sh <robot> [tip] [base] [strict]}"
-TIP="${2:-link7}"
-BASE="${3:-link_base}"
+ROBOT="${1:?用法: run_urdf_fk_test.sh <robot> <tip> <base> [strict]}"
+TIP="${2:?用法: run_urdf_fk_test.sh <robot> <tip> <base> [strict]} (机型拓扑无默认值)"
+BASE="${3:?缺 base 参数 (例 piper: base_link, xarm7: link_base)}"
 STRICT="${4:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(dirname "$SCRIPT_DIR")"            # urdf_fk/ 算法文件夹

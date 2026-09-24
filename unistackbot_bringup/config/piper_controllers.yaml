@@ -1,6 +1,14 @@
-controller_manager:
+# update_rate 单一事实源 (2026-09-23): /** 通配节同时命中 controller_manager (RT 循环
+# 频率) 与每个控制器节点 (ControllerInterfaceBase::configure() 读入 update_rate_ →
+# get_update_rate() 权威值; 只写 controller_manager 节名下时控制器节点匹配不到 → 参数
+# 0 → 被激活期 µs period 污染的实测中位数接管, 实锤 35 倍收敛减速)。总线频率矩阵测试
+# 经 launch bus_hz:= 参数运行期覆盖 (launch 的 -p 全局覆盖压过 yaml)。
+/**:
   ros__parameters:
     update_rate: 500
+
+controller_manager:
+  ros__parameters:
     # RT 线程调优: 经预留参数接口由我们设置 (ros2_control_node 起 RT 线程时应用
     # set_current_thread_affinity + configure_sched_fifo; 参数名是官方接口, 值是我们定的)
     thread_priority: 80     # SCHED_FIFO (0-99; 80=设计文档 CM 档, IgH 90/CiA402 85 之上预留)
@@ -19,33 +27,54 @@ controller_manager:
     cartesian_motion_controller:
       type: unistackbot_controller/CartesianMotionController
 
+    otg_gate_controller:
+      type: unistackbot_controller/OtgGateController
+
 joint_stream_controller:
   ros__parameters:
-    interpolation: hold          # hold | ruckig (慢上层选 ruckig)
+    interpolation: ruckig        # hold | ruckig (2026-09-23 A/B 定音: 默认 ruckig —— C2 兜底
+                                 # 第三方粗糙输入, 同轨迹 dv/拍 平滑 42-100×; hold 仅存满速透传语义)
+    # OTG (ruckig 档) 关节加速度/加加速度界 —— 机型资产 (URDF 只有 velocity, 无此两项;
+    # 2026-09-23 资产化: 显式声明取代代码默认值, 与 max_velocity 并列单一事实源)
+    max_acceleration: 5.0        # [rad/s²] 标量, 全关节一致 (per-joint 向量待真机标定)
+    max_jerk: 20.0               # [rad/s³]
     # RT 线程调优走 controller_manager 的 yaml 预留接口 (thread_priority/cpu_affinity, 值在上方 controller_manager 段)
     # 断流受控减速 (0c): ~/command 流死 200ms → 速度线性衰减到停 (200ms 窗);
     # 0 = 关闭。流式控制器安全默认开 (fault_injection F6 场景验证)
     stale_timeout_ms: 200.0
     # stale_decel_ms: 200.0
 
+# 笛卡尔运动控制器 (§16.6 语义统一改版, 2026-09-23): ~/target 每条消息=最新终点,
+# 回调线程逐条 IK (种子=实测) → RT 环 OtgStream C2 追最新关节终点。
+# 旧 RT 内流式 IK + worker 冷启动/预算族参数退役。
 cartesian_motion_controller:
   ros__parameters:
-    worker_cpu: -1        # 冷启动 worker 线程绑核
-    worker_nice: 10       # worker nice (让路姿态)
     base_link: base_link
     tip_link: link6
     # piper 暂无种子库资产, relpath 留空 = 走分支+随机阶梯
     seed_library_package: unistackbot_description
     seed_library_relpath: ""
-    update_timeout_ns: 500000
-    cold_timeout_ns: 50000000
-    max_cart_step: 0.02
+    ik_solver: analytic_piper   # 显式选择: 球腕解析解 (IKFast 闭式已接入, 回代 198/200; 限位过滤带 1e-3 微容差)
+    ik_timeout_ms: 50.0         # 回调线程单次 IK 墙钟预算 (必填)
+    max_acceleration: 5.0       # OTG 关节加速度界 [rad/s²] (机型资产, 必填)
+    max_jerk: 20.0              # [rad/s³] (必填)
     degraded_n: 50
     # ~/target 断流受控减速 (0c): 默认关 —— --once 单发目标是合法用法, 断流策略
     # 只服务流式跟踪 (RL/VLA ingress 连续目标流); 启用时取消注释 (status.stream_stale 置位)
     # stale_timeout_ms: 200.0
     # stale_decel_ms: 200.0
 
+# OTG 门 (设计 §16.4 路线 A): 笛卡尔终点 → 一次 IK → OtgStream 关节 C2 整形流 → JS。
+# 以 inactive 注册 (同 CM); 用法: ros2 control switch_controllers --activate otg_gate_controller
+# 后发 /otg_gate_controller/target (PoseStamped, base 系, 点流)。与 CM 互不干扰 (零接口认领)。
+otg_gate_controller:
+  ros__parameters:
+    base_link: base_link
+    tip_link: link6
+    ik_solver: analytic_piper   # 显式选择 (同 CM; 可选 dls | analytic_piper)
+    max_acceleration: 5.0       # OTG 关节加速度界 [rad/s²] (机型资产, 必填)
+    max_jerk: 20.0              # [rad/s³] (必填)
+    ik_timeout_ms: 50.0         # 回调线程一次 IK 预算 (必填; 缺配置 configure 即拒)
 
 ee_state_broadcaster:
   ros__parameters:

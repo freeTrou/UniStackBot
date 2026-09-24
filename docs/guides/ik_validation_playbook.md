@@ -158,3 +158,56 @@
 
 - **层 7 穿越奇异邻域的流式跟踪 E2E 测试**（径向边界 + 姿态扫掠双路径, 机型盲自校准设计已定稿见会话记录 2026-09-17）——触发: CM 控制器联调出现奇异区行为疑义, 或换臂验收需要
 - J⁺ 排序精化 / 运行时定向加密: 见上文期望值修正与增量纪律
+
+## 8. 求解器定位与组合架构（2026-09-22 裁决）
+
+- **定位**：数值解（本 playbook 主体）= 7 轴冗余臂主场 + 全机型通用 fallback + AB 基准；
+  解析闭式解 = 非冗余球腕 6 轴（Pieper 条件）的正解——piper 已几何实锤球腕，裁决与候选路径
+  见 `arms/piper/ik_decision_card.md`
+- **组合矩阵三轴正交**：机型（launch `robot:=`）× 仿真/硬件链（`chain:` / URDF `use_gazebo`）×
+  求解器（per-robot yaml `ik_solver:`）——IK 住 CM 内，与后端无关，mock/gz/mujoco/真机四链同代码
+- **选择必须显式手动**（2026-09-22 用户纪律）：多种同类型算法并存时，算法↔机型对应永远由人
+  在 per-robot yaml 里声明（`ik_solver: <名字>`）——代码无默认值，缺失 fail-fast 拒配置并列出
+  可选项；激活解在启动日志回显。**永不自动推断**（结构指纹只做"选拒"校验，不做"代选"）
+- **特化解绑定机型**：结构特化求解器（如 piper 解析解）在 `init()` 自校验结构指纹
+  （重做球腕三轴交点判定），不匹配 fail-fast 拒启；通用解（DlsIk / 用户 7 轴解）无此约束
+- **接入 SOP 不变**：任何新求解器（解析或数值）= 实现 `IkSolver` 接口 + yaml `ik_solver:` 切换
+  + 本 playbook 六阶段验证 + 与现行解平级 AB 对比
+
+## 9. 球腕 6 轴机型解析解接入流水线（piper 实例化, 2026-09-23 收拢）
+
+> 近球腕 6 轴臂（指纹残差舍入级）这一**类**的统一处理方案；piper 是第一个完整走通的实例，
+> 下一台同构型机型照此流水线走。§8 是求解器层的组合裁决，本节是机型层的操作流水线。
+
+| 步 | 内容 | 资产（照抄对象） |
+|---|---|---|
+| ① 构型判定 | `check_spherical_wrist(UrdfFk, 1mm)` 机器判定：残差 ≤1mm=近球腕（解析路线可行）/ cm 级=真非球腕（出局走 DLS）。裁决记录进机型决策卡；**指纹只做选拒校验，不做代选** | 判定函数已机型无关（`analytic_piper/`）；决策卡模板 `arms/piper/ik_decision_card.md` |
+| ② 归一化+记账 | IKFast 要求球腕数学精确 → 生成规范化 URDF（垂直残差归零）；**这笔账 = 该机型稳态精度地板**，记决策卡 §1。piper: 88µm 账 → 实测 0.089mm 收敛地板（逐位对上）。残差逼近容差要 flag（地板变大可能不配走解析） | `analytic_piper/gen/`（规范化 URDF + 账） |
+| ③ 生成管线 | podman+OpenRAVE 容器生成，三坑（collada 转换 / sympy 0.7.4 补丁 / 容器内自检误报）已内置配方；产物 vendored 入库（Apache-2.0）+ CMake 单文件关固有警告 | `gen/generate_in_container.sh`（跑通版配方） |
+| ④ 适配层 | `Analytic<Robot> : IkSolver` 语义全类锁死：init() 指纹自校验（配错机型 fail-fast）/ 全解枚举→**限位过滤带 `kLimitEpsRad` 微容差**→距 seed 最近解 / 诚实结果码 UNREACHABLE·LIMIT_CONFLICT·UNSUPPORTED / stats: iterations=0, min_sigma=-1 / 契约 1 失败不改 out_q。**代码抽取时机 = 第二台此构型机型落地时**抽公共基类（两处以上消费才上收，不预抽象） | `analytic_piper/analytic_piper.cpp` |
+| ⑤ CM 接线 | per-robot yaml `ik_solver: analytic_<robot>`（无默认、显式声明）；CM 主路径+worker 各加一个选择分支；启动日志回显激活解 | `cartesian_motion_controller.cpp` 选择分支 |
+| ⑥ 验证 | 本 playbook 六阶段 + 类专属用例：FK-IK 回代黄金测试（容差 = 归一化账 + 机器精度）/ 分支枚举断言（球腕 8 分支）/ **限位契约测试必含零位与贴限位目标**（2026-09-23 实锤教训，见下）/ AB 对比 DLS | `analytic_piper/test/` 三件套 |
+
+### 类专属教训（2026-09-23 piper 实锤，全类适用）
+
+- **零位压限位线的臂会"上得去、回不来"**：零位 j2/j3 恰在限位线上（piper j2 下限=0、j3 上限=0），
+  归一化账的关节侧微偏移（j2=-8.8e-5/j3=+3.4e-4 rad）使零位位姿的 8 个解析解**全被严格限位过滤
+  拒掉**（LIMIT_CONFLICT，回零目标 3 拍拒绝+冷启动同拒）。修法已制度化：`kLimitEpsRad=1e-3` 只放宽
+  "接受判定"，输出仍被 CM applySolution 限位 clamp + write 层最终防线硬钳——分层语义不变。
+  任何"解恰好贴限位线"的目标位姿都属此类（零位、贴限位示教点）。
+- **判收敛的消费者注意解析解的稳态地板**：误差 = 归一化账（piper 0.089mm），收敛阈值必须高于它；
+  demo 类脚本判收敛**必须清陈旧状态缓存**（只认发布之后的新 status，否则旧目标的 conv=True 假阳性）。
+- **AB 对比的预期差异**：DLS 在真臂 URDF 上迭代、无归一化账——解析解稳态误差恒比 DLS 高出
+  该账（88µm@piper），这是预期不是 bug。
+
+### 常备账目与类边界
+
+| 账目 | 状态 |
+|---|---|
+| 归一化偏差 → 精度地板 | 记决策卡 §1，验收核对 |
+| ε 限位容差（kLimitEpsRad） | 已制度化（analytic_piper，第二机型复用） |
+| 亚 0.1mm 任务 → 解析种 + 真臂牛顿抛光 1-2 步 | 挂账，真机精密任务触发 |
+| IkFast IkSolutionList 小分配（≤8 解） | 挂账 RT 纯化，同 urdf_fk KDL 暂存先例 |
+
+**不走此路线**：7 轴冗余（闭式解数学上不存在，如 xarm7）、偏置腕/非球腕 6 轴（指纹 cm 级拒）→ 一律
+DLS；**数值解永远是全机型 fallback**——解析解任何问题 yaml 一行切回。

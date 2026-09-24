@@ -28,12 +28,19 @@ find_package(unistackbot_interface REQUIRED)
 add_library(${PROJECT_NAME} SHARED
 	urdf_fk/urdf_fk.cpp
 	dls_ik/dls_ik.cpp
+	analytic_piper/analytic_piper.cpp
+	analytic_piper/piper_ikfast.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
 	$<INSTALL_INTERFACE:include>
+)
+# piper_ikfast.cpp 为 vendored 生成物 (ikfast.h 固有警告) → 单文件关该警告;
+# IKFAST_CLIBRARY: 函数以 extern "C" 导出 (与 analytic_piper.cpp 的声明链接一致)
+set_source_files_properties(analytic_piper/piper_ikfast.cpp PROPERTIES
+	COMPILE_OPTIONS "-Wno-ignored-qualifiers;-Wno-pedantic;-Wno-unused-parameter;-DIKFAST_CLIBRARY;-DIKFAST_NO_MAIN"
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 ament_target_dependencies(${PROJECT_NAME}
@@ -42,7 +49,7 @@ ament_target_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
 
 # 头文件随算法文件夹整体安装 (只装 .hpp, test/ 与 .cpp 不进 install)
-install(DIRECTORY urdf_fk ik_solver dls_ik
+install(DIRECTORY urdf_fk ik_solver dls_ik analytic_piper
 	DESTINATION include
 	FILES_MATCHING PATTERN "*.hpp"
 )

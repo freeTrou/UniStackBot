@@ -23,6 +23,16 @@ struct CartesianPose
 };
 
 /*
+ * 关节轴 (base 系, 零位): 轴上点 = 关节原点, 方向 = 单位轴向。
+ * 结构指纹判定用 (球腕三轴共点等) —— 轴线与关节值无关 (转自己轴不动线)。
+ */
+struct JointAxis
+{
+	double px{0.0}, py{0.0}, pz{0.0};
+	double dx{0.0}, dy{0.0}, dz{1.0};
+};
+
+/*
  * URDF 运动学库 —— 形态盲: 机型只是 URDF 数据, 库零机型知识。
  *
  * 能力: FK (关节角 -> 末端位姿) + 雅可比 (关节角 -> 6×n 末端速度映射)。
@@ -81,12 +91,16 @@ public:
 	// 链序关节名 (基座->tip; fk() 的 q 向量按此顺序)
 	[[nodiscard]] const std::vector<std::string> & jointNames() const {return joint_names_;}
 
+	// 链序各活动关节的轴 (base 系, 零位; 长度 = jointCount)。结构指纹判定用。
+	[[nodiscard]] bool jointAxesAtZero(std::vector<JointAxis> & out) const;
+
 private:
 	KDL::Chain chain_;
 	std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_solver_;
 	std::unique_ptr<KDL::ChainJntToJacSolver> jac_solver_;
 	std::vector<double> q_min_, q_max_;   // 链序限位 (init 时自 URDF 提取)
 	std::vector<std::string> joint_names_;   // 链序关节名
+	std::vector<JointAxis> axes_;   // 链序关节轴 (base 系, 零位; init 时提取)
 	bool ready_{false};
 	double max_reach_{0.0};   // 链长上界 (init 时累计)
 };

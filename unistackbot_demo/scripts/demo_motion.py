@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""给 JointStream 发送一段往返演示运动 (正弦过渡的 50Hz 点流), 机型无关。
+"""给 JointStream 发送一段往返演示运动 (正弦过渡的点流), 机型无关。
 
 2026-09-21 重写: JTC action 退役 → JointCommand 点流 (点流语义: 每条消息=最新目标,
 控制器端每周期步长饱和逼近——上层只管把目标流平滑地发下来)。
+
+三 demo = 三种命令域覆盖 (设计 §16.2 透传原则, 2026-09-23):
+  demo_cartesian.py                末端位姿流 (IK 伺服路径, 慢于总线)
+  demo_motion.py --hz 50 (默认)    关节慢流 (率失配 → JS ruckig 填充)
+  demo_joint_fullrate (C++)        关节满速流 (= update_rate; rclpy 到不了 500Hz,
+                                   满速域必须 C++, 见 demo_motion --hz 高值时的诚实报告)
 
 关节表/限位解析自 robot_state_publisher 的 robot_description (URDF <ros2_control> 块,
 带 position 命令接口的关节, 与 JointStream 解析口径一致), 路径点按限位区间百分比推算
@@ -10,7 +16,7 @@
 
 前置: 三链任一已启动 (control/ign/mujoco.launch.py) 且 joint_stream_controller active。
 
-用法: ros2 run unistackbot_bringup demo_motion.py [--hz 50] [--cycles 1]
+用法: ros2 run unistackbot_demo demo_motion.py [--hz 50] [--cycles 1]
 """
 
 import math
@@ -40,6 +46,8 @@ class DemoMotion(Node):
 		req.names = [name]
 		fut = cli.call_async(req)
 		rclpy.spin_until_future_complete(self, fut, timeout_sec=5.0)
+		if fut.result() is None:
+			raise RuntimeError('参数 %s/%s 调用 5 秒无响应 (CM 忙/链路退化)' % (node_name, name))
 		return fut.result().values[0]
 
 	def _fetch_contract(self):
@@ -47,6 +55,7 @@ class DemoMotion(Node):
 
 		mimic 关节 (mock 链手指: 有命令接口但无 min/max, 只有 mimic/multiplier)
 		也必须列全 —— JS 契约要求消息含全部命令关节; 其目标 = multiplier×主关节+offset。
+		分类口径与 C++ (urdf_command_joints.hpp / demo_joint_fullrate) 一致: mimic 先判。
 		返回 (直控关节表, 直控限位表, mimic 关节表[(name, master, k, off)])。"""
 		uv = self._get_param('/robot_state_publisher', 'robot_description')
 		if not uv.string_value:
@@ -59,14 +68,21 @@ class DemoMotion(Node):
 				continue
 			name = j.get('name')
 			ps = {p.get('name'): p.text for p in j.findall('param')}
-			if 'min' in ps and 'max' in ps:
-				joints.append(name)
-				lims.append((float(ps['min']), float(ps['max'])))
-			elif 'mimic' in ps:
+			if 'mimic' in ps:
 				mimics.append((name, ps['mimic'],
 				               float(ps.get('multiplier', '1')), float(ps.get('offset', '0'))))
+			elif 'min' in ps and 'max' in ps:
+				joints.append(name)
+				lims.append((float(ps['min']), float(ps['max'])))
+			else:
+				# 静默丢弃 = JS 按长度拒整条消息 → demo 发流臂不动零诊断 (审查实锤)
+				raise RuntimeError("命令关节 '%s' 无 min/max 也无 mimic 参数, 无法归类" % name)
 		if not joints:
 			raise RuntimeError('URDF ros2_control 块无 position 命令关节')
+		masters = set(joints)
+		for name, master, _, _ in mimics:
+			if master not in masters:
+				raise RuntimeError("mimic 关节 '%s' 的主关节 '%s' 不在直控关节表" % (name, master))
 		return joints, lims, mimics
 
 	def run(self, hz, cycles):
@@ -78,15 +94,19 @@ class DemoMotion(Node):
 		                 history=HistoryPolicy.KEEP_LAST, depth=1)
 		pub = self.create_publisher(JointCommand, '/joint_stream_controller/command', qos)
 
-		# 往返序列 (限位区间百分比): 35% -> 65% -> 20% -> 零位(夹进限位)
+		# 往返序列 (限位区间百分比): 35% -> 65% -> 20% -> 零位(向限位内缩 2%)
+		# 内缩原因: gz 链命令精确停限位会触发限位咬死 (gz_ros2_control #165 残余),
+		# 零位恰在 piper joint2/joint3 的限位线上
 		lo = [l for l, _ in lims]
 		hi = [h for _, h in lims]
 		frac = lambda f: [l + f * (h - l) for l, h in zip(lo, hi)]
-		waypoints = [frac(0.35), frac(0.65), frac(0.20),
-		             [min(max(0.0, l), h) for l, h in zip(lo, hi)]]
+		def inset(v, l, h):
+			return min(max(v, l + 0.02 * (h - l)), h - 0.02 * (h - l))
+		home = [inset(0.0, l, h) for l, h in zip(lo, hi)]
+		waypoints = [frac(0.35), frac(0.65), frac(0.20), home]
 
 		# 段时长按关节跨度保守推算 (最大跨度/1 rad/s, 3~8s 夹紧), 段内 s 曲线平滑过渡
-		prev = [min(max(0.0, l), h) for l, h in zip(lo, hi)]
+		prev = list(home)
 		plan = []
 		for wp in waypoints:
 			span = max(abs(p - q) for p, q in zip(wp, prev))
@@ -107,6 +127,9 @@ class DemoMotion(Node):
 			return pos
 
 		per_msg_timeout = 1.0 / hz
+		sent = 0
+		late = 0
+		t_start = time.time()
 		for prev, wp, dur in plan * cycles:
 			t0 = time.time()
 			i = 0
@@ -123,12 +146,21 @@ class DemoMotion(Node):
 				m.position = full_positions(
 					[p + s * (w - p) for p, w in zip(prev, wp)])
 				pub.publish(m)
+				sent += 1
 				i += 1
+				# 绝对时间步进 (相对 sleep 会累积漂移, 矩阵测试的 x 轴要诚实)
 				nxt = t0 + i * per_msg_timeout
-				if nxt > time.time():
-					time.sleep(nxt - time.time())
-				rclpy.spin_once(self, timeout_sec=0)
-		self.get_logger().info('演示流结束 (控制器按断流策略受控减速收尾)')
+				delay = nxt - time.time()
+				if delay > 0.0:
+					time.sleep(delay)
+				else:
+					late += 1
+		wall = time.time() - t_start
+		achieved = sent / wall if wall > 0.0 else 0.0
+		late_note = ('; %d 拍落后 (rclpy 跟不上, 高频域请用 demo_joint_fullrate)' % late) if late else ''
+		self.get_logger().info('演示流结束: 名义 %dHz, 实际达成 %.1fHz (%d 条 / %.1fs)%s' % (
+			hz, achieved, sent, wall, late_note))
+		self.get_logger().info('收尾: 控制器按断流策略受控减速')
 
 
 def main(args=None):
@@ -141,13 +173,18 @@ def main(args=None):
 			hz = int(argv.pop(0))
 		elif a == '--cycles':
 			cycles = int(argv.pop(0))
+		else:
+			raise SystemExit("未知参数 '%s' (支持: --hz <n> --cycles <n>)" % a)
 	rclpy.init(args=args)
 	node = DemoMotion()
 	try:
 		node.run(hz, cycles)
 	finally:
 		node.destroy_node()
-		rclpy.shutdown()
+		try:
+			rclpy.shutdown()
+		except Exception:
+			pass   # Ctrl-C 时 context 已关, 二次 shutdown 会抛 (守护, 不掩盖主流程)
 
 
 if __name__ == '__main__':

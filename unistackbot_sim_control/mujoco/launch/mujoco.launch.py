@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
@@ -14,6 +14,7 @@ def _launch_setup(context):
     robot = LaunchConfiguration('robot').perform(context)
     headless = LaunchConfiguration('headless').perform(context) == 'true'
     use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
+    bus_hz = LaunchConfiguration('bus_hz').perform(context)
 
     desc_share = get_package_share_directory('unistackbot_description')
     xacro_path = os.path.join(desc_share, 'arms', robot, 'urdf', f'{robot}.urdf.xacro')
@@ -75,14 +76,19 @@ def _launch_setup(context):
         # apt 0.1.2 无 MUJOCO_HEADLESS 环境变量支持 (PR #157 未随发布), headless 走
         # URDF 硬件参数; 此处 env 为后续版本升级的保险, 无害
         control_node_kwargs['additional_env'] = {'MUJOCO_HEADLESS': '1'}
+    # bus_hz (频率矩阵测试, 同 mock 链): -p 全局覆盖压过 yaml /** 通配节,
+    # CM 循环与全部控制器节点同拍切换 (定制节点同样经 rcl 全局参数解析)
+    mujoco_parameters = [
+        {'use_sim_time': True},
+        {'robot_description': ParameterValue(robot_description_content, value_type=str)},
+        controllers_yaml,
+    ]
+    if bus_hz:
+        mujoco_parameters.append({'update_rate': int(bus_hz)})
     mujoco_control = Node(
         package='mujoco_ros2_control',
         executable='ros2_control_node',
-        parameters=[
-            {'use_sim_time': True},
-            {'robot_description': ParameterValue(robot_description_content, value_type=str)},
-            controllers_yaml,
-        ],
+        parameters=mujoco_parameters,
         output='screen',
         **control_node_kwargs,
     )
@@ -108,41 +114,42 @@ def _launch_setup(context):
             output='screen',
         ))
 
-    spawners = [
+    # spawner 竞态防御 (2026-09-23, 官方依据 ros2_control issue #2071):
+    #   根因不是"没重试"(spawner 内建 3 次, max_attempts=3), 而是 10s service-call 窗口内
+    #   CM 忙(mujoco on_init 载 MJCF 模型)响应未归 → 盲目重试撞半途状态。官方两方向:
+    #   ①delay the spawners(TimerAction 2s) ②launch_utils/example_13 模式 = 一个 spawner
+    #   进程传控制器列表收拢并发风暴。--service-call-timeout 30s 让内建重试变耐心。
+    #   RMW 层 wait 卡死无解, 由流水线 ⓪ 残留检查兜底; supervisor 即时拉起(纯订阅容忍迟到)。
+    controller_spawners = [
+        # 激活组: 一个 spawner 进程按序 load/configure/activate (官方 example_13 模式)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+            arguments=['joint_state_broadcaster', 'joint_stream_controller',
+                       'ee_state_broadcaster',
+                       '--controller-manager', '/controller_manager',
+                       '--service-call-timeout', '30'],
             output='screen',
         ),
+        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, switch_controllers 切换)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_stream_controller', '--controller-manager', '/controller_manager'],
+            arguments=['cartesian_motion_controller',
+                       '--controller-manager', '/controller_manager',
+                       '--service-call-timeout', '30', '--inactive'],
             output='screen',
         ),
-        Node(
-        	package='controller_manager',
-        	executable='spawner',
-        	arguments=['ee_state_broadcaster', '--controller-manager', '/controller_manager'],
-        	output='screen',
-        ),
+    ]
+
+    return nodes + [
         Node(
         	package='unistackbot_bringup',
         	executable='supervisor_node',
         	output='screen',
         ),
-        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, 与 JointStream 由 switch_controllers 切换)
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['cartesian_motion_controller', '--controller-manager',
-                       '/controller_manager', '--inactive'],
-            output='screen',
-        ),
+        TimerAction(period=2.0, actions=controller_spawners),
     ]
-
-    return nodes + spawners
 
 
 def generate_launch_description():
@@ -150,9 +157,11 @@ def generate_launch_description():
         # DDS 跟随机器默认配置 (~/cyclonedds.xml), launch 不再覆盖
         DeclareLaunchArgument('robot',
                               description='机型名(必填), 对应 unistackbot_description/arms/<robot>/ 与 bringup config/<robot>_controllers.yaml'),
-        DeclareLaunchArgument('headless', default_value='true',
-                              description='无头模式 (不拉 MuJoCo Simulate 渲染窗); false 时需可用 DISPLAY'),
+        DeclareLaunchArgument('headless', default_value='false',
+                              description='无头模式 (true=不拉 MuJoCo Simulate 渲染窗, 基准/录制用); 默认带界面 (与 gz 链 gui 默认对齐), 需可用 DISPLAY'),
         DeclareLaunchArgument('use_rviz', default_value='false',
                               description='是否启动 RViz2'),
+        DeclareLaunchArgument('bus_hz', default_value='',
+                              description='总线/CM 频率覆盖 (Hz, 如 500/1000); 空=yaml update_rate 生效'),
         OpaqueFunction(function=_launch_setup),
     ])

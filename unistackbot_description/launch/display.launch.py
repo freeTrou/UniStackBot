@@ -16,6 +16,18 @@ from launch_ros.substitutions import FindPackageShare
 
 def _launch_setup(context):
     model = LaunchConfiguration('model').perform(context)
+    if not model:
+        # 机型无默认值 (2026-09-22 纪律): 必须显式指定, fail-fast 列可用项
+        import os as _os
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            _arms = _os.path.join(
+                get_package_share_directory('unistackbot_description'), 'arms')
+            _avail = ', '.join(sorted(_os.listdir(_arms)))
+        except Exception:
+            _avail = '未知'
+        raise RuntimeError(
+            '缺必填参数 model (机型 xacro/urdf 路径)。可用机型: ' + _avail)
     use_gripper = LaunchConfiguration('use_gripper').perform(context)
     use_ros2_control = LaunchConfiguration('use_ros2_control').perform(context)
     use_world = LaunchConfiguration('use_world').perform(context)
@@ -78,16 +90,11 @@ def _launch_setup(context):
 
 
 def generate_launch_description():
-    model_default = PathJoinSubstitution([
-        FindPackageShare('unistackbot_description'),
-        'arms', 'piper', 'urdf', 'piper.urdf.xacro'
-    ])
-
     return LaunchDescription([
         DeclareLaunchArgument(
             'model',
-            default_value=model_default,
-            description='URDF/Xacro 文件路径（默认 piper.urdf.xacro）'
+            description='URDF/Xacro 文件路径（必填, 机型无默认值; '
+                        '例: $(ros2 pkg prefix --share unistackbot_description)/arms/xarm7/urdf/xarm7.urdf.xacro）'
         ),
         DeclareLaunchArgument(
             'use_gripper', default_value='true',
