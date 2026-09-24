@@ -31,7 +31,11 @@ install(TARGETS supervisor_node
 )
 
 # 控制 demo 已独立成包 unistackbot_demo (2026-09-23): 三命令域演示程序 (末端/关节慢/关节满速)
-# scripts/ 目录随之退役 (空目录不保留)
+# scripts/ 目录 2026-09-24 重开: 三链通用清场脚本 (起链前/收场后调用; gz 家族模式与
+# unistackbot_gazebo 的 gz_clean.sh 镜像, 模式安全规则见脚本头)
+install(PROGRAMS scripts/chain_clean.sh
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

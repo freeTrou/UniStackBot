@@ -421,7 +421,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	watch_.reset();   // 重激活不继承断流态
 	stream_stale_ = false;
 	was_stale_ = false;
-	// 重激活防重放 (同 OTG 门/worker 先例): SpLatest 留着上一次激活期的解算结果,
+	// 重激活防重放 (SpLatest 残值先例): SpLatest 留着上一次激活期的解算结果,
 	// 预读残值记 seq 水位并弃用 —— 重激活不追陈旧目标 (臂可能已被别处动过)
 	SolvedTarget residual;
 	(void)solved_ch_.read(residual, target_seq_);

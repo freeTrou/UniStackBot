@@ -5,6 +5,7 @@
 | 文档 | 一句话 | 备注 |
 |---|---|---|
 | [architecture/hardware_framework_design.md](architecture/hardware_framework_design.md) | 真机层与通用框架设计总纲（master.hpp 契约/形态盲/§14 边界） | 讨论中未收口 |
+| [architecture/real_hardware_architecture.md](architecture/real_hardware_architecture.md) | **真机架构定稿视图**（多总线×多臂: 七原则/四轴分层/调度阶梯实测/双臂形态/接口统一/决策索引） | 2026-09-24 分叉自立, 讨论见母文档 |
 | [architecture/rt_software_architecture.md](architecture/rt_software_architecture.md) | RT 软件架构宣言（七支柱） | RT 代码纪律依据 |
 | [bus/socketcan_master_design.md](bus/socketcan_master_design.md) | SocketCAN CAN FD 主站完整设计 | 对 master.hpp 契约 |
 | [bus/ethercat_master_design.md](bus/ethercat_master_design.md) | IgH EtherCAT 主站完整设计（1kHz+DC） | 与 SocketCAN 结构平行 |

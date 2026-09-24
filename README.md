@@ -14,7 +14,7 @@
 ├─────────────────────────────────────────────┤
 │          unistackbot_algorithm              │  纯算法库 (FK/IK/求解器接口/种子库)
 ├─────────────────────────────────────────────┤
-│          unistackbot_hardware               │  真机驱动 / 总线主站 (骨架, 设计先行)
+│          unistackbot_hardware               │  真机域容器: 三骨架 + 三轴包 (protocol/statemachine/bus)
 │   └─ unistackbot_sim_control/               │  仿真集成组 (容器, 三独立包)
 │      core / gazebo / mujoco                 │    统一仿真层 + Gazebo + MuJoCo
 ├─────────────────────────────────────────────┤
@@ -32,7 +32,7 @@
 | `unistackbot_controller` | CM（笛卡尔流式）+ JS（关节点流式）+ EE 反馈 + 工具节点 | [README](unistackbot_controller/README.md) |
 | `unistackbot_algorithm` | urdf_fk / dls_ik / IkSolver 接口 / 种子库 | [README](unistackbot_algorithm/README.md) |
 | `unistackbot_description` | URDF/Xacro + mesh + MJCF + RViz（横切层） | [README](unistackbot_description/README.md) |
-| `unistackbot_hardware` | 真机驱动 / 总线主站（空骨架） | [README](unistackbot_hardware/README.md) |
+| `unistackbot_hardware` | 真机域容器（protocol codec 轴 + statemachine 翻译轴 + bus 交换轴 + 三骨架目录） | [README](unistackbot_hardware/README.md) |
 | `unistackbot_sim_control/` | 仿真集成组：core + gazebo + mujoco | [README](unistackbot_sim_control/README.md) |
 | `unistackbot_interface` | 跨包/跨仓库共享类型单一事实源 | [README](unistackbot_interface/README.md) |
 | `unistackbot_common` | 组件库，非 ROS 包（无锁原语/日志/RT 调优） | [README](unistackbot_common/README.md) |

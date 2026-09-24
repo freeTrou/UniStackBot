@@ -30,26 +30,12 @@ IK 上环宿主：`cartesian_motion_controller/` 自包含文件夹。双机型�
 
 EE 位姿独立反馈流：`~/ee_state` PoseStamped（base 系，FK(关节状态)，50Hz）。**只读**（零命令接口，CM 切走后反馈不断流），三链第四 spawner。旋转表示决策挂起，先四元数载体。
 
-## OtgGateController（OTG 门, P1, 2026-09-23）
+## OtgGateController —— 已退役（2026-09-24 删代码）
 
-设计 §16.4 路线 A 的壳：**"上层只有终点"的对齐服务** —— 笛卡尔终点 →（回调线程一次
-IK, 50ms 预算）→ 关节终点 →（RT 环 OtgStream 每拍整形）→ **总线频率 JointCommand
-点流** → JS（hold 档满速退化 = 透传）→ write 层防线。本路径引入关节 C2 平滑与
-加速度界（消解 CM"加速度界挂真机前"挂账）。
-
-- 契约: 订阅 `~/target`(PoseStamped, base 系, 点流) + `/joint_states`(实测快照, 非链
-  关节回显源); 发布 `/joint_stream_controller/command`(CSP, 500Hz 实测)。**零接口认领**
-  （与 JS/CM/EE 全共存, inactive 注册同 CM）
-- 线程: IK 在订阅回调线程（RT 环零运动学）; RT = OtgStream(~µs) + RealtimePublisher
-  trylock（joint_names 激活期预填, RT 只写 position 数值, 零分配）
-- 关节表: 全 position 命令关节（`controller_common/urdf_command_joints.hpp`, 与 JS 同源）;
-  链关节 = OTG 输出, 非链关节 = 实测回显（门不发明夹爪运动）
-- 参数纪律: `base_link`/`tip_link`/`ik_solver` **必填无默认**（同 CM; dls | analytic_piper）;
-  `max_acceleration`/`max_jerk` = OTG 界（机型资产 yaml）; dt = 首拍 16 中位数校准（同 JS/CM）
-- 用法: `ros2 run controller_manager spawner otg_gate_controller` → 发
-  `/otg_gate_controller/target`。不可达终点 → 求解拒绝 WARN 保持上一目标（诚实失败）
-- mock E2E (2026-09-23): +20cm 终点到位误差 0.088mm(账地板), 命令流 500.03Hz,
-  不可达 (result=1) 拒绝保持, 回程到位
+OTG 门（2026-09-23 落地）在 §16.6 语义统一裁决后架构并入 CM：**其通路（订阅回调线程
+一次 IK → RT 环 OtgStream 输出级）就是 CM 的新实现**，独立控制器不再存在。终点命令
+直接发 `/cartesian_motion_controller/target`（CM 默认可打断，OtgStream 自目标刹停/保持）。
+决策记录见 `docs/architecture/hardware_framework_design.md` §16.4/§16.6。
 
 ## 工具节点
 

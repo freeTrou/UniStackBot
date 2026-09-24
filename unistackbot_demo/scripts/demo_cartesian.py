@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """给 CartesianMotionController 发一段笛卡尔演示/测试运动 (末端位姿目标), 机型无关。
 
-两种 pattern:
+四种 pattern:
   up   (默认, 演示腿): 切 CM 接管 → 当前位姿 +z 偏移 → 等收敛 → 回原位姿 → 切回 JS。
   axes (2026-09-23 多点位测试): 抬升 --offset 到基准位 → 以基准为原点 8 方向
        (±x/±y/±z/x+y/x-y) --sweep 偏移逐点往返, 每点后回基准 → 汇总。
        抬升位 2cm 扫描探针实测 (piper+analytic): 7/8 可解, -x 限位冲突诚实拒。
-  sweep (2026-09-23 大幅运动): 抬升 --lift → 前伸 --fwd 部署 → r=--span 圆周整圈
-       (16 点连续) → 上浮/回圆心 → 收回落零。全程按 --speed (m/s) 插值目标流。
+  sweep (2026-09-23 大幅运动; 2026-09-24 快慢变速): 抬升 --lift → 前伸 --fwd 部署 →
+       r=--span 圆周整圈 (16 点连续, 逐点快慢交替) → 上浮/回圆心 → 收回落零。
+       全程按 --speed (m/s) ×每腿系数 (慢 0.5 / 快 1.6) 插值目标流, 总程 >20s。
        piper 工作空间探针: 零位仅 +z 可行 (z 阶梯 300mm 全通); 部署位 (z+200,x+200)
        邻域 ±150mm 球 6/6 + r=100mm 圆周 8/8 全可解——大幅度必须先部署出去。
 
@@ -314,13 +315,15 @@ class DemoCartesian(Node):
 			else:   # sweep: 大幅运动 —— 部署(抬升+前伸) → 圆周整圈 → 上浮/回心 → 收回落零
 				cur = (0.0, 0.0, 0.0)   # 相对快照的当前偏移 (链式插值起点)
 
-				def leg(target, tag, must=False):
-					"""流式走一腿 (距离/speed 定时长); 返回 'conv'/'plateau'/'reject'。
-					收敛与稳态(物理链跟踪到不了 1mm 线但已钉住)都推进 cur, 诚实拒保持原位。"""
+				def leg(target, tag, must=False, spd=1.0):
+					"""流式走一腿 (距离/速度定时长, spd=本腿速度系数——快慢变速); 返回
+					'conv'/'plateau'/'reject'。收敛与稳态(物理链跟踪到不了 1mm 线但已
+					钉住)都推进 cur, 诚实拒保持原位。"""
 					nonlocal cur
 					dist = ((target[0] - cur[0]) ** 2 + (target[1] - cur[1]) ** 2 +
 					        (target[2] - cur[2]) ** 2) ** 0.5
-					dur = dist / speed if speed > 0 else 0.0   # speed=0 单发点到点
+					v = speed * spd
+					dur = dist / v if v > 0 else 0.0   # v<=0 单发点到点
 					steps = max(2, int(round(max(dur, 0.05) * stream_hz))) if dur > 0 else 1
 					t_leg = time.time()
 					dt = 1.0 / stream_hz if dur > 0 else 0.0
@@ -346,24 +349,28 @@ class DemoCartesian(Node):
 						raise RuntimeError('关键腿 "%s" 被拒 (result=%s), 终止' % (tag, v))
 					return 'reject'
 
+				# 快慢变速 (2026-09-24 用户需求: 长时大幅动作有快有慢): 每腿速度系数
+				# 乘 --speed —— 慢 0.5× / 快 1.6×, 圆周逐点交替, 大腿各自快慢
 				plan = [
-					((0.0, 0.0, lift), '部署·抬升 z+%.0fcm' % (lift * 100.0), True),
-					((fwd, 0.0, lift), '部署·前伸 x+%.0fcm' % (fwd * 100.0), True),
+					((0.0, 0.0, lift), '部署·抬升 z+%.0fcm·慢' % (lift * 100.0), True, 0.5),
+					((fwd, 0.0, lift), '部署·前伸 x+%.0fcm·快' % (fwd * 100.0), True, 1.6),
 				]
 				for k in range(1, 17):   # 圆周 16 点连续整圈 (探针: r=100mm 8/8 可解)
 					th = 2.0 * math.pi * k / 16.0
+					fast = k % 2 == 1
 					plan.append(((fwd + span * math.cos(th), span * math.sin(th), lift),
-					             '圆周 %2d/16' % k, False))
+					             '圆周 %2d/16·%s' % (k, '快' if fast else '慢'), False,
+					             1.6 if fast else 0.5))
 				plan += [
-					((fwd, 0.0, lift + span), '上浮 z+%.0fcm' % (span * 100.0), False),
-					((fwd, 0.0, lift), '回圆心', False),
-					((0.0, 0.0, lift), '收·回中', False),
-					((0.0, 0.0, 0.0), '收·落回起点', False),
+					((fwd, 0.0, lift + span), '上浮 z+%.0fcm·快' % (span * 100.0), False, 1.6),
+					((fwd, 0.0, lift), '回圆心·慢', False, 0.5),
+					((0.0, 0.0, lift), '收·回中·快', False, 1.6),
+					((0.0, 0.0, 0.0), '收·落回起点·慢', False, 0.5),
 				]
 				ok_n = pl_n = rej_n = 0
 				t0 = time.time()
-				for target, tag, must in plan:
-					k = leg(target, tag, must)
+				for target, tag, must, spd in plan:
+					k = leg(target, tag, must, spd)
 					if k == 'conv':
 						ok_n += 1
 					elif k == 'plateau':

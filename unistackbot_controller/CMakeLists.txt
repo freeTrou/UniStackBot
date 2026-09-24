@@ -61,27 +61,9 @@ pluginlib_export_plugin_description_file(controller_interface
 pluginlib_export_plugin_description_file(controller_interface
   ee_state_broadcaster/ee_state_broadcaster.xml
 )
-# OTG 门 (P1, 设计 §16.4 路线 A): 笛卡尔终点 → IK → OtgStream 关节整形流
-file(GLOB OTG_GATE_RUCKIG ${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common/ruckig/src/ruckig/*.cpp)
-add_library(otg_gate_controller SHARED
-  otg_gate/otg_gate_controller.cpp
-  ${OTG_GATE_RUCKIG}
-)
-target_compile_features(otg_gate_controller PUBLIC cxx_std_17)
-target_include_directories(otg_gate_controller PRIVATE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common/ruckig/include>
-)
-ament_target_dependencies(otg_gate_controller
-  rclcpp controller_interface realtime_tools pluginlib ament_index_cpp
-  geometry_msgs sensor_msgs unistackbot_interface unistackbot_algorithm
-)
-target_link_libraries(otg_gate_controller ${TINYXML2_LIBRARY})
-pluginlib_export_plugin_description_file(controller_interface
-  otg_gate/otg_gate_controller.xml
-)
+# OTG 门已退役 (2026-09-24 实做删除): §16.6 语义统一后其架构 (回调 IK + RT 环
+# OtgStream 输出级) 并入 CM, 即 CM 本身; 决策记录见设计文档 §16.4/§16.6
+
 # 关节级 topic 流式控制器 (取代 JTC action 层, 2026-09-18 裁决)
 file(GLOB RUCKIG_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common/ruckig/src/ruckig/*.cpp)
 add_library(joint_stream_controller SHARED
@@ -151,7 +133,7 @@ target_include_directories(ik_tool PRIVATE
 install(TARGETS fk_tool ik_tool ik_demo_node
   DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS cartesian_motion_controller joint_stream_controller otg_gate_controller
+install(TARGETS cartesian_motion_controller joint_stream_controller
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -160,9 +142,6 @@ install(TARGETS cartesian_motion_controller joint_stream_controller otg_gate_con
 # pluginlib 环境钩子按"包内相对路径"解析 xml —— 安装必须保持目录结构, 不能拍平
 install(FILES cartesian_motion_controller/cartesian_motion_controller.xml
   DESTINATION share/${PROJECT_NAME}/cartesian_motion_controller
-)
-install(FILES otg_gate/otg_gate_controller.xml
-  DESTINATION share/${PROJECT_NAME}/otg_gate
 )
 install(FILES joint_stream_controller/joint_stream_controller.xml
   DESTINATION share/${PROJECT_NAME}/joint_stream_controller

@@ -10,9 +10,11 @@
 // (/joint_states 到达周期中位数, ≈ JSB 发布率 = update_rate)。
 //
 // 前置: 三链任一已启动且 joint_stream_controller active。
-// 用法: ros2 run unistackbot_demo demo_joint_fullrate [--ros-args -p duration:=8.0 -p hz:=0.0]
+// 用法: ros2 run unistackbot_demo demo_joint_fullrate [--ros-args -p duration:=14.5 -p hz:=0.0 -p robot:=<机型>]
 //   hz=0 (默认) 自校准; 显式指定则以指定值发布 (实际达成率结束时如实报告)。
-// 运动内容: 实测位 → 各直控关节向限位区间中位偏移 30% (正弦过渡) → 回实测位。
+// 运动内容 (2026-09-24 用户需求: >10s + 大幅 + 有快有慢): 实测位 → 85% → 15% →
+//   85% → 回实测位 (限位区间百分比), 四段快慢交替 (2.0/6.0/2.5/4.0s ≈14.5s);
+//   duration=总时长, 各段按设计占比缩放 (快慢对比保持); 段内正弦过渡。
 // 收尾: 停流即走 JS 断流受控减速 (yaml stale_timeout)。
 
 #include <algorithm>
@@ -145,7 +147,7 @@ int main(int argc, char ** argv)
 {
 	rclcpp::init(argc, argv);
 	auto node = rclcpp::Node::make_shared("demo_joint_fullrate");
-	node->declare_parameter<double>("duration", 8.0);
+	node->declare_parameter<double>("duration", 14.5);   // 四段快慢总时长 (设计值, 2026-09-24)
 	node->declare_parameter<double>("hz", 0.0);
 	node->declare_parameter<std::string>("robot", "");   // 机型名 (多份配置时必填)
 
@@ -356,18 +358,49 @@ int main(int argc, char ** argv)
 	}
 	std::printf("控制频率: %.1f Hz (%s)\n", hz, hz_src);
 
-	// ③ 计划: home → 各关节向限位中位偏移 30% (正弦) → home
-	std::vector<double> wp(joints.size(), 0.0);
-	for (std::size_t i = 0; i < joints.size(); ++i)
+	// ③ 计划: 多段快慢变速大幅序列 (2026-09-24 用户需求: >10s + 大幅 + 有快有慢)。
+	//    段目标 = 限位区间百分比 (frac<0 = 回实测 home); 段时长显式, 快/慢腿交替
+	//    (同跨度命令速度对比 ~3×)。每段起止位置一次性预展开成表 —— 定时器回调
+	//    内只查表插值, 零分配。
+	struct Leg
 	{
-		if (joints[i].has_limits)
+		double frac;
+		double dur;
+	};
+	const std::vector<Leg> legs = {
+		{0.85, 2.0},   // 快: 部署大跨
+		{0.15, 6.0},   // 慢: 摆到对侧 (~70% 限位区间)
+		{0.85, 2.5},   // 快: 回摆全跨度
+		{-1.0, 4.0},   // 慢: 收尾回实测位
+	};
+	double design_total = 0.0;
+	for (const auto & l : legs) {design_total += l.dur;}
+	const double scale = duration / design_total;
+	std::vector<double> leg_t0(legs.size(), 0.0);
+	std::vector<double> leg_dur(legs.size(), 0.0);
+	std::vector<std::vector<double>> leg_from(legs.size(), std::vector<double>(joints.size(), 0.0));
+	std::vector<std::vector<double>> leg_to(legs.size(), std::vector<double>(joints.size(), 0.0));
+	{
+		std::vector<double> prev = home;
+		double t_acc = 0.0;
+		for (std::size_t l = 0; l < legs.size(); ++l)
 		{
-			const double mid = 0.5 * (joints[i].qmin + joints[i].qmax);
-			wp[i] = home[i] + 0.3 * (mid - home[i]);
-		}
-		else
-		{
-			wp[i] = home[i];
+			leg_t0[l] = t_acc;
+			leg_dur[l] = legs[l].dur * scale;
+			t_acc += leg_dur[l];
+			leg_from[l] = prev;
+			for (std::size_t i = 0; i < joints.size(); ++i)
+			{
+				if (legs[l].frac >= 0.0 && joints[i].has_limits)
+				{
+					leg_to[l][i] = joints[i].qmin + legs[l].frac * (joints[i].qmax - joints[i].qmin);
+				}
+				else
+				{
+					leg_to[l][i] = home[i];   // 回实测位 / 无限位关节
+				}
+			}
+			prev = leg_to[l];
 		}
 	}
 
@@ -412,7 +445,8 @@ int main(int argc, char ** argv)
 	const double period = 1.0 / hz;
 	const auto t0 = std::chrono::steady_clock::now();
 	uint64_t count = 0;
-	std::printf("发送满速流 @%.1fHz, 时长 %.1fs (去回两段正弦)...\n", hz, duration);
+	std::printf("发送满速流 @%.1fHz, 时长 %.1fs (四段快慢: 85%%→15%%→85%%→回实测位, 正弦过渡)...\n",
+		hz, duration);
 	rclcpp::TimerBase::SharedPtr timer;
 	timer = node->create_wall_timer(
 		std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(period)),
@@ -432,14 +466,15 @@ int main(int argc, char ** argv)
 				rclcpp::shutdown();
 				return;
 			}
-			const double u = std::min(t / (duration * 0.5), 2.0);   // [0,2): 段1 去, 段2 回
-			const bool back = u >= 1.0;
-			const double a = back ? u - 1.0 : u;
+			// 定位当前段 (段数固定 4, 线性扫够用; a 钳 1 兜尾拍)
+			std::size_t l = 0;
+			while (l + 1 < legs.size() && t >= leg_t0[l + 1]) {++l;}
+			const double a = leg_dur[l] > 0.0
+				? std::min((t - leg_t0[l]) / leg_dur[l], 1.0) : 1.0;
 			const double s = 0.5 * (1.0 - std::cos(M_PI * a));
 			for (std::size_t i = 0; i < joints.size(); ++i)
 			{
-				cmd.position[i] = back ? wp[i] + (home[i] - wp[i]) * s
-				                       : home[i] + (wp[i] - home[i]) * s;
+				cmd.position[i] = leg_from[l][i] + (leg_to[l][i] - leg_from[l][i]) * s;
 			}
 			for (std::size_t m = 0; m < mimics.size(); ++m)
 			{

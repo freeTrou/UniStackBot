@@ -46,3 +46,16 @@ python /tmp/validate_piper_mjcf.py   # 零位保持 / mimic 收敛 / 全关节�
   joint damping/frictionloss=0.1 (转换器按 URDF effort 自动加 actuatorfrcrange)。
   全关节并发稳态误差 ≤5 mrad (离线验证), 上链后按跟踪调。
 - **timestep**: 默认 0.002 (500Hz) 与控制器 update_rate 对齐。
+
+## 链上 E2E (改版 CM §16.6 回归, 2026-09-24)
+
+kp 两轮调参后 (j2/j3/j4 = 24000/16000/8000, 见 piper.xml 注释账) + 新 CM
+(回调线程逐条 IK, 种子=实测 → OtgStream C2):
+
+- **demo_cartesian up**: 双腿真收敛 0.706 / 0.273 mm (无 plateau)。
+- **demo_cartesian sweep** (大幅+快慢变速): **22/22 腿收敛 0 拒, err 0.206-0.973 mm,
+  24.9s** —— 旧架构同链 19/22 + 3 腿骑线 plateau (1.01-1.14mm); 每条消息以实测位姿
+  为种子重解 IK 把重力下垂闭环追回, 最差腿进 1mm 容差线 (§16.6 "下垂按消息率追回"
+  的实证)。
+- **demo_joint_fullrate**: 500Hz 配置直读 / 100.0% 达成 / 7 关节 (手指 passive 无 mimic
+  尾 = mujoco 链指纹)。

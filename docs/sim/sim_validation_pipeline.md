@@ -144,14 +144,15 @@ bash test/rt_chain_bench.sh piper_first_0922 --robot piper --chain mujoco
 **链 1/3 mock（本阶段必录）**——按序执行，每步等上一步收尾：
 
 ```bash
-# ⓪ 残留检查 (2026-09-23 实锤: 三条链的 robot_state_publisher 同活 → demo 读到别链
-#    的 URDF 变体 → 关节表错 → JS 因"未列全命令关节"静默丢消息 → demo 发流臂不动。
-#    supervisor_node 也要查——2026-09-23 实锤 24 个孤儿积累整天无人发现, 因残留检查
-#    模式里没它; 它本身 SIGINT 正常退出, 孤儿全来自旁路 launch 的收场方式)
-pgrep -af "robot_state_publisher|ros2_control_node|supervisor_node" | grep -v grep   # 必须=空
-#    清理用 [x] 括号防 pgrep -f 自匹配 (实锤: 模式含自身命令行会把清理命令自己杀死, exit 144):
-for p in $(pgrep -f "[s]upervisor_node|[r]os2_control_node|[r]obot_state_publisher"); do kill $p; done
-ros2 daemon stop                                                     # 清 DDS 缓存的陈旧参与者
+# ⓪ 残留清场 (2026-09-24 固化成脚本; 历史实锤: 三条链的 robot_state_publisher 同活
+#    → demo 读到别链的 URDF 变体 → 关节表错 → JS 静默丢消息 → 发流臂不动; supervisor_node
+#    孤儿也曾积累整天无人发现。2026-09-24 教训: 手打 pgrep 模式误杀过系统进程 gvfsd-*——
+#    一律走脚本, 它的模式已路径锚定+方括号化)
+#    单独执行! (它会杀 ros2 launch 宿主, 勿与 launch 命令同行)
+ros2 run unistackbot_bringup chain_clean.sh || exit 1   # exit 0=干净 (杀三链残留+gz 家族+挂死 CLI+停 daemon)
+#    手动兜底 (脚本不可用时, 模式必须 [x] 括号防自匹配自杀 exit 144):
+#    pgrep -af "[r]os2_control_node|[r]obot_state_publisher|[s]upervisor_node"   # 必须=空
+#    ros2 daemon stop
 
 # ① 起链 —— spawner 竞态防御 (2026-09-23 定稿, 官方依据 ros2_control issue #2071):
 #    launch 已收拢为 2 个 spawner 进程(激活组列表 + inactive 组, 官方 example_13 模式)
@@ -264,10 +265,10 @@ bash test/rate_matrix_bench.sh <标签> --robot piper --chain mock --bus-hz 500 
 门（每链 2+1 演示）：曲线人检——演示 1 正弦平滑无抖动（慢流=demo_motion ruckig 填充、满速=
 demo_joint_fullrate 透传，同路径两档对比）；演示 2
 看到"部署 → 圆周连续扫描 → 收回落零"全程流式平滑，status 误差单调收敛无震荡；演示 3
-OTG 门加减速平滑（对照恒速段）、到位 ≈ 账地板、命令流 ≈ update_rate。**判读三条**：① 解析解稳态
+终点+负路径（§16.6 后 CM 即门: 终点到位 ≈ 账地板、不可达拒绝保持、恢复目标照常收敛）。**判读三条**：① 解析解稳态
 误差地板 = 归一化账（piper ≈0.089mm，预期非 bug，DLS 无此账）；② 诚实拒绝（UNREACHABLE=1/
 LIMIT_CONFLICT=4）是解析解的正确行为——脚本记"拒"跳过并在汇总行给出 N/M（零位邻域 ±x/±y 拒绝
-属预期; OTG 门对不可达终点 WARN 拒绝保持）；③ 收敛只认发布后的新 status（脚本已内置清缓存 +
+属预期; CM 对不可达终点拒绝保持）；③ 收敛只认发布后的新 status（脚本已内置清缓存 +
 target_pose 对账，防在途旧帧假收敛）。收场不用 pkill，精确收链。
 
 ### 2.8 归档（G）
@@ -304,6 +305,76 @@ bash test/run_acceptance.sh <robot> [--with-rt]
 
 **已知边界**：流程覆盖"链对命令流的响应"；算法在环由批次 6 消费者样例节点覆盖；
 传感器闭环与多形态保持挂账；真机就绪归 G6（`sim_environment_and_test_plan.md` §5.5/§10）。
-OTG 门（2026-09-23）暂为 §2.7 手动项——**尚未进 verify_robot 自动断言**（mujoco 链验证与
-rt_chain_bench WCET 对比待补后收编）；OTG 门与 CartesianShaper 的设计依据见
+OTG 门已退役（2026-09-23 落地 → **2026-09-24 删代码**, §16.6 并入 CM）——其 E2E 验证
+义务随架构归 CM（mujoco 链回归与 rt_chain_bench WCET 对比仍欠）；命令平滑设计依据见
 `architecture/hardware_framework_design.md` §16。
+
+## 6. 真机迁移（sim → real，2026-09-24 定稿）
+
+> 三链仿真全套验证之后、上真机的最后一段。核心原则：**sim2real 不是跳变，是连续谱
+> ——每一级只换一个变量，每一级有自己的门**。三链本来就是"现实梯度"，真机只是
+> 第四五级，不是另一个世界。首个实例：R1-7A（串口 485）。
+
+### 6.1 现实梯度
+
+```
+mock ──→ gz ──→ mujoco ──→ 假总线 ──→ 真机(盲读) ──→ 真机(锁定) ──→ 真机(微动) ──→ 真机(跟流)
+理想执行器  真仿真器  真动力学    真驱动+假电机   只读不写        零速kp锁       ±1°验证       500Hz流
+  └── 每往右一级恰好多一个真实变量, 其余不变, 各级有自己的验收门 ──┘
+```
+
+### 6.2 架构层的答案：换一个插件 + 重跑同一套门
+
+- 控制器及以上**全部不动**（JS/CM/EE/supervisor、词典、demo、录包分析管线、
+  verify_robot 断言）——真机链 `--chain real` 原样跑。**"框架包 git diff = 零"这个
+  验收标准本身就是 sim2real 的门**：上真机要改控制器 = 抽象失败；允许改的只有
+  `serial_master` 一个总线插件（其 write 防线在仿真链已同型预演——sim_control 当初
+  就是照"真机驱动同形态"写的）。
+- 接口统一红利（§17.8）：录包 topic 清单 / rate-matrix 指标 / 曲线分析，仿真与真机
+  **全部同名**——真机数据进同一套分析管线。
+
+### 6.3 七步迁移路径（每步有门）
+
+| 步 | 做什么 | 过门判据 |
+|---|---|---|
+| 0 假总线台架 | 真驱动 + FakeTransport（假从站回帧/注入丢帧·错帧） | 零硬件全链：codec golden / 帧泵 / 安全序列 / 故障注入全绿 |
+| 1 上机清单 | 回环/echo/量端接·偏置·共地 → 低速→6M → TIOCGICOUNT 压测 → rtt 分布 → ID 扫描 | 四计数零增长；从机响应真值 X 实测入账（时隙定音） |
+| 2 真机链起链 | `chain:=real`，控制器按 §16.6 语义 | `verify_robot --chain real` 全绿（与仿真链同一套断言） |
+| 3 点火四步 | 盲读→零速锁定→微动（ratio 配错签名=幅度差 32/12.67/16 倍）→跟流（rate 阶梯 50→100→250→500） | 每级计数器全零才升级 |
+| 4 kp 参数迁移 | mujoco 的 τ_g/kp 下垂账方法论照搬：真机重力矩预测下垂→实测对账→调档 | 稳态误差进账内（piper mujoco 两轮先例） |
+| 5 对照测试 | 同一命令流（bag 重放/demo）喂 mujoco 链与真机链，diff 响应（§4 工具#2 跨链对比器的第一位真实用户） | 差异逐项归因（延迟/量化/间隙）入延迟档案 |
+| 6 回归门 | fault_injection 真机版子集（**拔线实验=故意断线验证看门狗**）/ rt_chain_bench 真机链 WCET / 验收报告入库 | A-G 全绿 + 真机补充项全绿 |
+
+### 6.4 数字迁移账（仿真工作直接带走的部分）
+
+| 资产 | 迁移方式 |
+|---|---|
+| kp 下垂账方法论 | 照搬（真机重力矩代入重算、实测对账） |
+| OTG a/j 限值 / update_rate 500Hz | 同 yaml 直接用 |
+| IK（solver+种子库） | 同 solver；种子库用同一生成器从真机 URDF 重生成 |
+| demo 全家 | 零适配（URDF 自持解析） |
+| 断流减速/看门狗链/防线 | 行为级同款，真机上是真验证 |
+
+### 6.5 RL 策略的 sim2real（走上这条路时）
+
+1. **延迟档案驱动的域随机化**——真机链实测反馈年龄/抖动/量化分布（一等遥测）喂训练侧：
+   在测出来的延迟上随机化，不在猜的延迟上。
+2. **策略永远进不了裸总线**——"不可信命令源经校验+OTG 进门"在真机上从口号变物理事实：
+   策略输出过 write 防线 + OTG 平滑，最坏被钳住，撞不坏机器。**策略 sim2real 的安全
+   不靠策略收敛，靠底座不信任它。**
+
+### 6.6 诚实清单：sim 永远验证不了的（上机清单存在的意义）
+
+电气层（端接/EMI/共地）/ 从机响应真值 / 机械背隙·柔性 / 热降额 / **拔线实验**——
+没有任何仿真能替。方法学的一半是"把可验证的尽量前置到 sim"，另一半是
+**把不可验证的枚举成手工门**（点火四步+上机清单）——不知道自己不知道什么才是真风险，
+清单让每项"只有真机能验"的东西都有位置、有判据、有人签。
+
+### 6.7 "sim2real 完成"的定义
+
+**verify_robot 真机链全绿 + 拔线实验看门狗实证 + RT 基线无回归 + 验收报告入库 +
+框架包 diff=0**——五条齐即毕业，且毕业证可复跑（引擎化后一条命令重考）。
+
+> 衔接：真机侧架构见 `architecture/real_hardware_architecture.md`；总线点火/上机清单
+> 细节见 `bus/rs485_master_design.md` §8/§10；G6 真机迁移门背景见
+> `sim_environment_and_test_plan.md` §5.5/§10。

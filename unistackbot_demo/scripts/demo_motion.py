@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""给 JointStream 发送一段往返演示运动 (正弦过渡的点流), 机型无关。
+"""给 JointStream 发送一段大幅快慢变速演示运动 (正弦过渡的点流), 机型无关。
+
+2026-09-24 运动内容 (用户需求: >10s 长时 + 大幅 + 有快有慢): 四段计划
+85% → 15% → 85% → 零位(内缩), 快腿 2.0/2.5s 与慢腿 6.0/4.0s 交替, 共 ~14.5s。
 
 2026-09-21 重写: JTC action 退役 → JointCommand 点流 (点流语义: 每条消息=最新目标,
 控制器端每周期步长饱和逼近——上层只管把目标流平滑地发下来)。
@@ -94,7 +97,9 @@ class DemoMotion(Node):
 		                 history=HistoryPolicy.KEEP_LAST, depth=1)
 		pub = self.create_publisher(JointCommand, '/joint_stream_controller/command', qos)
 
-		# 往返序列 (限位区间百分比): 35% -> 65% -> 20% -> 零位(向限位内缩 2%)
+		# 大幅快慢变速序列 (2026-09-24 用户需求: >10s 长时 + 大幅 + 有快有慢):
+		# 显式段计划 (限位区间百分比目标, 段时长) —— 快腿/慢腿交替, 同跨度下
+		# 命令速度对比 ~3×; 段内 smoothstep 过渡 (起停零速度)。
 		# 内缩原因: gz 链命令精确停限位会触发限位咬死 (gz_ros2_control #165 残余),
 		# 零位恰在 piper joint2/joint3 的限位线上
 		lo = [l for l, _ in lims]
@@ -103,18 +108,21 @@ class DemoMotion(Node):
 		def inset(v, l, h):
 			return min(max(v, l + 0.02 * (h - l)), h - 0.02 * (h - l))
 		home = [inset(0.0, l, h) for l, h in zip(lo, hi)]
-		waypoints = [frac(0.35), frac(0.65), frac(0.20), home]
-
-		# 段时长按关节跨度保守推算 (最大跨度/1 rad/s, 3~8s 夹紧), 段内 s 曲线平滑过渡
-		prev = list(home)
+		schedule = [
+			(frac(0.85), 2.0, '快'),   # 部署: 大跨快腿
+			(frac(0.15), 6.0, '慢'),   # 摆到对侧: ~70% 限位区间慢腿
+			(frac(0.85), 2.5, '快'),   # 回摆: 全跨度快腿
+			(home, 4.0, '慢'),         # 收尾: 慢腿归位
+		]
 		plan = []
-		for wp in waypoints:
-			span = max(abs(p - q) for p, q in zip(wp, prev))
-			dur = max(3.0, min(8.0, span * 1.5 + 1.0))
-			plan.append((prev, wp, dur))
+		prev = list(home)
+		for wp, dur, tag in schedule:
+			plan.append((prev, wp, dur, tag))
 			prev = wp
-		total = sum(d for _, _, d in plan)
-		self.get_logger().info('发送点流 @%dHz (%d 段, 约 %.0f 秒)...' % (hz, len(plan), total))
+		total = sum(d for _, _, d, _ in plan)
+		self.get_logger().info('大幅快慢序列: %d 段 / %.1fs (%s)' % (
+			len(plan), total, ' → '.join('%s %.1fs' % (t, d) for _, _, d, t in plan)))
+		self.get_logger().info('发送点流 @%dHz...' % hz)
 
 		# 消息关节集 = 直控 + mimic (JS 契约: 必须列全命令关节)
 		msg_names = joints + [m[0] for m in mimics]
@@ -130,7 +138,7 @@ class DemoMotion(Node):
 		sent = 0
 		late = 0
 		t_start = time.time()
-		for prev, wp, dur in plan * cycles:
+		for prev, wp, dur, _tag in plan * cycles:
 			t0 = time.time()
 			i = 0
 			while True:

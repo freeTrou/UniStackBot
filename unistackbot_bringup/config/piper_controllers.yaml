@@ -27,9 +27,6 @@ controller_manager:
     cartesian_motion_controller:
       type: unistackbot_controller/CartesianMotionController
 
-    otg_gate_controller:
-      type: unistackbot_controller/OtgGateController
-
 joint_stream_controller:
   ros__parameters:
     interpolation: ruckig        # hold | ruckig (2026-09-23 A/B 定音: 默认 ruckig —— C2 兜底
@@ -64,17 +61,8 @@ cartesian_motion_controller:
     # stale_timeout_ms: 200.0
     # stale_decel_ms: 200.0
 
-# OTG 门 (设计 §16.4 路线 A): 笛卡尔终点 → 一次 IK → OtgStream 关节 C2 整形流 → JS。
-# 以 inactive 注册 (同 CM); 用法: ros2 control switch_controllers --activate otg_gate_controller
-# 后发 /otg_gate_controller/target (PoseStamped, base 系, 点流)。与 CM 互不干扰 (零接口认领)。
-otg_gate_controller:
-  ros__parameters:
-    base_link: base_link
-    tip_link: link6
-    ik_solver: analytic_piper   # 显式选择 (同 CM; 可选 dls | analytic_piper)
-    max_acceleration: 5.0       # OTG 关节加速度界 [rad/s²] (机型资产, 必填)
-    max_jerk: 20.0              # [rad/s³] (必填)
-    ik_timeout_ms: 50.0         # 回调线程一次 IK 预算 (必填; 缺配置 configure 即拒)
+# OTG 门已退役 (2026-09-24 删代码): §16.6 语义统一后并入 CM (回调 IK + OtgStream
+# 输出级即 CM 新通路), 终点命令直接发 /cartesian_motion_controller/target。
 
 ee_state_broadcaster:
   ros__parameters:
