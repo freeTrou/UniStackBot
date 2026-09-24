@@ -28,6 +28,7 @@
 
 #include <tinyxml2.h>
 
+#include "rcl_interfaces/msg/parameter.hpp"
 #include "rcl_interfaces/srv/get_parameters.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
@@ -245,16 +246,49 @@ int main(int argc, char ** argv)
 			return 1;
 		}
 	}
+	const char * hz_src = "显式指定";
 	if (hz <= 0.0)
 	{
-		if (periods.size() < 20)
+		// 权威源 = controller_manager 的 update_rate 参数 (2026-09-24 用户裁决: 读配置比从
+		// 消息流反推合理——yaml /** 通配节单一事实源, 且无 RTF/时域歧义; 仿真链 stamp 是
+		// 仿真时间, RTF≠1 时实测值≠控制频率)
+		bool got = false;
 		{
-			std::printf("FAIL: /joint_states 采样不足 (%zu), 无法自校准频率\n", periods.size());
-			return 1;
+			auto cli = node->create_client<rcl_interfaces::srv::GetParameters>(
+				"/controller_manager/get_parameters");
+			if (cli->wait_for_service(std::chrono::seconds(3)))
+			{
+				auto req = std::make_shared<rcl_interfaces::srv::GetParameters::Request>();
+				req->names = {"update_rate"};
+				auto fut = cli->async_send_request(req);
+				if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(3)) ==
+					rclcpp::FutureReturnCode::SUCCESS)
+				{
+					const auto & v = fut.get()->values[0];
+					if (v.type == rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER &&
+						v.integer_value > 0)
+					{
+						hz = static_cast<double>(v.integer_value);
+						hz_src = "CM 配置 (update_rate 参数)";
+						got = true;
+					}
+				}
+			}
 		}
-		std::vector<double> srt = periods;
-		std::sort(srt.begin(), srt.end());
-		hz = 1.0 / srt[srt.size() / 2];
+		if (!got)
+		{
+			// 兜底: /joint_states stamp 差分中位数 (CM 参数服务不可达时)
+			if (periods.size() < 20)
+			{
+				std::printf("FAIL: CM update_rate 参数不可达且 /joint_states 采样不足 (%zu)\n",
+					periods.size());
+				return 1;
+			}
+			std::vector<double> srt = periods;
+			std::sort(srt.begin(), srt.end());
+			hz = 1.0 / srt[srt.size() / 2];
+			hz_src = "实测中位数兜底 (CM 参数不可达)";
+		}
 	}
 	// 校准/显式值一致性钳位 (审查补, 2026-09-23): 仿真时间跳变/暂停会让 stamp 差分
 	// 出 20µs 级离群 → 校准出几十 kHz → 定时器全速狂发。钳到 [10, 2000] 合理带。
@@ -263,8 +297,7 @@ int main(int argc, char ** argv)
 		std::printf("WARN: 校准/指定频率 %.1fHz 超合理带 [10,2000], 钳位后继续\n", hz);
 		hz = std::min(std::max(hz, 10.0), 2000.0);
 	}
-	std::printf("控制频率: %.1f Hz (%s)\n", hz,
-		node->get_parameter("hz").as_double() > 0.0 ? "显式指定" : "/joint_states 自校准");
+	std::printf("控制频率: %.1f Hz (%s)\n", hz, hz_src);
 
 	// ③ 计划: home → 各关节向限位中位偏移 30% (正弦) → home
 	std::vector<double> wp(joints.size(), 0.0);
