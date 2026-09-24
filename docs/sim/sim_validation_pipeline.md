@@ -17,7 +17,7 @@
 | C mujoco 物理 | 动力学跟踪 + 防线在动力学下 + F7 mimic | verify 段、fault --chain mujoco | 全绿 | 日志 |
 | D gz 集成 | 跟踪 + 桥语义 + pause/resume 端到端 | verify --with-gazebo 段 | 全绿 | 日志 |
 | E RT 基准 | cyclictest + CM 链路 WCET/误差 | rt_chain_bench | 对比基线无回归 | results/rt_*.md |
-| F 数据场景 | 三命令域 demo 流（关节慢/关节满速/末端）+ OTG 门点到点 + 录包 + 曲线人检 | demo_motion + demo_cartesian + otg_gate、bag | 曲线无异常 | bag |
+| F 数据场景 | 三命令域 demo 流（关节慢/关节满速/末端）+ 终点/负路径 + 录包 + 曲线人检 | demo_motion + demo_cartesian、bag | 曲线无异常 | bag |
 | G 归档 | 汇总填写验收报告 | 报告模板 | 报告生成 | acceptance_*.md |
 
 ## 2. 手动执行手册（当前标准走法；每步门不过即停）
@@ -131,11 +131,12 @@ bash test/rt_chain_bench.sh piper_first_0922 --robot piper --chain mujoco
   - `up`（最小演示）：+z 往返 3cm，`--traverse` 插值流（=0 单发点到点）
   - **点位设计纪律**：大幅运动必须先"部署"——piper 探针实测零位邻域仅 +z 可行，部署位
     (z+200,x+200) 邻域 ±150mm 球 6/6 全可解；换机型先跑工作空间探针再定 `--lift/--fwd/--span` 默认
-- **演示 3 OTG 门（点到点 C2, 2026-09-23 P1）**：终点对齐服务——`~/target` 笛卡尔终点 →
-  一次 IK → OtgStream 关节 C2 整形流 @控制频率 → JS 透传。与演示 1/2 同链共存
-  （零接口认领, inactive 注册, 需先 spawner 拉起）。判读：到位误差 ≈ 归一化账地板
-  （piper 0.089mm 级）、`/joint_stream_controller/command` 频率 ≈ update_rate（mock 实测
-  500.03Hz）、不可达终点 WARN 拒绝且保持、曲线加减速平滑（对照演示 1 恒速段的肉眼差异）
+- **演示 3 终点+负路径（§16.6 改版, 2026-09-24）**：OTG 门已退役（架构并入 CM 输出级）。
+  终点语义 = CM 原生能力（`--once` 单发即完整合法用法, 内部一次 IK + OtgStream C2）;
+  负路径 = `--pattern reject` 不可达弹幕（远超臂展/穿底等）逐点断言诚实拒
+  （UNREACHABLE/LIMIT_CONFLICT 两类结果码都要有镜头）+ 恢复目标必须照常收敛
+  （拒绝不污染链路状态; 上层不完美是常态, 拒绝路径也是验收面）。判读：诚实拒 N/N、
+  恢复收敛 err ≈ 账地板、单发终点到位 err ≈ 账地板、命令流频率 ≈ update_rate
 
 先起录包再跑演示（慢流/满速/末端/OTG 门四路命令流都进包——`/joint_stream_controller/command`
 是关节慢流+满速+OTG 门共用入口，`/cartesian_motion_controller/target` 是末端流）；**仿真链必须带
@@ -175,12 +176,11 @@ ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0
 # ⑤ 演示 2 末端位姿流 (sweep, ~12s) —— 等脚本退出 (臂已落回起点)
 ros2 run unistackbot_demo demo_cartesian.py --pattern sweep
 
-# ⑥ 拉起 OTG 门 (一次性) —— 等日志 "otg_gate_controller: 就绪 (dt=...)"
-ros2 run controller_manager spawner otg_gate_controller
-
-# ⑦ 演示 3 OTG 门终点 (零位+20cm 抬升, 发出后 1-2s 到位; 示例为 piper, 换机型自定可达终点)
-ros2 topic pub --once /otg_gate_controller/target geometry_msgs/msg/PoseStamped \
-  "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
+# ⑥ 演示 3 终点+负路径 (§16.6 改版 2026-09-24: OTG 门退役, 终点语义=CM 原生能力——
+#    每条消息=最新终点, --once 单发即完整合法用法; 脚本自动切 CM, 结束切回 JS)
+#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped \
+#      "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
+ros2 run unistackbot_demo demo_cartesian.py --pattern reject
 
 # ⑧ 收尾: Ctrl-C 停录包(终端 2) → Ctrl-C 收链(终端 1; 不用 pkill) → 等 ~30s 租约
 #    → 下一条链前重跑 ⓪ (残留检查是每链 ⓪ 步, 不是只有第一条链做)
@@ -206,12 +206,11 @@ ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0
 # ⑤ 演示 2 末端位姿流 (sweep) —— 物理链稳态 0.7-1.1mm, 骑 1mm 线的腿判"稳态未达容差"属预期
 ros2 run unistackbot_demo demo_cartesian.py --pattern sweep
 
-# ⑥ 拉起 OTG 门 —— 等日志 "就绪"
-ros2 run controller_manager spawner otg_gate_controller
-
-# ⑦ 演示 3 OTG 门终点 (零位+20cm; piper 示例)
-ros2 topic pub --once /otg_gate_controller/target geometry_msgs/msg/PoseStamped \
-  "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
+# ⑥ 演示 3 终点+负路径 (§16.6 改版 2026-09-24: OTG 门退役, 终点语义=CM 原生能力——
+#    每条消息=最新终点, --once 单发即完整合法用法; 脚本自动切 CM, 结束切回 JS)
+#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped \
+#      "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
+ros2 run unistackbot_demo demo_cartesian.py --pattern reject
 
 # ⑧ 收尾: 停录包 → 收链 → 等租约再起下一条
 ```
@@ -239,12 +238,11 @@ ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0
 # ⑤ 演示 2 末端位姿流 (sweep) —— 手指不耦合为已知回归, 曲线里属预期
 ros2 run unistackbot_demo demo_cartesian.py --pattern sweep
 
-# ⑥ 拉起 OTG 门 —— 等日志 "就绪"
-ros2 run controller_manager spawner otg_gate_controller
-
-# ⑦ 演示 3 OTG 门终点 (零位+20cm; piper 示例)
-ros2 topic pub --once /otg_gate_controller/target geometry_msgs/msg/PoseStamped \
-  "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
+# ⑥ 演示 3 终点+负路径 (§16.6 改版 2026-09-24: OTG 门退役, 终点语义=CM 原生能力——
+#    每条消息=最新终点, --once 单发即完整合法用法; 脚本自动切 CM, 结束切回 JS)
+#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped \
+#      "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
+ros2 run unistackbot_demo demo_cartesian.py --pattern reject
 
 # ⑧ 收尾: 停录包 → 收链 → **gz_clean 再清一次** (ign 服务器常驻留孤儿) → 等租约
 ```
