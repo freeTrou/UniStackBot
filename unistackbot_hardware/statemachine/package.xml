@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>unistackbot_statemachine</name>
+  <version>0.0.1</version>
+  <description>状态机翻译库: 统一反馈→中立四态的翻译轴 (StateTranslator 父类+子类+工厂, 同协议轴组织)。细分格/影子机/动作序列为延后项。</description>
+  <maintainer email="todo@todo.todo">UniStackBot</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>unistackbot_protocol</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

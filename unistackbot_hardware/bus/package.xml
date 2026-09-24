@@ -1,20 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>unistackbot_hardware</name>
-  <version>0.1.0</version>
-  <description>硬件抽象层，负责与底层驱动（电机、IMU、编码器等）通信，向上提供统一硬件接口。</description>
+  <name>unistackbot_bus</name>
+  <version>0.0.1</version>
+  <description>总线主站轴: MasterBase 父类 (纯交换语义零线程可见) + 工厂。交换类型自持零 ROS (BusCommand/BusState = protocol Node 类型定长数组)。子类 SerialMaster 随串口泵骨架落地注册。</description>
   <maintainer email="todo@todo.todo">UniStackBot</maintainer>
-  <license>TODO: Declaration of license</license>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
-  <depend>rclcpp</depend>
-  <depend>sensor_msgs</depend>
-  <depend>std_msgs</depend>
-  <depend>hardware_interface</depend>
-  <depend>pluginlib</depend>
-  <depend>serial</depend>
+  <depend>unistackbot_protocol</depend>
+  <depend>unistackbot_statemachine</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
