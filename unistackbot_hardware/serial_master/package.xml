@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>unistackbot_serial</name>
+  <version>0.0.1</version>
+  <description>串口总线骨架: SerialMaster (MasterBase 实现: 泵线程+时隙调度+追帧纪律+SpLatest 交换+quick_stop) + IoTransport/FakeTransport/TermiosTransport + Framer。R1-7A 485@6M 第一消费者。</description>
+  <maintainer email="todo@todo.todo">UniStackBot</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>unistackbot_protocol</depend>
+  <depend>unistackbot_statemachine</depend>
+  <depend>unistackbot_bus</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
