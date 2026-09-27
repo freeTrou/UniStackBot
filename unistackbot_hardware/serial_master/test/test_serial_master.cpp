@@ -1,5 +1,5 @@
 /*
- * test_serial_master —— 串口泵全链集成测试 (2026-09-24, 切片1步4; 零硬件)。
+ * test_serial_master —— 串口泵全链集成测试 (2026-09-24, 切片1步4; 2026-09-27 补盲区; 零硬件)。
  *
  * FakeTransport + FakeMotor (假从站: 解析 20B 命令帧 → 维护内部位姿 → 产 26B 反馈帧)。
  * 覆盖:
@@ -7,9 +7,12 @@
  *   ②命令往返: publish_cmd 位置 → 假电机收到 run 模式+位置 → 反馈位姿回读一致
  *   ③状态翻译: 使能→ENABLED; 假电机报错→FAULT
  *   ④断流陈旧: 丢全部应答 → 节点态 Unknown (kStaleCycles 后)
+ *   ④b/④c 坏帧拒收计数 + 分片应答跨拍拼接 (corrupt/fragment 旋钮)
  *   ⑤quick_stop: 置位后线上变停机帧, 反馈回显实测位 (锚定)
  *   ⑥追帧跳过遥测: 正常=0
  *   ⑦工厂注册: registerToMasterFactory 后 createMaster("serial") 可用
+ *   ⑧tx 失败遥测: FlakyWriteTransport 写失败注入 → 计数 + 恢复
+ *   ⑨重启: stop 释放 transport → 二次 start → quick_stop 闩锁已复位
  *
  * 编译运行 (零 ROS):
  *   cd unistackbot_hardware/serial_master/test
@@ -157,6 +160,43 @@ MasterConfig makeCfg()
 	return cfg;
 }
 
+// 写失败注入包装器 (FakeTransport 本体不动): 前 fail_next_writes 次 write 返回 -1
+class FlakyWriteTransport final : public unistackbot_serial::IoTransport
+{
+public:
+	explicit FlakyWriteTransport(std::unique_ptr<FakeTransport> inner)
+		: inner_(std::move(inner))
+	{
+	}
+
+	std::size_t fail_next_writes = 0;
+
+	ssize_t read(std::uint8_t *buf, std::size_t cap) override
+	{
+		return inner_->read(buf, cap);
+	}
+
+	ssize_t write(const uint8_t *buf, std::size_t n) override
+	{
+		if (fail_next_writes > 0)
+		{
+			--fail_next_writes;
+			return -1;
+		}
+		return inner_->write(buf, n);
+	}
+
+	[[nodiscard]] std::size_t bytes_available() const override
+	{
+		return inner_->bytes_available();
+	}
+
+	void close() override { inner_->close(); }
+
+private:
+	std::unique_ptr<FakeTransport> inner_;
+};
+
 }  // namespace
 
 int main()
@@ -241,6 +281,18 @@ int main()
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
 	check(m->state() != NeutralState::kUnknown, "recovered from stale");
 
+	// ④b 坏帧拒收: corrupt 旋钮 (载荷字节翻转 → CRC 拒)
+	const auto rej0 = m->telemetry().rx_rejected;
+	fake_raw->set_corrupt_next_response();
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+	check(m->telemetry().rx_rejected > rej0, "corrupt frame rejected");
+	check(m->state() == NeutralState::kEnabled, "state survives corrupt frame");
+
+	// ④c 分片应答: fragment 旋钮 (劈两半跨拍; framer 拼接不锁死不丢同步)
+	fake_raw->set_fragment_next_response(5);
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+	check(m->state() == NeutralState::kEnabled, "fragmented response stitched");
+
 	// ⑤ quick_stop: 线上变停机帧
 	m->quick_stop();
 	std::this_thread::sleep_for(std::chrono::milliseconds(60));
@@ -250,10 +302,55 @@ int main()
 	const auto tl = m->telemetry();
 	check(tl.rx_frames > 10, "rx frames counted");
 	check(tl.skipped_slots < 50, "skip telemetry sane");
+	check(tl.rx_nofit == 0, "no out-of-table ids");
 
 	m->stop();
 	check(!m->running(), "stopped");
 	check(fake_raw->closed(), "transport closed by stop");
+
+	// ⑧ tx 失败遥测: 写失败注入 (下一时隙盲发重试)
+	auto motor2 = std::make_shared<FakeMotor>();
+	auto fake2 = std::make_unique<FakeTransport>(
+		[motor2](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+			return motor2->respond(in, n, out);
+		});
+	auto flaky = std::make_unique<FlakyWriteTransport>(std::move(fake2));
+	FlakyWriteTransport *flaky_raw = flaky.get();
+	SerialMaster m2;
+	m2.attach_transport(std::move(flaky));
+	check(m2.start(makeCfg()), "start with flaky transport");
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+	flaky_raw->fail_next_writes = 5;
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+	const auto tl2 = m2.telemetry();
+	check(tl2.tx_failed >= 5, "tx failures counted");
+	check(tl2.tx_frames > tl2.tx_failed, "tx resumed after failures");
+	m2.stop();
+
+	// ⑨ 重启: stop 释放 transport、start 复位 quick_stop 闩锁与泵态
+	auto motor3 = std::make_shared<FakeMotor>();
+	auto fake3 = std::make_unique<FakeTransport>(
+		[motor3](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+			return motor3->respond(in, n, out);
+		});
+	FakeTransport *fake3_raw = fake3.get();
+	m->attach_transport(std::move(fake3));
+	check(m->start(makeCfg()), "restart after stop");
+	check(m->running(), "restart running");
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+	check(motor3->cmd_frames > 5, "frames flowing after restart");
+	BusCommand run_cmd;
+	run_cmd.node[0].mode = NodeMode::kRun;
+	run_cmd.node[0].position = 0.5;
+	run_cmd.node[0].kp = 10.0;
+	run_cmd.node[0].watchdog_enable = true;
+	run_cmd.node[1] = run_cmd.node[0];
+	m->publish_cmd(run_cmd);
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+	check(motor3->last_mode[kNodeA] == 1, "quick_stop latch cleared on restart");
+	check(m->state() == NeutralState::kEnabled, "state after restart");
+	m->stop();
+	check(fake3_raw->closed(), "second stop closes transport");
 
 	std::printf("%s: %d cases, %d failed\n", g_fail == 0 ? "PASS" : "FAIL", g_case, g_fail);
 	return g_fail == 0 ? 0 : 1;

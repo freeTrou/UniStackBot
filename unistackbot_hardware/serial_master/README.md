@@ -11,7 +11,7 @@
 | `FakeTransport` | `fake_transport.hpp` | 假总线：写入字节交 responder（假电机）→ 应答入 RX 队列；故障注入旋钮（丢应答/坏字节/分片） |
 | `TermiosTransport` | `termios_transport.*` | Linux 真串口：8N1 raw·BOTHER 任意波特·TIOCEXCL 独占·FIONREAD；kernel ABI 手工复刻（glibc/asm 头撞名的经典解法） |
 | `Framer` | `framer.*` | 字节流→帧提取：帧头同步+定长切帧+跨调用拼接+坏帧重同步；CRC 归 decode；命令回显免疫（FE vs FC） |
-| `SerialMaster` | `serial_master.*` | **MasterBase 实现**：泵线程 FIFO 85/核2、逐节点时隙调度、追帧跳过纪律、quick_stop 闩锁（锚定实测位）、SpLatest 交换、安全怠速（start 后未发命令=停机帧+看门狗位）、慢通道 kUnsupported |
+| `SerialMaster` | `serial_master.*` | **MasterBase 实现**：泵线程 FIFO 85/核2、逐节点时隙调度、追帧跳过纪律、quick_stop 闩锁（锚定实测位）、SpLatest 交换、安全怠速（start 后未发命令=停机帧+看门狗位）、tx/rx 全遥测（含写失败/表外 id 分流）、可重启（stop 释放 transport、start 复位闩锁与泵态）、慢通道 kUnsupported |
 
 ## 组合根职责
 
@@ -27,7 +27,7 @@ m->start(cfg);                                   // endpoint="fake" 或设备路
 | 测试 | cases | 覆盖 |
 |---|---|---|
 | `test_framer` | 9 | 噪声找帧/跨调用拼接/一批多帧/回显免疫/残尾恢复 |
-| `test_serial_master` | 25 | 工厂注册/安全怠速/命令往返(位置 1e-3 精度)/状态翻译(ENABLED·FAULT)/断流陈旧(kStaleCycles→Unknown→恢复)/quick_stop(线上停机帧)/遥测 |
+| `test_serial_master` | 38 | 工厂注册/安全怠速/命令往返(位置 1e-3 精度)/状态翻译(ENABLED·FAULT)/断流陈旧(kStaleCycles→Unknown→恢复)/坏帧拒收/分片拼接/quick_stop(线上停机帧)/tx 失败遥测(FlakyWriteTransport)/重启(闩锁复位) |
 
 ```bash
 cd unistackbot_hardware/serial_master/test

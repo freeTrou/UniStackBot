@@ -1,10 +1,8 @@
 #include "unistackbot_serial/serial_master.hpp"
 
 #include <atomic>
-#include <chrono>
-#include <cmath>
 #include <cstdio>
-#include <cstring>
+#include <system_error>
 #include <thread>
 
 #include "unistackbot_bus/master_factory.hpp"
@@ -33,20 +31,22 @@ using unistackbot_statemachine::NeutralState;
 constexpr int kPumpPrio = 85;    // 串口档 (调度阶梯 EC95>CAN90>串口85)
 constexpr int kPumpCpu = 2;      // 总线核
 constexpr std::uint64_t kStaleCycles = 50;   // 无反馈判 Unknown 的拍数 (~100ms@500Hz)
+constexpr std::int64_t kNsPerSec = 1'000'000'000LL;
+constexpr std::size_t kRxBurst = 8;          // 单次排干最多处理帧数
 constexpr int kDefaultBaud = 6000000;        // unitree IM 系默认 (MasterConfig 无波特位, 协议侧约定)
 
-double clockNowNs()
+std::int64_t clockNowNs()
 {
 	timespec ts{};
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return static_cast<double>(ts.tv_sec) * 1.0e9 + static_cast<double>(ts.tv_nsec);
+	return static_cast<std::int64_t>(ts.tv_sec) * kNsPerSec + ts.tv_nsec;
 }
 
-void sleepUntilNs(double target_ns)
+void sleepUntilNs(std::int64_t target_ns)
 {
 	timespec ts{};
-	ts.tv_sec = static_cast<time_t>(target_ns / 1.0e9);
-	ts.tv_nsec = static_cast<long>(target_ns - static_cast<double>(ts.tv_sec) * 1.0e9);
+	ts.tv_sec = static_cast<time_t>(target_ns / kNsPerSec);
+	ts.tv_nsec = static_cast<long>(target_ns % kNsPerSec);
 	clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, nullptr);
 }
 
@@ -54,7 +54,7 @@ void sleepUntilNs(double target_ns)
 
 struct SerialMaster::Impl
 {
-	// ── 装配期定 (start 前/后不变) ──
+	// ── 装配期 (start() 前注入, 之后只读; stop() 后 io 释放待重装配) ──
 	MasterConfig cfg;
 	std::unique_ptr<IoTransport> io;
 	std::unique_ptr<unistackbot_protocol::ProtocolCore> proto;
@@ -64,27 +64,32 @@ struct SerialMaster::Impl
 	unistackbot_common::SpLatest<BusCommand> cmd_ch;
 	unistackbot_common::SpLatest<BusState> state_ch;
 
-	// ── 泵线程 ──
+	// ── 线程控制 ──
 	std::thread pump;
 	std::atomic<bool> stop_flag{false};
 	std::atomic<bool> quick_stop_flag{false};
 	std::atomic<bool> started{false};
-	Framer framer{unistackbot_protocol::FrameSpec{}};
 
-	// ── 泵侧私有 (单写者线程; 全部预分配, RT 循环零构造零分配) ──
-	NodeFeedback fb[kMaxNodes] = {};
-	NeutralState node_state[kMaxNodes] = {};
-	std::uint64_t last_seen_cycle[kMaxNodes] = {};
-	std::uint64_t cycle = 0;
+	// ── 泵态 (泵线程唯一写者; start() 复位) ──
+	struct PumpState
+	{
+		Framer framer{unistackbot_protocol::FrameSpec{}};
+		NodeFeedback fb[kMaxNodes] = {};
+		std::uint64_t last_seen_cycle[kMaxNodes] = {};
+		std::uint64_t cycle = 0;
+	} pump_;
 
-	// 循环体工作缓冲 (start 前分配一次, pumpMain 内只读写)
-	BusCommand cmd_buf;                          // ~800B: SpLatest 读出目标
-	NodeCommand out_buf;                         // 单槽命令 (quick_stop 改写用)
-	std::uint8_t tx_frame[64];                   // 单帧编码缓冲
-	std::uint8_t rx_chunk[256];                  // 非阻塞读缓冲
-	ExtractedFrame rx_frames[8];                 // framer 吐出帧
-	NodeFeedback rx_fb;                          // decode 工作结构
-	BusState snap_buf;                           // ~1.2KB: 快照发布缓冲
+	// ── 工作缓冲 (随 Impl 一次分配, 泵内只读写; RT 循环零构造零分配) ──
+	struct WorkBuf
+	{
+		BusCommand cmd;         // SpLatest 读出目标
+		NodeCommand slot_cmd;   // 当前时隙命令 (quick_stop 改写)
+		std::uint8_t tx_frame[64];
+		std::uint8_t rx_chunk[256];
+		ExtractedFrame rx_frames[kRxBurst];
+		NodeFeedback rx_fb;
+		BusState snap;          // 快照发布缓冲
+	} work_;
 };
 
 SerialMaster::SerialMaster() : impl_(new Impl)
@@ -140,7 +145,7 @@ bool SerialMaster::start(const MasterConfig &cfg)
 	if (impl_->io == nullptr)
 	{
 		std::string err;
-		impl_->io = TermiosTransport::open(cfg.endpoint, static_cast<int>(kDefaultBaud), err);
+		impl_->io = TermiosTransport::open(cfg.endpoint, kDefaultBaud, err);
 		if (impl_->io == nullptr)
 		{
 			std::fprintf(stderr, "SerialMaster: 打开 %s 失败: %s\n",
@@ -149,12 +154,21 @@ bool SerialMaster::start(const MasterConfig &cfg)
 		}
 	}
 	impl_->cfg = cfg;
-	impl_->framer = Framer{impl_->proto->framespec()};
+	resetPumpState();
+	impl_->pump_.framer = Framer{impl_->proto->framespec()};
 	impl_->stop_flag.store(false);
+	impl_->quick_stop_flag.store(false);   // 闩锁不跨生命周期
+	try
+	{
+		impl_->pump = std::thread([this] { pumpMain(); });
+	}
+	catch (const std::system_error &e)
+	{
+		std::fprintf(stderr, "SerialMaster: 泵线程创建失败: %s\n", e.what());
+		return false;
+	}
 	impl_->started.store(true);
 	running_.store(true);
-
-	impl_->pump = std::thread([this] { pumpMain(); });
 	return true;
 }
 
@@ -162,71 +176,77 @@ void SerialMaster::pumpMain()
 {
 	unistackbot_common::rt_tune::apply(kPumpCpu, kPumpPrio, 0, "serial_pump");
 
-	const double period_ns = 1.0e9 / impl_->cfg.rate_hz;
-	const double slot_ns = period_ns / static_cast<double>(impl_->cfg.node_count);
+	const std::int64_t period_ns = static_cast<std::int64_t>(kNsPerSec / impl_->cfg.rate_hz);
+	const std::int64_t slot_ns = period_ns / static_cast<std::int64_t>(impl_->cfg.node_count);
 	const std::size_t n = impl_->cfg.node_count;
-	double base = clockNowNs() + period_ns;
+	std::int64_t base = clockNowNs() + period_ns;
 
 	while (!impl_->stop_flag.load())
 	{
 		for (std::size_t k = 0; k < n && !impl_->stop_flag.load(); ++k)
 		{
-			double target = base + static_cast<double>(k) * slot_ns;
+			// 时隙 k 标称时刻: base + k*period/n (整数分摊, 无舍入累积)
+			std::int64_t target = base +
+				static_cast<std::int64_t>(k) * period_ns / static_cast<std::int64_t>(n);
 			// ── 落后追帧纪律: 逾期超一个时隙即跳未来, 绝不补发 ──
-			const double behind = clockNowNs() - target;
+			const std::int64_t behind = clockNowNs() - target;
 			if (behind > slot_ns)
 			{
 				const std::uint64_t skip = static_cast<std::uint64_t>(behind / slot_ns) + 1;
-				target += static_cast<double>(skip) * slot_ns;
+				target += static_cast<std::int64_t>(skip) * slot_ns;
 				telemetry_.skipped_slots += skip;   // 单读者近似, 健康签名=0
 			}
 			sleepUntilNs(target);
-
-			// ── 取最新命令 (预分配缓冲; quick_stop 置位 → 改发停机帧, 闩锁) ──
-			uint64_t seq = 0;
-			impl_->cmd_ch.read(impl_->cmd_buf, seq);
-			impl_->out_buf = impl_->cmd_buf.node[k];
-			if (impl_->quick_stop_flag.load())
-			{
-				impl_->out_buf.mode = unistackbot_protocol::NodeMode::kStop;
-				impl_->out_buf.watchdog_enable = true;
-				impl_->out_buf.tau = 0;
-				impl_->out_buf.speed = 0;
-				impl_->out_buf.kp = 0;
-				impl_->out_buf.kd = 0;
-				impl_->out_buf.position = impl_->fb[k].position;   // 锚定实测位
-			}
-
-			// ── 单帧单 write (绝不合并: USB 拼帧 → 线上背靠背碰撞) ──
-			const std::size_t fn = impl_->proto->encode(impl_->tx_frame,
-				sizeof(impl_->tx_frame), impl_->out_buf,
-				impl_->cfg.node_id[k], impl_->cfg.ratio[k]);
-			if (fn > 0 && impl_->io->write(impl_->tx_frame, fn) == static_cast<ssize_t>(fn))
-			{
-				++telemetry_.tx_frames;
-			}
-
-			// ── 非阻塞排干读 → framer → decode (按反馈 node_id 配对) ──
-			drainAndDecode();
+			runSlot(k);
 		}
 		base += period_ns;
-		++impl_->cycle;
+		++impl_->pump_.cycle;
+		publishSnapshot();
+	}
+}
 
-		// ── 快照发布 (预分配缓冲; 含 stale 判定: 无反馈拍数超界 → Unknown) ──
-		for (std::size_t i = 0; i < n; ++i)
-		{
-			impl_->snap_buf.node[i] = impl_->fb[i];
-			if (impl_->cycle - impl_->last_seen_cycle[i] > kStaleCycles)
-			{
-				impl_->snap_buf.node_state[i] = NeutralState::kUnknown;
-			}
-			else
-			{
-				impl_->snap_buf.node_state[i] = impl_->translator->map_state(impl_->fb[i]);
-			}
-		}
-		impl_->snap_buf.seq = impl_->cycle;
-		impl_->state_ch.publish(impl_->snap_buf);
+void SerialMaster::runSlot(std::size_t k)
+{
+	resolveSlotCmd(k);
+
+	// 单帧单 write (绝不合并: USB 拼帧 → 线上背靠背碰撞)
+	const std::size_t fn = impl_->proto->encode(impl_->work_.tx_frame,
+		sizeof(impl_->work_.tx_frame), impl_->work_.slot_cmd,
+		impl_->cfg.node_id[k], impl_->cfg.ratio[k]);
+	if (fn == 0)
+	{
+		++telemetry_.tx_failed;
+		return;
+	}
+	const ssize_t written = impl_->io->write(impl_->work_.tx_frame, fn);
+	if (written == static_cast<ssize_t>(fn))
+	{
+		++telemetry_.tx_frames;
+	}
+	else
+	{
+		// 写失败/部分写不补写: 下一时隙发最新命令 (盲发语义即重试)
+		++telemetry_.tx_failed;
+	}
+
+	drainAndDecode();
+}
+
+void SerialMaster::resolveSlotCmd(std::size_t k)
+{
+	uint64_t seq = 0;
+	impl_->cmd_ch.read(impl_->work_.cmd, seq);
+	impl_->work_.slot_cmd = impl_->work_.cmd.node[k];
+	if (impl_->quick_stop_flag.load())
+	{
+		NodeCommand &stop = impl_->work_.slot_cmd;
+		stop.mode = unistackbot_protocol::NodeMode::kStop;
+		stop.watchdog_enable = true;
+		stop.tau = 0;
+		stop.speed = 0;
+		stop.kp = 0;
+		stop.kd = 0;
+		stop.position = impl_->pump_.fb[k].position;   // 锚定实测位
 	}
 }
 
@@ -234,48 +254,81 @@ void SerialMaster::drainAndDecode()
 {
 	while (true)
 	{
-		const std::size_t avail = impl_->io->bytes_available();
-		if (avail == 0)
+		if (impl_->io->bytes_available() == 0)
 		{
 			break;
 		}
-		const ssize_t r = impl_->io->read(impl_->rx_chunk, sizeof(impl_->rx_chunk));
+		const ssize_t r = impl_->io->read(impl_->work_.rx_chunk, sizeof(impl_->work_.rx_chunk));
 		if (r <= 0)
 		{
 			break;
 		}
-		const std::size_t produced = impl_->framer.push(
-			impl_->rx_chunk, static_cast<std::size_t>(r),
-			impl_->rx_frames, sizeof(impl_->rx_frames) / sizeof(impl_->rx_frames[0]));
+		const std::size_t produced = impl_->pump_.framer.push(
+			impl_->work_.rx_chunk, static_cast<std::size_t>(r),
+			impl_->work_.rx_frames, kRxBurst);
 		for (std::size_t f = 0; f < produced; ++f)
 		{
-			const std::size_t n = impl_->cfg.node_count;
-			bool decoded = false;
-			for (std::size_t i = 0; i < n; ++i)
-			{
-				if (impl_->proto->decode(impl_->rx_frames[f].bytes, impl_->rx_frames[f].len,
-					impl_->rx_fb, impl_->cfg.ratio[i]))
-				{
-					if (impl_->rx_fb.node_id == impl_->cfg.node_id[i])
-					{
-						impl_->fb[i] = impl_->rx_fb;
-						impl_->last_seen_cycle[i] = impl_->cycle;
-						decoded = true;
-						++telemetry_.rx_frames;
-						break;
-					}
-				}
-			}
-			if (!decoded)
-			{
-				++telemetry_.rx_rejected;
-			}
+			classifyFrame(impl_->work_.rx_frames[f]);
 		}
-		if (static_cast<std::size_t>(r) < sizeof(impl_->rx_chunk))
+		if (static_cast<std::size_t>(r) < sizeof(impl_->work_.rx_chunk))
 		{
 			break;   // 排干
 		}
 	}
+}
+
+void SerialMaster::classifyFrame(const ExtractedFrame &frame)
+{
+	// CRC 与 ratio 无关: 任一节点 ratio 解码一次即完成验帧并取出 node_id
+	if (!impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb,
+			impl_->cfg.ratio[0]))
+	{
+		++telemetry_.rx_rejected;
+		return;
+	}
+	const std::size_t i = findNode(impl_->work_.rx_fb.node_id);
+	if (i == impl_->cfg.node_count)
+	{
+		++telemetry_.rx_nofit;
+		return;
+	}
+	(void)impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb,
+		impl_->cfg.ratio[i]);   // 以本节点 ratio 重解, 物理量按正确减速比换算
+	impl_->pump_.fb[i] = impl_->work_.rx_fb;
+	impl_->pump_.last_seen_cycle[i] = impl_->pump_.cycle;
+	++telemetry_.rx_frames;
+}
+
+std::size_t SerialMaster::findNode(std::uint8_t node_id) const
+{
+	for (std::size_t i = 0; i < impl_->cfg.node_count; ++i)
+	{
+		if (impl_->cfg.node_id[i] == node_id)
+		{
+			return i;
+		}
+	}
+	return impl_->cfg.node_count;
+}
+
+void SerialMaster::publishSnapshot()
+{
+	const std::size_t n = impl_->cfg.node_count;
+	for (std::size_t i = 0; i < n; ++i)
+	{
+		impl_->work_.snap.node[i] = impl_->pump_.fb[i];
+		impl_->work_.snap.node_state[i] =
+			(impl_->pump_.cycle - impl_->pump_.last_seen_cycle[i] > kStaleCycles)
+			? NeutralState::kUnknown
+			: impl_->translator->map_state(impl_->pump_.fb[i]);
+	}
+	impl_->work_.snap.seq = impl_->pump_.cycle;
+	impl_->state_ch.publish(impl_->work_.snap);
+}
+
+void SerialMaster::resetPumpState()
+{
+	impl_->pump_ = Impl::PumpState{};   // fb/last_seen/cycle 归零; framer 随后由 start() 重设
 }
 
 void SerialMaster::stop()
@@ -293,6 +346,7 @@ void SerialMaster::stop()
 	if (impl_->io)
 	{
 		impl_->io->close();
+		impl_->io.reset();   // 重启语义: 释放 transport, 二次 start 重开/重挂
 	}
 }
 
@@ -345,8 +399,8 @@ bool registerToMasterFactory()
 {
 	return unistackbot_bus::registerMaster("serial", []() ->
 		std::unique_ptr<unistackbot_bus::MasterBase> {
-			return std::make_unique<SerialMaster>();
-		});
+		return std::make_unique<SerialMaster>();
+	});
 }
 
 }  // namespace unistackbot_serial
