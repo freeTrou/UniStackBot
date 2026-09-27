@@ -2,9 +2,9 @@
 
 > 一条流水线完成一台机型的全部仿真验收，产出一份可归档报告。**可复用资产**：新机型只带资产
 > 进流程（URDF/MJCF/登记表），流程零改动——复用性验收标准见 §5。
-> 配套文档：测试项定义见 `sim_environment_and_test_plan.md` §5.7；接口字段查
-> `chain_interface_dictionary.md`；故障定位查 `sim_environment_and_test_plan.md` §8；
-> 换臂/换求解器 SOP 与球腕解析解机型接入流水线查 `guides/ik_validation_playbook.md`（§9）。
+> 配套文档：接口字段查 `chain_interface_dictionary.md`；换臂/换求解器 SOP 与球腕解析解
+> 机型接入流水线查 `guides/ik_validation_playbook.md`（§9）。（原 test_plan §5.7 测试项
+> 定义/§8 故障定位未随并入迁移，需要时从 git 历史找回。）
 
 ## 1. 流程总览
 
@@ -304,7 +304,7 @@ bash test/run_acceptance.sh <robot> [--with-rt]
 3. 未来新机型：只备机型资产 + 登记表，一条命令出报告
 
 **已知边界**：流程覆盖"链对命令流的响应"；算法在环由批次 6 消费者样例节点覆盖；
-传感器闭环与多形态保持挂账；真机就绪归 G6（`sim_environment_and_test_plan.md` §5.5/§10）。
+传感器闭环与多形态保持挂账；真机就绪门归本文件 §6 真机迁移。
 OTG 门已退役（2026-09-23 落地 → **2026-09-24 删代码**, §16.6 并入 CM）——其 E2E 验证
 义务随架构归 CM（mujoco 链回归与 rt_chain_bench WCET 对比仍欠）；命令平滑设计依据见
 `architecture/hardware_framework_design.md` §16。
@@ -376,5 +376,4 @@ mock ──→ gz ──→ mujoco ──→ 假总线 ──→ 真机(盲读) 
 框架包 diff=0**——五条齐即毕业，且毕业证可复跑（引擎化后一条命令重考）。
 
 > 衔接：真机侧架构见 `architecture/real_hardware_architecture.md`；总线点火/上机清单
-> 细节见 `bus/rs485_master_design.md` §8/§10；G6 真机迁移门背景见
-> `sim_environment_and_test_plan.md` §5.5/§10。
+> 细节见 `bus/rs485_master_design.md` §8/§10。

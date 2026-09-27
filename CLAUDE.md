@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 启动必读（每次会话最先执行）
 
 先读记忆目录恢复工作上下文，再读本文件：
-1. `~/.claude/projects/-home-work-project-git-project-UniStackBot-ws-src-UniStackBot/memory/MEMORY.md` — 记忆索引
+1. `~/.claude/projects/<本工程绝对路径，`/` 换成 `-`>/memory/MEMORY.md` — 记忆索引（多机共用本仓库、路径各异，各机按自身工程路径换算；本机示例 `-home-work-project-UniStackBot-ws-src-UniStackBot`）
 2. 重点读 `p15-progress.md`（进行中项目的快照：已完成/验收数据/下一步/环境坑）
 3. 记忆是时点快照不是实时状态——引用的文件/参数先对照当前代码核实再用
 
@@ -44,6 +44,8 @@ g++ -std=c++17 -O2 -pthread -Wall -Wextra -Wconversion -I.. test_ulog.cpp -o tes
 ```
 测试二进制（test_ulog/bench_ulog 等）已在 .gitignore，勿提交。
 
+hardware 域四子包（protocol/statemachine/bus/serial）是 colcon 包但**单元测试同样 g++ 直编**（零 ROS；规范命令在各子包 README，范本 `unistackbot_hardware/serial_master/README.md`）。
+
 统一入口 + 四个底层入口 (控制链三选一: mock/gz/mujoco):
 
 ```bash
@@ -74,7 +76,7 @@ All control chains spawn `joint_state_broadcaster` + `joint_stream_controller` (
 
 双控制器切换 (三条链同款): CM 以 inactive 注册, `ros2 control switch_controllers --deactivate joint_stream_controller --activate cartesian_motion_controller` 接管 (切回反向同理)。Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo/MuJoCo, both green = pass.
 
-RT 备注: 控制器管理器 RT 线程调优**经预留参数接口由我们设置**（参数名是 ros2_control 暴露的接口、值是我们定的, 住 `<robot>_controllers.yaml`: `thread_priority: 80` / `cpu_affinity: 1` / `lock_memory: true`; 核1=CM update, 核2 预留总线）。`lock_memory` 依赖 `ulimit -l unlimited`（非 root 下失败仅 WARN 不阻塞）。
+RT 备注: 控制器管理器 RT 线程调优**经预留参数接口由我们设置**（参数名是 ros2_control 暴露的接口、值是我们定的, 住 `<robot>_controllers.yaml`: `thread_priority: 80` / `cpu_affinity: 1` / `lock_memory: true`; 核1=CM update, 核2 预留总线）。**`lock_memory` 的 memlock 毒区纪律 (2026-09-26 实锤)**: `lock_memory:true` → `mlockall(MCL_CURRENT|MCL_FUTURE)`, 而 MCL_FUTURE 按**新映射的虚拟大小全额记账**（82 线程的 mujoco 进程 VmSize 轻松 4GB）——非 root shell 设 `ulimit -l unlimited` 会被 hard limit 截成 ~3.8GB 有限值 → mlockall 成功 → MCL_FUTURE 武装 → 虚拟账本烧穿配额 → 后续 pthread_create/malloc 全部 EAGAIN/bad_alloc（控制器 configure 集体炸, mujoco 链必崩）。**三档纪律: 默认小值=保险丝（mlockall 立败仅 WARN, 非 root dev shell 用这个）/ root 真无限=安全（sudo 语境才设）/ 有限大值=毒区（永不制造）**。**非 root 常规 shell 要真启用 RT 姿态** = `/etc/security/limits.conf` 配 `work soft/hard memlock unlimited` + `work soft/hard rtprio 99`（注销重登生效; systemd 服务语境不读 limits.conf, 须 unit 内 `LimitMEMLOCK=`）。
 
 All control/sim launches take a **required** `robot:=<机型>` argument (resolves `unistackbot_description/arms/<robot>/` + `unistackbot_bringup/config/<robot>_controllers.yaml`; unknown robots fail fast with the available list). Current robots: `piper` (6-DoF 球腕 arm + gripper — IK 决策卡 `arms/piper/ik_decision_card.md`: 闭式解析解定路), `xarm7` (7-DoF arm, vendor: UFACTORY — see `arms/xarm7/README.md` + `arms/xarm7/ik_decision_card.md`).
 
@@ -84,14 +86,14 @@ Three layers orchestrated by `unistackbot_bringup`. `unistackbot_description` is
 
 ```
 unistackbot_bringup            → 顶层启动 / 参数编排
-unistackbot_demo               → 控制 demo 独立包 (三命令域: 末端位姿流/关节慢流/关节满速流)
+unistackbot_demo               → 控制 demo 独立包 (三命令域: 末端位姿流/关节慢流/关节满速流; 链路契约的栈外独立消费者)
 unistackbot_controller         → 控制器集成 (CM 笛卡尔流式 + JointStream 关节流式) + 工具节点
 unistackbot_algorithm          → 纯算法库 (FK/IK/种子库, 零控制器依赖)
-unistackbot_hardware           → 真机域容器: 三骨架目录 + 三子包 (protocol=codec轴 / statemachine=状态翻译轴 / bus=总线交换轴)
-  └─ unistackbot_sim_control/  → 仿真集成组 (容器目录, 三独立包; 见其 README)
-      ├─ core     (包 unistackbot_sim_control: 统一仿真控制层 kinematic 后端 + /sim_control 服务)
-      ├─ gazebo   (包 unistackbot_gazebo: Gazebo 集成 world + launch + gz 适配器)
-      └─ mujoco   (包 unistackbot_mujoco: MuJoCo 集成 launch; MJCF 资产住 description)
+unistackbot_hardware           → 真机域容器 (目录平级于仿真域): 三主站骨架目录 + 四子包 (protocol=codec轴 / statemachine=状态翻译轴 / bus=总线交换轴 / serial=串口主站实现)
+unistackbot_sim_control/       → 仿真集成组 (容器目录, 三独立包; 见其 README)
+  ├─ core     (包 unistackbot_sim_control: 统一仿真控制层 kinematic 后端 + /sim_control 服务)
+  ├─ gazebo   (包 unistackbot_gazebo: Gazebo 集成 world + launch + gz 适配器)
+  └─ mujoco   (包 unistackbot_mujoco: MuJoCo 集成 launch; MJCF 资产住 description)
 物理硬件 / 仿真器
 ```
 
@@ -111,8 +113,8 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 - **unistackbot_description** — URDF/Xacro, RViz config, `display.launch.py`.
 - **unistackbot_protocol**（住 `unistackbot_hardware/protocol/`，2026-09-24 开包当日拆轴定形：**纯 codec 轴**——状态翻译轴已分家到 statemachine 包）: ①`ProtocolCore` 父类（最小 3 方法: framespec/encode/decode——字节↔物理量, 状态翻译/错误人话化/特殊命令均为延后项）; ②契约类型 NodeCommand·NodeFeedback·FrameSpec·NodeMode（协议词汇零出包, 零 ROS 依赖零外部依赖）; ③`unitree_im` 子类 + 纯函数 encodeFrame/decodeFrame/crc32（宇树字序 CRC32 变体; 定点五系数+钳位; 非有限输入一票拒绝）; ④工厂 `createProtocolCore(name)` + 静态注册表（加协议=加一行; 未知名字 nullptr+列可选项, 无默认纪律）。**文件名=主类 snake_case**。测试: 厂商 demo 源码作甲骨文（test/oracle_unitree_demo/, test-only）——encode 逐字节对拍 buildControlPacket 216 组/decode 自造帧喂厂商解析器互校/CRC 表 40 项 golden/三减速比复式记账/拒收路径/工厂多态, **256 cases 绿**（g++ 直编零 ROS）。R1-7A 三款电机通用, ratio 参数化。
 - **unistackbot_statemachine**（住 `unistackbot_hardware/statemachine/`, 2026-09-24 拆轴开包——用户裁决: 状态机与协议同款组织分两包, 同容器）: ①`NeutralState` 四态粗机（kUnknown/READY/ENABLED/QUICK_STOP/FAULT; 细分格 STANDBY·瞬态终态与影子机为延后项）; ②`StateTranslator` 父类（map_state: 统一 NodeFeedback→中立态; plan 动作序列延后）; ③`UnitreeImTranslator` 子类（优先级 故障>超时>模式）; ④工厂 `createStateTranslator(name)` + 注册表同款。依赖单向 protocol←statemachine。测试 9 cases 绿（直构结构体, 与 codec 解耦）。
-- **unistackbot_bus**（住 `unistackbot_hardware/bus/`, 2026-09-24 立轴——用户裁决: 总线父类与协议/状态机同款组织）: ①`MasterBase` 父类（8 方法, **交互类别完整**: 周期交换 PDO 形 publish_cmd/take_state[RT] + **慢通道事务 SDO 形 read_param/write_param**[2026-09-24 用户纠偏补——参数/对象读写带超时, 非RT上下文专用, key/value 中立载体(CiA402 OD/Modbus 寄存器/Dynamixel 控制表), 无能力协议返 kUnsupported, 即发命令 quick_stop, 生命周期 start/stop, 段级粗态 state worst-of——**纯交换语义零线程可见**); ②`MasterConfig`（protocol/translator/endpoint/rate_hz/节点表+每节点 ratio, 无默认纪律非法即拒）; ③**交换类型自持** BusCommand/BusState（protocol 包 Node 类型定长数组 kMaxNodes=16 镜像 kMaxJoints——不引用 interface 包的 RobotCommand/RobotFeedback, 零 ROS 链保持: interface←protocol←statemachine←bus）; ④工厂 `createMaster(name)` 注册表**空占位**（serial=SerialMaster 随切片1步4 泵骨架落地注册; ethercat/canfd 加法各一行）。测试 8 cases 绿（抽象性+交互类别存在性 static_assert/空注册表契约/定长界）。
-- **unistackbot_hardware** — **真机域容器目录**（非包本身; 内含 protocol/statemachine/bus 三个 colcon 子包 + 三骨架目录, 仿 sim_control 容器先例）。三个主站子目录各带 README: `serial_master/`（串口总线骨架 transport/framer/pump/scheduler/health 五件套, **协议内芯改由 unistackbot_protocol 包提供**——骨架只留 IO 工程; 第一个消费者 unitree_im = R1-7A 七轴臂 485@6M） / `ethercat_master/`（IgH ecrt+DC, 设计已成文） / `canfd_master/`（SocketCAN CAN FD, Piper 真机预期落位, 设计已成文）。**总线父类 MasterBase 住本包**（五要素代码化: 实现者=三骨架, 消费者=SystemInterface, 均在包内; 纯交换语义零线程可见——CM 只见 take_state/publish_cmd/quick_stop/state/caps）。三主站共用 master.hpp 五要素契约（设计 §4）; Piper 参数预埋仍在 `piper_ros2_control.xacro`（device/baudrate/loop_rate）。
+- **unistackbot_bus**（住 `unistackbot_hardware/bus/`, 2026-09-24 立轴——用户裁决: 总线父类与协议/状态机同款组织）: ①`MasterBase` 父类（8 方法, **交互类别完整**: 周期交换 PDO 形 publish_cmd/take_state[RT] + **慢通道事务 SDO 形 read_param/write_param**[2026-09-24 用户纠偏补——参数/对象读写带超时, 非RT上下文专用, key/value 中立载体(CiA402 OD/Modbus 寄存器/Dynamixel 控制表), 无能力协议返 kUnsupported, 即发命令 quick_stop, 生命周期 start/stop, 段级粗态 state worst-of——**纯交换语义零线程可见**); ②`MasterConfig`（protocol/translator/endpoint/rate_hz/节点表+每节点 ratio, 无默认纪律非法即拒）; ③**交换类型自持** BusCommand/BusState（protocol 包 Node 类型定长数组 kMaxNodes=16 镜像 kMaxJoints——不引用 interface 包的 RobotCommand/RobotFeedback, 零 ROS 链保持: interface←protocol←statemachine←bus←serial 骨架实现）; ④工厂 `createMaster(name)` **运行期注册制**——注册表无内置条目, 各实现包在组合根调 `registerToMasterFactory()` 经 `registerMaster()` 注入（"serial" 已由 unistackbot_serial 落地注册; ethercat/canfd 同款各一行）。测试 8 cases 绿（抽象性+交互类别存在性 static_assert/空注册表契约/定长界）。
+- **unistackbot_hardware** — **真机域容器目录**（非包本身; 内含 protocol/statemachine/bus/serial 四个 colcon 子包 + 三主站骨架目录, 仿 sim_control 容器先例）。三个主站子目录各带 README: `serial_master/`（★包 unistackbot_serial, 2026-09-24 五件套落地: **SerialMaster = MasterBase 首个实现**——泵线程 FIFO85/核2 + 逐节点时隙调度 + 追帧跳过纪律 + quick_stop 闩锁(锚定实测位) + SpLatest 交换 + 安全怠速(start 后未发命令=停机帧+看门狗位) + 慢通道 kUnsupported; 配套 IoTransport 字节管道接口 / FakeTransport 假总线(故障注入旋钮) / TermiosTransport 真串口(8N1 raw·BOTHER 任意波特·TIOCEXCL 独占, kernel ABI 手工复刻) / Framer(帧头同步+跨调用拼接+坏帧重同步+命令回显免疫); **协议内芯由 unistackbot_protocol 提供**——骨架只留 IO 工程; 组合根 = `registerToMasterFactory()`+`attach_transport()`+`start(cfg)`; **2026-09-27 泵职责拆分重构**——pumpMain 拆 runSlot/classifyFrame/publishSnapshot 等 ≤15 行函数、Impl 分 PumpState/WorkBuf、int64 时间、可重启(stop 释放 transport, start 复位闩锁/泵态)、tx_failed/rx_nofit 遥测分流; 测试 g++ 直编 9+38 cases 绿; TermiosTransport 编译过、回环/真机验证待硬件到货; 第一个消费者 unitree_im = R1-7A 七轴臂 485@6M） / `ethercat_master/`（IgH ecrt+DC, 设计已成文） / `canfd_master/`（SocketCAN CAN FD, Piper 真机预期落位, 设计已成文）。**总线父类 MasterBase 住 bus 子包**（五要素代码化: 实现者=主站骨架, 消费者=SystemInterface; 纯交换语义零线程可见——CM 只见 take_state/publish_cmd/quick_stop/state/caps; 契约=设计 §4）。Piper 参数预埋仍在 `piper_ros2_control.xacro`（device/baudrate/loop_rate）。
 - **unistackbot_sim_control** — 统一仿真控制层（ 对 ros2_control 提供统一插件接口，对内按后端分类）:
   - `SimControlHardware` (`SystemInterface`): URDF `<hardware>` 里固定写 `<plugin>unistackbot_sim_control/SimControlHardware</plugin>` + `<param name="backend">kinematic</param>`。接口按 URDF 声明镜像导出（effort 恒 0）；关节动态数量 ≤16，限位/`max_velocity`/mimic 全部来自 `<ros2_control>` 的 `<param>`。
   - 后端 `kinematic`（`BackendKinematic`）: 理想执行器 —— 限位 clamp + 每关节 `max_velocity` 饱和的一阶逼近；mimic 关节按 multiplier/offset 从源关节推导。
@@ -148,10 +150,10 @@ Morphology differences are isolated to: `description` model files, `hardware`/`s
 
 ## RT 基准与调优（仓库根 test/）
 
-- `test/rt_chain_bench.sh <标签> --robot <piper|xarm7> [--chain mock|mujoco]` — 一键 RT 基准套件: cyclictest 三档(无负载/50%/90%, `cpu_load.py` 造载) + SMI/中断采样 + hwlatdetect + RT 带宽记录 + CM 链路三档 E2E(WCET/误差/收敛; CM 目标从 ee_state 动态生成, 机型无关); 终端分步进度, 报告入 test/results/。结果 markdown 入库 `test/results/`（mock 权威基线 `rt_baseline_isolcpus.md`, 2026-09-20 隔离全套生效后: 负载档 Max 6-12µs; mujoco 基线 `rt_mujoco_baseline.md`: p99 4-55µs/误差 0.74mm/**max 508.6µs = 500µs IK 预算剪枝签名**——激活后首批冷 IK 烧穿预算, worker 3 拍自愈, 无害; warmup 多轮加固用户裁定暂缓排批次4; 历史基线同目录; piper 机型首跑报告 `rt_piper_first_0922.md`）。内核背景: 本机是**低延迟内核 (lowlatency), 不是 PREEMPT_RT**——措辞勿混。cmdline 已加 `isolcpus=domain,managed_irq,1,2 nohz_full=1,2 rcu_nocbs=1,2 irqaffinity=0,3-27`（隔离核1/2）。
+- `test/rt_chain_bench.sh <标签> --robot <piper|xarm7> [--chain mock|mujoco]` — 一键 RT 基准套件: cyclictest 三档(无负载/50%/90%, `cpu_load.py` 造载) + SMI/中断采样 + hwlatdetect + RT 带宽记录 + CM 链路三档 E2E(WCET/误差/收敛; CM 目标从 ee_state 动态生成, 机型无关); 终端分步进度, 报告入 test/results/。结果 markdown 入库 `test/results/`（mock 权威基线 `rt_baseline_isolcpus.md`, 2026-09-20 隔离全套生效后: 负载档 Max 6-12µs; mujoco 基线 `rt_mujoco_baseline.md`: p99 4-55µs/误差 0.74mm/**max 508.6µs = 500µs IK 预算剪枝签名**——激活后首批冷 IK 烧穿预算, worker 3 拍自愈, 无害; warmup 多轮加固用户裁定暂缓排批次4; 历史基线同目录; piper 机型首跑报告 `rt_piper_first_0922.md`）。内核背景: 本机是**低延迟内核 (lowlatency), 不是 PREEMPT_RT**——措辞勿混。cmdline 隔离参数集: `isolcpus=domain,managed_irq,1,2 nohz_full=1,2 rcu_nocbs=1,2 skew_tick=1 nohz=on nosoftlockup nowatchdog nmi_watchdog=0 irqaffinity=0,3-<末在线核>`（隔离核1/2）。**CPU 数类数值随机器定、文档勿写死**——irqaffinity 尾值 = 排除隔离核后的全部在线核末位（7945HX 32 线程机 = 0,3-31；28 线程机 = 0,3-27, 见 test/results/ 两机基线报告各自的 cmdline 行），引用时以 `/proc/cmdline` 实测为准；关 watchdog 族 = 以丢挂死诊断日志换削尾抖动的取舍（2026-09-25 定型）。
 - RT 裁决 (2026-09-20, 勿回退): `sched_rt_runtime_us` **保持默认 950000**——"500ms 事件 = RT throttling" 归因已翻案 (SCHED_OTHER 负载不进 RT 带宽账本, RT 占空比 <1% vs 95% 门槛; 详见基线文档翻案段); 950ms 默认值是同核 RT 疯转时的保险丝, 不持久化 -1。
 - isolcpus 坑: cyclictest 直接 `-a 1,2` 会 FATAL（不突破继承亲和 mask）——必须 `taskset -c 1,2 cyclictest ...`（套件已内置）。
-- `test/rt_tune_boot.sh [0-3]` — **每次开机手动执行** `sudo bash test/rt_tune_boot.sh` (默认 = 核0-3 前四核): idle 按退出延迟>2µs 禁深睡 (x86 通用, 兼 ACPI/intel_idle 档表) + performance governor + EPP; uncore 锁频段默认关 (对照实验无收益)。幂等, sysfs 直写零依赖; 换机器改脚本内 DEFAULT_CPUS。生产环境再转 systemd oneshot。
+- `test/rt_tune_boot.sh [0-3]` — **每次开机手动执行** `sudo bash test/rt_tune_boot.sh` = 开机必做全部动作一条收拢 (默认 = 核0-3 前四核): idle 按退出延迟>2µs 禁深睡 (x86 通用, 兼 ACPI/intel_idle 档表) + performance governor + EPP + **lo 组播标志补位** (2026-09-25 并入——重启即丢, DDS 随机失联根因, cyclonedds.xml 单播引导仅兜底); uncore 锁频段默认关 (对照实验无收益)。幂等, sysfs 直写零依赖; 换机器改脚本内 DEFAULT_CPUS。生产环境再转 systemd oneshot。
 - `test/rate_matrix_bench.sh <标签> --robot <机型> --chain mock|mujoco --bus-hz 500|1000 --cmd-hz 50|100|200 [--domain joint|cartesian] [--seconds 30]` — **频率矩阵** (2026-09-23): 控制端低频 × 总线/CM 频率的组合测试接口, 一格一跑 (清场→起链→录包→demo→指标→结果行自动追加 `test/results/rate_matrix_<机型>_<链>.md`), 指标 = 命令达成Hz/JS实测Hz/max|dv|拍/2阶差。**gz 链忽略 bus_hz 不报错** (CM 在 gz 插件进程内, launch 参数本就不可达; 用户裁决 2026-09-23: 三链各有各端功能, 频率矩阵属 mock 理想执行器 + mujoco 动力学回归两域, gz 要换频直接改 yaml `/**.update_rate`)。配套: launch `bus_hz:=` 参数 (运行期覆盖 update_rate, yaml /** 通配节单一事实源)。
 - 跑链前先 `ros2 run unistackbot_bringup chain_clean.sh`（**三链通用清场**, 2026-09-24: 杀三链残留+gz 家族+挂死 ros2 CLI+停 daemon, exit 0=干净可当门禁; gz_clean.sh 仍在 gazebo 包, 模式与其镜像; **单独执行**勿与 launch 同行——会杀 ros2 launch 宿主; 模式安全规则: `-f` 模式一律路径锚定+`[x]` 方括号防宿主自杀——裸词 "spawner" 曾误杀 gvfsd-*）。
 - 手动清残留也用 chain_clean.sh, 不要手打 pgrep/pkill 模式（历史坑: pkill 模式自杀 exit 144 / 误杀系统进程; 详见记忆 `p15-progress.md` 环境坑）。
@@ -200,8 +202,7 @@ Not build input, but two items are normative for code. 分类索引见 `docs/REA
 - `bus/udp_internal_bus_argument.md` — 内部总线选型论证（插值器以下链路不采用 UDP 的文献证据版, 服务于 CAN FD 定版决策）。
 - `guides/linux_rt_guide.md` — RT system tuning (PREEMPT_RT, isolcpus, IRQ affinity, cyclictest/抖动排查).
 - `guides/ik_validation_playbook.md` — 换臂/换 IK 求解器的六阶段验证方法论 + 参数审计表 + 验收模板 + §9 球腕 6 轴机型解析解接入流水线（piper 实例化, 2026-09-23 收拢——下一台同构型机型的照抄入口）。
-- `sim/sim_environment_and_test_plan.md` — 三链仿真现状 / 互补性定位 / 对上接口契约 / 分链测试矩阵 / 实施批次（2026-09-21 批次1-3 全勾; 5-9 已排）。
-- `sim/sim_validation_pipeline.md` — 机型接入→验收归档的端到端流程（A-G 七阶段门禁, 可复用资产）。
+- `sim/sim_validation_pipeline.md` — 机型接入→验收归档的端到端流程（A-G 七阶段门禁, 可复用资产; §2 手动执行手册=当前标准走法, §6 sim→real 真机迁移七步路径+数字迁移账, 2026-09-24）。**原 `sim_environment_and_test_plan.md`（三链现状/分链测试矩阵/批次进度）已于 2026-09-24 并入本文件后删除**——三链互补漏斗存活于 §1, 真机迁移门由 §6 吸收; 旧 §5.7 测试项定义/§8 故障定位未迁移（需要时 git 历史找回）; 悬空引用已清（2026-09-25, 8 处: docs/README.md 索引行 + 本文档头注/§5/§6 + sim.launch.py 注释 + 双 acceptance.yaml 头注 + ee_state_broadcaster.hpp 注释）。
 - `sim/chain_interface_dictionary.md` — 链上接口词典（运行面可观测话题/类型/频率/服务的规范描述; 定义先行——实现与词典冲突=实现 bug; piper mock 为基线, 三链差异见其 §6）。
 - `sim/acceptance_report_template.md` — 机型验收报告模板（A-G 阶段同构表, 手动首跑版; run_acceptance.sh 就位后由引擎自动填写）。
 - `control_course/` — control-theory course notes（传递函数 → 三环级联、PM/带宽账）. Background for the numbers cited in the design docs; not code documentation.

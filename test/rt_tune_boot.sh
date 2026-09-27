@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# RT 核开机调优 — 禁深睡 + performance governor + uncore 锁频。
+# RT 核开机调优 — 禁深睡 + performance governor + uncore 锁频 + lo 组播标志。
 # x86 通用: idle 档按"退出延迟值"取舍 (兼容 ACPI 4 档表 / intel_idle 多档表差异), 不依赖档位索引与命名。
+# 本脚本 = 开机必做的全部动作 (一条命令收拢, 2026-09-25 并入 lo 组播)。
 # 用法:  sudo bash test/rt_tune_boot.sh [0-3]
 #   不传参数 → DEFAULT_CPUS (当前 = 核0,1,2,3 前四核全调优; 换机器改下面 DEFAULT_CPUS)
 #   传 N (0-3) → 核 0..N (显式指定范围, 覆盖默认)
@@ -66,7 +67,8 @@ done
 
 # ---------- ④ uncore 锁频 (默认关: 2026-09-20 三档对照实测无可辨识收益, 见基线 D 节; 复测改 LOCK_UNCORE=1) ----------
 LOCK_UNCORE=0
-UNCORE_DIR=$(ls -d /sys/devices/system/cpu/intel_uncore_frequency/package_*_die_* 2>/dev/null | head -1)
+# || true 非装饰: AMD 无此接口时 ls 退出 2, pipefail+set -e 会在本行静默杀脚本 (2026-09-26 本机实锤)
+UNCORE_DIR=$(ls -d /sys/devices/system/cpu/intel_uncore_frequency/package_*_die_* 2>/dev/null | head -1 || true)
 if [ "$LOCK_UNCORE" = "1" ] && [ -n "$UNCORE_DIR" ]; then
   UMAX=$(cat "$UNCORE_DIR/initial_max_freq_khz")
   echo "$UMAX" > "$UNCORE_DIR/min_freq_khz"
@@ -75,6 +77,13 @@ elif [ -n "$UNCORE_DIR" ]; then
   echo "ℹ uncore 锁频默认关 (对照无收益); 当前 min=$(cat "$UNCORE_DIR/min_freq_khz") kHz"
 else
   echo "ℹ 无 uncore sysfs 接口 (非 Intel 或旧内核), 跳过"
+fi
+
+# ---------- ⑤ lo 组播标志 (重启即丢, 每次开机补; DDS 根因见 ~/cyclonedds.xml) ----------
+if ip link set lo multicast on 2>/dev/null; then
+  echo "✓ lo MULTICAST 标志已置位 (CycloneDDS 发现层依赖; 缺失=随机失联根因, cyclonedds.xml 单播引导仅兜底)"
+else
+  echo "⚠️ ip link set lo multicast on 失败 — DDS 发现可能间歇退化 (cyclonedds.xml 单播引导兜底仍在)"
 fi
 
 # ---------- 验证 (档名[退出延迟]后 0=可用 1=已禁) ----------
@@ -89,3 +98,4 @@ done
 if [ -n "$UNCORE_DIR" ]; then
   echo "uncore: min=$(cat "$UNCORE_DIR/min_freq_khz") max=$(cat "$UNCORE_DIR/max_freq_khz") kHz"
 fi
+echo "lo: flags=$(cat /sys/class/net/lo/flags) (0x1009=含组播 ✓, 0x9=缺)"

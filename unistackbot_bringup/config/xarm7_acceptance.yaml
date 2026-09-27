@@ -1,5 +1,5 @@
-# xarm7 机型验收登记表 —— §5.7 测试定义判据的登记值单一事实源 (verify_robot.sh 消费)
-# 定义依据: docs/sim/sim_environment_and_test_plan.md §5.7
+# xarm7 机型验收登记表 —— 测试判据登记值单一事实源 (verify_robot.sh 消费)
+# 定义依据: 原 docs/sim/sim_environment_and_test_plan.md §5.7 (文档 2026-09-24 删除, 判据定义未迁移, git 历史可查); 现行流程 docs/sim/sim_validation_pipeline.md
 # 纪律: 改模型/改判据阈值 → 先改这里 (登记值变更要说明理由), verify 按此断言
 fingerprint:                # 静态判据 (2026-09-22 实测登记)
   subchain_count: 9         # 判据②: check_urdf child 数 (use_world + use_ros2_control 展开)

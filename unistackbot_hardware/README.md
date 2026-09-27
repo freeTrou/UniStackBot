@@ -7,7 +7,7 @@ colcon 自动忽略，同 `unistackbot_common` 先例；代码动工时再复包
 父类+子类+工厂组织, 仿 sim_control 容器先例——目录归家, 包名不变）：
 
 ```
-unistackbot_hardware/              (容器; 内含三个 colcon 包)
+unistackbot_hardware/              (容器; 内含四个 colcon 包)
   serial_master/     # ★包 unistackbot_serial: 串口骨架五件套已落地 (SerialMaster=MasterBase 实现
                      #  泵+时隙+追帧+quick_stop+FakeTransport 全链 25 cases 绿 + Framer 9 cases 绿
                      #  + TermiosTransport 编译过待真机) —— 见其 README
@@ -18,8 +18,9 @@ unistackbot_hardware/              (容器; 内含三个 colcon 包)
   statemachine/      # ★包 unistackbot_statemachine: 状态翻译轴 (StateTranslator 父类
                      #  + UnitreeImTranslator 子类 + 工厂; 9 cases 绿; 依赖 protocol 包)
   bus/               # ★包 unistackbot_bus: 总线主站轴 (MasterBase 父类=五要素最小集代码化,
-                     #  纯交换零线程可见 + 工厂; 注册表空占位——serial 随泵骨架落地;
-                     #  BusCommand/BusState 自持零 ROS; 依赖 protocol+statemachine)
+                     #  纯交换零线程可见 + 工厂; 运行期注册制——serial 已注册,
+                     #  ethercat/canfd 同款各一行; BusCommand/BusState 自持零 ROS;
+                     #  依赖 protocol+statemachine)
 ```
 
 三主站共用 MasterBase 父类（`bus/` 包, 五要素已代码化; 设计 §4），
