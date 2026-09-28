@@ -4,6 +4,7 @@
     <xacro:arg name="use_ros2_control" default="false" />
     <xacro:arg name="use_world" default="true" />
     <xacro:arg name="use_gazebo" default="false" />
+    <xacro:arg name="headless" default="true" />
 
     <xacro:include filename="$(find unistackbot_description)/arms/stationlite/urdf/stationlite_macro.xacro"/>
     <xacro:include filename="$(find unistackbot_description)/arms/stationlite/urdf/stationlite_ros2_control.xacro"/>

@@ -1,0 +1,171 @@
+<mujoco model="stationlite">
+  <!--
+    stationlite MuJoCo (2026-09-28 从 URDF 生成)。
+    双臂各 6 revolute + 2 prismatic (mimic via equality); mesh 直引 collision STL。
+    kp/dampratio 起步同 piper 量级; timestep 0.002 (500Hz) 对齐 update_rate。
+  -->
+  <compiler angle="radian" meshdir="../meshes/collision/"/>
+  <option timestep="0.002"/>
+
+  <asset>
+    <mesh name="armbase" file="armbase.STL"/>
+    <mesh name="base" file="base.STL"/>
+    <mesh name="griperlj_link1" file="griperlj_link1.STL"/>
+    <mesh name="griperlj_link2" file="griperlj_link2.STL"/>
+    <mesh name="gripper_base" file="gripper_base.STL"/>
+    <mesh name="handcam" file="handcam.STL"/>
+    <mesh name="headcam" file="headcam.STL"/>
+    <mesh name="link1" file="link1.STL"/>
+    <mesh name="link2" file="link2.STL"/>
+    <mesh name="link3" file="link3.STL"/>
+    <mesh name="link4" file="link4.STL"/>
+    <mesh name="link5" file="link5.STL"/>
+    <mesh name="refcam" file="refcam.STL"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5"/>
+  </asset>
+
+  <default>
+    <default class="visual"><geom contype="0" conaffinity="0" group="1" rgba="0.75 0.75 0.75 1"/></default>
+    <default class="collision"><geom contype="1" conaffinity="1" group="2"/></default>
+  </default>
+
+  <worldbody>
+    <light pos="0 0 2.0" dir="0 0 -1" directional="true"/>
+    <geom conaffinity="0" contype="1" material="groundplane" name="floor" pos="0 0 -0.01" size="0 0 0.01" type="plane"/>
+    <body name="base" pos="0 0 0">
+      <inertial pos="-0.008088 -3e-06 0.217476" mass="2.239" diaginertia="0.265323119 0.217350657 0.049509934"/>
+      <geom name="base_mesh" mesh="base" class="visual"/>
+      <geom name="base_coll" mesh="base" class="collision"/>
+      <body name="left_armbase" pos="0 0.3175 0">
+        <inertial pos="-2.1e-05 -4.7e-05 0.037955" mass="0.510232" diaginertia="0.000284 0.000280 0.000280"/>
+        <geom name="left_armbase_mesh" mesh="armbase" class="visual"/>
+        <geom name="left_armbase_coll" mesh="armbase" class="collision"/>
+        <joint name="left_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824"/>
+        <body name="left_link1" pos="0 0 0">
+          <inertial pos="0.02 -0.002 0.109" mass="0.496" diaginertia="0.000349 0.000356 0.000267"/>
+          <geom name="left_link1_mesh" mesh="link1" class="visual"/>
+          <geom name="left_link1_coll" mesh="link1" class="collision"/>
+          <joint name="left_joint2" type="hinge" pos="0.024 0 0.117" axis="0 1 0" range="-0.209 3.508"/>
+          <body name="left_link2" pos="0.024 0 0.117">
+            <inertial pos="-0.19164 -0.001145 -5.7e-05" mass="0.774" diaginertia="0.00037 0.006613 0.006701"/>
+            <geom name="left_link2_mesh" mesh="link2" class="visual"/>
+            <geom name="left_link2_coll" mesh="link2" class="collision"/>
+            <joint name="left_joint3" type="hinge" pos="-0.265 0 0" axis="0 1 0" range="-3.193 0"/>
+            <body name="left_link3" pos="-0.265 0 0">
+              <inertial pos="0.17632 -0.001549 0.054649" mass="0.67366" diaginertia="0.000494 0.007196 0.00709"/>
+              <geom name="left_link3_mesh" mesh="link3" class="visual"/>
+              <geom name="left_link3_coll" mesh="link3" class="collision"/>
+              <joint name="left_joint4" type="hinge" pos="0.265 0 0.062" axis="0 1 0" range="-1.71 1.71"/>
+              <body name="left_link4" pos="0.265 0 0.062">
+                <inertial pos="0.064717 0 0.047271" mass="0.45575" diaginertia="0.000449 0.000662 0.000513"/>
+                <geom name="left_link4_mesh" mesh="link4" class="visual"/>
+                <geom name="left_link4_coll" mesh="link4" class="collision"/>
+                <joint name="left_joint5" type="hinge" pos="0.078 0 -0.00295" axis="0 0 1" range="-1.71 1.71"/>
+                <body name="left_link5" pos="0.078 0 -0.00295">
+                  <inertial pos="0.002443 0 0.002098" mass="0.37166" diaginertia="0.000176 0.00017 0.000147"/>
+                  <geom name="left_link5_mesh" mesh="link5" class="visual"/>
+                  <geom name="left_link5_coll" mesh="link5" class="collision"/>
+                  <joint name="left_joint6" type="hinge" pos="0.0255 0 0" axis="1 0 0" range="-2.856 2.856"/>
+                  <body name="left_linkgripper" pos="0.0255 0 0">
+                    <inertial pos="0.043232 4.1e-05 0.000635" mass="0.484919" diaginertia="0.000344 0.000318 0.000433"/>
+                    <geom name="left_linkgripper_mesh" mesh="gripper_base" class="visual"/>
+                    <geom name="left_linkgripper_coll" mesh="gripper_base" class="collision"/>
+                    <joint name="left_gripper_joint1" type="slide" pos="0.1733 0 0" axis="0 1 0" range="-0.0425 0"/>
+                    <body name="left_griperlj_link1" pos="0.1733 0 0">
+                      <inertial pos="-0.074793 -0.014951 3.8e-05" mass="0.049996" diaginertia="0.000008474 0.000034639 0.000035808"/>
+                      <geom name="left_griperlj_link1_mesh" mesh="griperlj_link1" class="visual"/>
+                      <geom name="left_griperlj_link1_coll" mesh="griperlj_link1" class="collision"/>
+                    </body>
+                    <joint name="left_gripper_joint2" type="slide" pos="0.1733 0 0" axis="0 1 0" range="0 0.0425"/>
+                    <body name="left_griperlj_link2" pos="0.1733 0 0">
+                      <inertial pos="-0.074793 0.014951 -3.8e-05" mass="0.05" diaginertia="0.000008474 0.000034639 0.000035808"/>
+                      <geom name="left_griperlj_link2_mesh" mesh="griperlj_link2" class="visual"/>
+                      <geom name="left_griperlj_link2_coll" mesh="griperlj_link2" class="collision"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="right_armbase" pos="0 -0.3175 0">
+        <inertial pos="-2.1e-05 -4.7e-05 0.037955" mass="0.510232" diaginertia="0.000284 0.000280 0.000280"/>
+        <geom name="right_armbase_mesh" mesh="armbase" class="visual"/>
+        <geom name="right_armbase_coll" mesh="armbase" class="collision"/>
+        <joint name="right_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824"/>
+        <body name="right_link1" pos="0 0 0">
+          <inertial pos="0.02 -0.002 0.109" mass="0.496" diaginertia="0.000349 0.000356 0.000267"/>
+          <geom name="right_link1_mesh" mesh="link1" class="visual"/>
+          <geom name="right_link1_coll" mesh="link1" class="collision"/>
+          <joint name="right_joint2" type="hinge" pos="0.024 0 0.117" axis="0 1 0" range="-0.209 3.508"/>
+          <body name="right_link2" pos="0.024 0 0.117">
+            <inertial pos="-0.19164 -0.001145 -5.7e-05" mass="0.774" diaginertia="0.00037 0.006613 0.006701"/>
+            <geom name="right_link2_mesh" mesh="link2" class="visual"/>
+            <geom name="right_link2_coll" mesh="link2" class="collision"/>
+            <joint name="right_joint3" type="hinge" pos="-0.265 0 0" axis="0 1 0" range="-3.193 0"/>
+            <body name="right_link3" pos="-0.265 0 0">
+              <inertial pos="0.17632 -0.001549 0.054649" mass="0.67366" diaginertia="0.000494 0.007196 0.00709"/>
+              <geom name="right_link3_mesh" mesh="link3" class="visual"/>
+              <geom name="right_link3_coll" mesh="link3" class="collision"/>
+              <joint name="right_joint4" type="hinge" pos="0.265 0 0.062" axis="0 1 0" range="-1.71 1.71"/>
+              <body name="right_link4" pos="0.265 0 0.062">
+                <inertial pos="0.064717 0 0.047271" mass="0.45575" diaginertia="0.000449 0.000662 0.000513"/>
+                <geom name="right_link4_mesh" mesh="link4" class="visual"/>
+                <geom name="right_link4_coll" mesh="link4" class="collision"/>
+                <joint name="right_joint5" type="hinge" pos="0.078 0 -0.00295" axis="0 0 1" range="-1.71 1.71"/>
+                <body name="right_link5" pos="0.078 0 -0.00295">
+                  <inertial pos="0.002443 0 0.002098" mass="0.37166" diaginertia="0.000176 0.00017 0.000147"/>
+                  <geom name="right_link5_mesh" mesh="link5" class="visual"/>
+                  <geom name="right_link5_coll" mesh="link5" class="collision"/>
+                  <joint name="right_joint6" type="hinge" pos="0.0255 0 0" axis="1 0 0" range="-2.856 2.856"/>
+                  <body name="right_linkgripper" pos="0.0255 0 0">
+                    <inertial pos="0.043232 4.1e-05 0.000635" mass="0.484919" diaginertia="0.000344 0.000318 0.000433"/>
+                    <geom name="right_linkgripper_mesh" mesh="gripper_base" class="visual"/>
+                    <geom name="right_linkgripper_coll" mesh="gripper_base" class="collision"/>
+                    <joint name="right_gripper_joint1" type="slide" pos="0.1733 0 0" axis="0 1 0" range="-0.0425 0"/>
+                    <body name="right_griperlj_link1" pos="0.1733 0 0">
+                      <inertial pos="-0.074793 -0.014951 3.8e-05" mass="0.049996" diaginertia="0.000008474 0.000034639 0.000035808"/>
+                      <geom name="right_griperlj_link1_mesh" mesh="griperlj_link1" class="visual"/>
+                      <geom name="right_griperlj_link1_coll" mesh="griperlj_link1" class="collision"/>
+                    </body>
+                    <joint name="right_gripper_joint2" type="slide" pos="0.1733 0 0" axis="0 1 0" range="0 0.0425"/>
+                    <body name="right_griperlj_link2" pos="0.1733 0 0">
+                      <inertial pos="-0.074793 0.014951 -3.8e-05" mass="0.05" diaginertia="0.000008474 0.000034639 0.000035808"/>
+                      <geom name="right_griperlj_link2_mesh" mesh="griperlj_link2" class="visual"/>
+                      <geom name="right_griperlj_link2_coll" mesh="griperlj_link2" class="collision"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="left_joint1" joint="left_joint1" kp="1500" dampratio="1.0" ctrlrange="-2.824 2.824"/>
+    <position name="left_joint2" joint="left_joint2" kp="6000" dampratio="1.0" ctrlrange="-0.209 3.508"/>
+    <position name="left_joint3" joint="left_joint3" kp="4000" dampratio="1.0" ctrlrange="-3.193 0"/>
+    <position name="left_joint4" joint="left_joint4" kp="2000" dampratio="1.0" ctrlrange="-1.71 1.71"/>
+    <position name="left_joint5" joint="left_joint5" kp="300" dampratio="1.0" ctrlrange="-1.71 1.71"/>
+    <position name="left_joint6" joint="left_joint6" kp="200" dampratio="1.0" ctrlrange="-2.856 2.856"/>
+    <position name="left_gripper_joint1" joint="left_gripper_joint1" kp="200" dampratio="1.0" ctrlrange="-0.0425 0"/>
+    <position name="right_joint1" joint="right_joint1" kp="1500" dampratio="1.0" ctrlrange="-2.824 2.824"/>
+    <position name="right_joint2" joint="right_joint2" kp="6000" dampratio="1.0" ctrlrange="-0.209 3.508"/>
+    <position name="right_joint3" joint="right_joint3" kp="4000" dampratio="1.0" ctrlrange="-3.193 0"/>
+    <position name="right_joint4" joint="right_joint4" kp="2000" dampratio="1.0" ctrlrange="-1.71 1.71"/>
+    <position name="right_joint5" joint="right_joint5" kp="300" dampratio="1.0" ctrlrange="-1.71 1.71"/>
+    <position name="right_joint6" joint="right_joint6" kp="200" dampratio="1.0" ctrlrange="-2.856 2.856"/>
+    <position name="right_gripper_joint1" joint="right_gripper_joint1" kp="200" dampratio="1.0" ctrlrange="-0.0425 0"/>
+  </actuator>
+
+  <equality>
+    <joint joint1="left_gripper_joint2" joint2="left_gripper_joint1" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+    <joint joint1="right_gripper_joint2" joint2="right_gripper_joint1" polycoef="0 -1 0 0 0" solimp="0.95 0.99 0.001" solref="0.005 1"/>
+  </equality>
+
+</mujoco>
