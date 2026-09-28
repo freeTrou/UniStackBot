@@ -13,7 +13,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/base.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/base.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -26,7 +26,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/armbase.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/armbase.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -39,7 +39,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link1.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link1.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -52,7 +52,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link2.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link2.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -65,7 +65,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link3.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link3.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -78,7 +78,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link4.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link4.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -91,7 +91,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link5.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link5.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -104,7 +104,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/gripper_base.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/gripper_base.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -117,7 +117,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link1.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/griperlj_link1.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -130,7 +130,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link2.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/griperlj_link2.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -143,7 +143,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/handcam.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/handcam.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -233,7 +233,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/armbase.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/armbase.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -246,7 +246,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link1.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link1.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -259,7 +259,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link2.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link2.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -272,7 +272,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link3.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link3.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -285,7 +285,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link4.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link4.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -298,7 +298,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link5.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/link5.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -311,7 +311,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/gripper_base.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/gripper_base.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -324,7 +324,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link1.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/griperlj_link1.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -337,7 +337,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link2.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/griperlj_link2.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
@@ -350,7 +350,7 @@
       </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/handcam.STL"/></geometry>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/visual/handcam.STL"/></geometry>
         <material name="station_gray"/>
       </visual>
     </link>
