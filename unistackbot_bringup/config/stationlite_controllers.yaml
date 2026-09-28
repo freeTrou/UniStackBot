@@ -1,27 +1,21 @@
 /**:
   ros__parameters:
-    update_rate: 500  # Hz
+    update_rate: 500
 
-    controller_manager:
-      ros__parameters:
-        joint_state_broadcaster:
-          type: joint_state_broadcaster/JointStateBroadcaster
-        joint_stream_controller:
-          type: unistackbot_controller/JointStreamController
-        cartesian_motion_controller:
-          type: unistackbot_controller/CartesianMotionController
-        ee_state_broadcaster:
-          type: unistackbot_controller/EeStateBroadcaster
-
-# 左臂 CM (base=left_armbase, tip=left_linkgripper)
-cartesian_motion_controller:
+controller_manager:
   ros__parameters:
-    base_link: left_armbase
-    tip_link: left_linkgripper
-    ik_solver: dls  # 非球腕 → 数值解 (Pieper 条件 2 平行轴可升级解析)
-    ik_timeout_ms: 50.0
-    max_acceleration: 5.0
-    max_jerk: 20.0
+    thread_priority: 80
+    cpu_affinity: 1
+    lock_memory: true
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    joint_stream_controller:
+      type: unistackbot_controller/JointStreamController
+    cartesian_motion_controller:
+      type: unistackbot_controller/CartesianMotionController
+    ee_state_broadcaster:
+      type: unistackbot_controller/EeStateBroadcaster
 
 joint_stream_controller:
   ros__parameters:
@@ -30,6 +24,15 @@ joint_stream_controller:
     max_jerk: 20.0
     stale_timeout_ms: 200.0
     stale_decel_ms: 200.0
+
+cartesian_motion_controller:
+  ros__parameters:
+    base_link: left_armbase
+    tip_link: left_linkgripper
+    ik_solver: dls
+    ik_timeout_ms: 50.0
+    max_acceleration: 5.0
+    max_jerk: 20.0
 
 ee_state_broadcaster:
   ros__parameters:
