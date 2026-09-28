@@ -98,21 +98,24 @@ class DemoMotion(Node):
 		pub = self.create_publisher(JointCommand, '/joint_stream_controller/command', qos)
 
 		# 大幅快慢变速序列 (2026-09-24 用户需求: >10s 长时 + 大幅 + 有快有慢):
-		# 显式段计划 (限位区间百分比目标, 段时长) —— 快腿/慢腿交替, 同跨度下
-		# 命令速度对比 ~3×; 段内 smoothstep 过渡 (起停零速度)。
-		# 内缩原因: gz 链命令精确停限位会触发限位咬死 (gz_ros2_control #165 残余),
-		# 零位恰在 piper joint2/joint3 的限位线上
+		# 构型感知航点 (2026-09-28 修正): 限位百分比在不对称限位/零位偏移的臂上
+		# (stationlite j2: [-0.209, 3.508]) 会走到极端折叠构型——
+		# 改为围绕零位的对称偏移 (±range*factor), 并保守取 factor=0.3
 		lo = [l for l, _ in lims]
 		hi = [h for _, h in lims]
-		frac = lambda f: [l + f * (h - l) for l, h in zip(lo, hi)]
 		def inset(v, l, h):
 			return min(max(v, l + 0.02 * (h - l)), h - 0.02 * (h - l))
 		home = [inset(0.0, l, h) for l, h in zip(lo, hi)]
+		# 围绕零位的偏移量 = min(|lo-home|, |hi-home|) * factor (保守 30%)
+		factor = 0.3
+		amp = [min(abs(h - h0), abs(h0 - l)) * factor for l, h, h0 in zip(lo, hi, home)]
+		pos = [h0 + a for h0, a in zip(home, amp)]   # 正向偏移
+		neg = [h0 - a for h0, a in zip(home, amp)]   # 负向偏移
 		schedule = [
-			(frac(0.85), 2.0, '快'),   # 部署: 大跨快腿
-			(frac(0.15), 6.0, '慢'),   # 摆到对侧: ~70% 限位区间慢腿
-			(frac(0.85), 2.5, '快'),   # 回摆: 全跨度快腿
-			(home, 4.0, '慢'),         # 收尾: 慢腿归位
+			(pos, 2.0, '快'),
+			(neg, 6.0, '慢'),
+			(pos, 2.5, '快'),
+			(home, 4.0, '慢'),
 		]
 		plan = []
 		prev = list(home)

@@ -643,7 +643,8 @@
       "Bash(git -C /home/work/project/git_project/UniStackBot_ws/src/UniStackBot add -A)",
       "Bash(git -C /home/work/project/git_project/UniStackBot_ws/src/UniStackBot commit -m \"修stationlite mesh路径加visual子目录\")",
       "Bash(git -C /home/work/project/git_project/UniStackBot_ws/src/UniStackBot commit -m \"修stationlite ros2_control缺type=system属性\\(SIGABRT根因\\)\")",
-      "Bash(git -C /home/work/project/git_project/UniStackBot_ws/src/UniStackBot log --oneline -1)"
+      "Bash(git -C /home/work/project/git_project/UniStackBot_ws/src/UniStackBot log --oneline -1)",
+      "Bash(git -C /home/work/project/git_project/UniStackBot_ws/src/UniStackBot commit -m \"demo_motion构型感知:航点改围绕零位对称偏移30%替代限位百分比\")"
     ]
   }
 }
