@@ -89,7 +89,7 @@ unistackbot_bringup            → 顶层启动 / 参数编排
 unistackbot_demo               → 控制 demo 独立包 (三命令域: 末端位姿流/关节慢流/关节满速流; 链路契约的栈外独立消费者)
 unistackbot_controller         → 控制器集成 (CM 笛卡尔流式 + JointStream 关节流式) + 工具节点
 unistackbot_algorithm          → 纯算法库 (FK/IK/种子库, 零控制器依赖)
-unistackbot_hardware           → 真机域容器 (目录平级于仿真域): 三主站骨架目录 + 四子包 (protocol=codec轴 / statemachine=状态翻译轴 / bus=总线交换轴 / serial=串口主站实现)
+unistackbot_hardware           → 真机域容器 (目录平级于仿真域): EC/CAN 两骨架目录 + 四子包 (protocol=codec轴 / statemachine=状态翻译轴 / bus=总线交换契约 / serial=串口主站已实现)
 unistackbot_sim_control/       → 仿真集成组 (容器目录, 三独立包; 见其 README)
   ├─ core     (包 unistackbot_sim_control: 统一仿真控制层 kinematic 后端 + /sim_control 服务)
   ├─ gazebo   (包 unistackbot_gazebo: Gazebo 集成 world + launch + gz 适配器)
@@ -215,5 +215,6 @@ Not build input, but two items are normative for code. 分类索引见 `docs/REA
 C++ style is governed by `docs/guides/cpp_style_guide.md`. Non-negotiables: Allman braces on their own line everywhere; **Tab indentation** (display width 4), never spaces; filename = snake_case of the main class (`sim_control_hardware.hpp` ↔ `SimControlHardware`); `PKG__FILE_HPP_` include guards; `k`-prefixed constexpr constants, `snake_case_` members; **explicit error flow** — our code never throws (errors via return value + message, `[[nodiscard]]` on error-returning functions); system calls that are documented to throw (`std::stod` etc.) are caught at the call boundary and translated into return values — exceptions never enter the control chain (style guide rule 27). All C++ packages compile with `-Wall -Wextra -Wpedantic` and `cxx_std_17`, zero warnings. RT hot paths: lock-free structures/atomics only — no mutex, malloc, printf, or IO in the control loop (RT code discipline lives in `docs/guides/linux_rt_guide.md` part 2, not the style guide).
 - **ROS I/O 纪律（2026-09-21 用户定稿，控制器/RT 线程相关节点一律适用）**：① RT 线程内发布一律 `RealtimePublisher` trylock——非阻塞，拿不到锁跳本拍，序列化/DDS 发送在其后台线程做；② 订阅回调永不进 RT 线程——executor 回调经无锁通道交接（`SpLatest` 值通道 / `SpscRing` 事件通道，POD 硬断言），RT 侧读撕裂/无更新沿用旧值；③ 任何新节点不得给 CM RT 线程引入等待、锁或分配。先例：CM target/worker 回灌/status、JS CmdSnapshot、EE broadcaster。验收 = rt_chain_bench WCET 前后对比。
 - Each package uses `ament_lint_auto` with `ament_lint_common` for tests — match this when adding new packages.
+- **git commit 纪律（2026-09-24 用户纠偏）**：只写**一行简洁中文标题**，**≤30 字左右**——"真机域三轴:protocol/statemachine/bus包" 是合格样例；列细节、括号解释、破折号展开全部不要。
 - `bringup`'s `package.xml` lists the packages it orchestrates as `exec_depend` (including `unistackbot_sim_control`); `unistackbot_gazebo` similarly declares its runtime deps. Add new runtime-consumed packages there.
 - Keep `.gitkeep` files in empty `launch/`, `config/`, `include/` directories so the package structure survives in git.

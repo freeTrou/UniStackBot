@@ -32,9 +32,12 @@ namespace unistackbot_bus
 // 节点表上限 (总线一段的节点数界; 与 interface 的 kMaxJoints=16 同口径镜像)
 constexpr std::size_t kMaxNodes = 16;
 
-// 总线段装配配置 (组合根从机器配置读入; 无默认纪律——非法即 start 拒绝)
+// 总线段装配配置 (组合根从机器配置读入)
+// 拓扑类字段无默认 (rate_hz/protocol/translator/endpoint/node_*/ratio——非法即 start 拒绝);
+// 调优类字段有合理默认 (线程/陈旧/波特——部署侧按机型覆盖)。
 struct MasterConfig
 {
+	// ── 拓扑 (必填, 无默认纪律) ──
 	std::string protocol;    // 协议内芯名 (protocol 工厂口径)
 	std::string translator;  // 状态翻译器名 (statemachine 工厂口径)
 	std::string endpoint;    // 总线端点 (串口=设备路径; CAN=接口名; EC=网卡——中立载体)
@@ -42,6 +45,12 @@ struct MasterConfig
 	std::size_t node_count = 0;                       // 节点表长度
 	std::uint8_t node_id[kMaxNodes] = {};             // 节点总线 ID 表 (定槽)
 	double ratio[kMaxNodes] = {};                     // 每节点减速比 (>0)
+
+	// ── 调优 (有默认, 部署侧覆盖) ──
+	int baudrate = 6000000;              // 串口波特率 (EC/CAN 忽略或由协议定)
+	int thread_priority = 85;            // 泵线程 SCHED_FIFO 优先级 (调度阶梯: EC95>CAN90>串口85)
+	int cpu_affinity = 2;                // 泵线程绑核 (总线核; -1=不绑)
+	std::uint64_t stale_cycles = 50;     // 无反馈判 Unknown 的拍数 (~100ms@500Hz)
 };
 
 // 一拍命令集 (按配置的节点表定槽; publish 覆盖写, 取最新语义)

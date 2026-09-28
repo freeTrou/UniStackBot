@@ -28,12 +28,8 @@ using unistackbot_protocol::NodeCommand;
 using unistackbot_protocol::NodeFeedback;
 using unistackbot_statemachine::NeutralState;
 
-constexpr int kPumpPrio = 85;    // 串口档 (调度阶梯 EC95>CAN90>串口85)
-constexpr int kPumpCpu = 2;      // 总线核
-constexpr std::uint64_t kStaleCycles = 50;   // 无反馈判 Unknown 的拍数 (~100ms@500Hz)
 constexpr std::int64_t kNsPerSec = 1'000'000'000LL;
-constexpr std::size_t kRxBurst = 8;          // 单次排干最多处理帧数
-constexpr int kDefaultBaud = 6000000;        // unitree IM 系默认 (MasterConfig 无波特位, 协议侧约定)
+constexpr std::size_t kRxBurst = 8;   // 单次排干帧数界 (实现常量, 非部署调优)
 
 std::int64_t clockNowNs()
 {
@@ -136,6 +132,12 @@ bool SerialMaster::start(const MasterConfig &cfg)
 			return false;
 		}
 	}
+	// 调优字段合法性 (有默认但有界)
+	if (cfg.baudrate <= 0 || cfg.thread_priority < 0 || cfg.thread_priority > 99 ||
+		cfg.cpu_affinity < -1 || cfg.stale_cycles == 0)
+	{
+		return false;
+	}
 	impl_->proto = unistackbot_protocol::createProtocolCore(cfg.protocol);
 	impl_->translator = unistackbot_statemachine::createStateTranslator(cfg.translator);
 	if (impl_->proto == nullptr || impl_->translator == nullptr)
@@ -145,7 +147,7 @@ bool SerialMaster::start(const MasterConfig &cfg)
 	if (impl_->io == nullptr)
 	{
 		std::string err;
-		impl_->io = TermiosTransport::open(cfg.endpoint, kDefaultBaud, err);
+		impl_->io = TermiosTransport::open(cfg.endpoint, cfg.baudrate, err);
 		if (impl_->io == nullptr)
 		{
 			std::fprintf(stderr, "SerialMaster: 打开 %s 失败: %s\n",
@@ -174,7 +176,8 @@ bool SerialMaster::start(const MasterConfig &cfg)
 
 void SerialMaster::pumpMain()
 {
-	unistackbot_common::rt_tune::apply(kPumpCpu, kPumpPrio, 0, "serial_pump");
+	unistackbot_common::rt_tune::apply(impl_->cfg.cpu_affinity, impl_->cfg.thread_priority,
+		0, "serial_pump");
 
 	const std::int64_t period_ns = static_cast<std::int64_t>(kNsPerSec / impl_->cfg.rate_hz);
 	const std::int64_t slot_ns = period_ns / static_cast<std::int64_t>(impl_->cfg.node_count);
@@ -318,7 +321,7 @@ void SerialMaster::publishSnapshot()
 	{
 		impl_->work_.snap.node[i] = impl_->pump_.fb[i];
 		impl_->work_.snap.node_state[i] =
-			(impl_->pump_.cycle - impl_->pump_.last_seen_cycle[i] > kStaleCycles)
+			(impl_->pump_.cycle - impl_->pump_.last_seen_cycle[i] > impl_->cfg.stale_cycles)
 			? NeutralState::kUnknown
 			: impl_->translator->map_state(impl_->pump_.fb[i]);
 	}

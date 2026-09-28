@@ -152,6 +152,10 @@ MasterConfig makeCfg()
 	cfg.translator = "unitree_im";
 	cfg.endpoint = "fake";
 	cfg.rate_hz = 250.0;   // 测试提速 (2 节点 slot 2ms)
+	cfg.baudrate = 6000000;
+	cfg.thread_priority = 0;   // 测试环境不抢 FIFO (0=rt_tune 降级 SCHED_OTHER)
+	cfg.cpu_affinity = -1;    // 测试不绑核
+	cfg.stale_cycles = 30;    // 250Hz 下 120ms
 	cfg.node_count = 2;
 	cfg.node_id[0] = kNodeA;
 	cfg.node_id[1] = kNodeB;
@@ -273,9 +277,9 @@ int main()
 	check(m->state() == NeutralState::kFault, "error bits -> FAULT");
 	motor->error_bits = 0;
 
-	// ④ 断流陈旧: 丢全部应答 → Unknown (kStaleCycles=50 拍 @250Hz ≈ 200ms)
+	// ④ 断流陈旧: 丢全部应答 → Unknown (stale_cycles=30 拍 @250Hz ≈ 120ms)
 	fake_raw->set_drop_responses(1000000);
-	std::this_thread::sleep_for(std::chrono::milliseconds(400));
+	std::this_thread::sleep_for(std::chrono::milliseconds(250));
 	check(m->state() == NeutralState::kUnknown, "all-drop -> stale Unknown");
 	fake_raw->set_drop_responses(0);
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
