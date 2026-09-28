@@ -13,6 +13,7 @@ find_package(unistackbot_protocol REQUIRED)
 add_library(${PROJECT_NAME}
   src/unitree_im_translator.cpp
   src/state_translator_factory.cpp
+  src/node_safety.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_include_directories(${PROJECT_NAME} PUBLIC
