@@ -325,6 +325,8 @@ int main()
 	auto flaky = std::make_unique<FlakyWriteTransport>(std::move(fake2));
 	FlakyWriteTransport *flaky_raw = flaky.get();
 	SerialMaster m2;
+	m2.set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
+	m2.set_translator(unistackbot_statemachine::createStateTranslator("unitree_im"));
 	m2.attach_transport(std::move(flaky));
 	check(m2.start(makeCfg()), "start with flaky transport");
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
@@ -343,6 +345,8 @@ int main()
 		});
 	FakeTransport *fake3_raw = fake3.get();
 	m->attach_transport(std::move(fake3));
+	m->set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
+	m->set_translator(unistackbot_statemachine::createStateTranslator("unitree_im"));
 	check(m->start(makeCfg()), "restart after stop");
 	check(m->running(), "restart running");
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));

@@ -6,8 +6,6 @@
 #include <thread>
 
 #include "unistackbot_bus/master_factory.hpp"
-#include "unistackbot_protocol/unitree_im_core.hpp"
-#include "unistackbot_serial/framer.hpp"
 #include "unistackbot_serial/termios_transport.hpp"
 
 #include "rt_tune/rt_tune.hpp"
@@ -24,10 +22,14 @@ using unistackbot_bus::MasterConfig;
 using unistackbot_bus::kMaxNodes;
 using unistackbot_protocol::NodeCommand;
 using unistackbot_protocol::NodeFeedback;
+using unistackbot_protocol::NodeMode;
+using unistackbot_statemachine::NodeSafety;
 using unistackbot_statemachine::NeutralState;
 
 constexpr std::int64_t kNsPerSec = 1'000'000'000LL;
 constexpr std::size_t kRxBurst = 8;   // 单次排干帧数界 (实现常量, 非部署调优)
+constexpr double kEnableGripKp = 20.0;   // 使能锁定刚度 (安全默认, 参数化延后)
+constexpr double kEnableGripKd = 1.5;    // 使能锁定阻尼
 
 std::int64_t clockNowNs()
 {
@@ -59,39 +61,40 @@ struct SerialMaster::Impl
 	unistackbot_common::SpLatest<BusState> state_ch;
 
 	// ── 线程控制 ──
-	std::thread pump;
+	std::thread cycle_thread;
 	std::atomic<bool> stop_flag{false};
 	std::atomic<bool> quick_stop_flag{false};
 	std::atomic<bool> started{false};
 
-	// ── 泵态 (泵线程唯一写者; start() 复位) ──
-	struct PumpState
+	// ── 循环态 (总线线程唯一写者; start() 复位) ──
+	struct CycleState
 	{
 		Framer framer{unistackbot_protocol::FrameSpec{}};
 		NodeFeedback fb[kMaxNodes] = {};
+		NodeSafety safety[kMaxNodes] = {};   // ← 状态机住总线线程 (零锁)
 		std::uint64_t last_seen_cycle[kMaxNodes] = {};
 		std::uint64_t cycle = 0;
-	} pump_;
+	} cycle_;
 
-	// ── 工作缓冲 (随 Impl 一次分配, 泵内只读写; RT 循环零构造零分配) ──
+	// ── 工作缓冲 (随 Impl 一次分配, 循环内只读写; RT 零构造零分配) ──
 	struct WorkBuf
 	{
-		BusCommand cmd;         // SpLatest 读出目标
-		NodeCommand slot_cmd;   // 当前时隙命令 (quick_stop 改写)
+		BusCommand cmd;
+		NodeCommand slot_cmd;
 		std::uint8_t tx_frame[64];
 		std::uint8_t rx_chunk[256];
 		ExtractedFrame rx_frames[kRxBurst];
 		NodeFeedback rx_fb;
-		BusState snap;          // 快照发布缓冲
+		BusState snap;
 	} work_;
 };
 
 SerialMaster::SerialMaster() : impl_(new Impl)
 {
-	BusCommand idle{};   // 安全怠速: 全体停机+看门狗位
+	BusCommand idle{};
 	for (std::size_t i = 0; i < kMaxNodes; ++i)
 	{
-		idle.node[i].mode = unistackbot_protocol::NodeMode::kStop;
+		idle.node[i].mode = NodeMode::kStop;
 		idle.node[i].watchdog_enable = true;
 	}
 	impl_->cmd_ch.init(idle);
@@ -106,7 +109,7 @@ SerialMaster::~SerialMaster()
 
 void SerialMaster::attach_transport(std::unique_ptr<IoTransport> io)
 {
-	if (!impl_->started.load() && impl_->pump.joinable() == false)
+	if (!impl_->started.load() && impl_->cycle_thread.joinable() == false)
 	{
 		impl_->io = std::move(io);
 	}
@@ -129,13 +132,17 @@ void SerialMaster::set_translator(
 	}
 }
 
+const NodeSafety &SerialMaster::node_safety(std::size_t index) const
+{
+	return impl_->cycle_.safety[index];
+}
+
 bool SerialMaster::start(const MasterConfig &cfg)
 {
 	if (impl_->started.load())
 	{
 		return false;
 	}
-	// 配置校验 (无默认纪律: 非法即拒)
 	if (cfg.rate_hz <= 0.0 || cfg.node_count == 0 || cfg.node_count > kMaxNodes)
 	{
 		return false;
@@ -147,7 +154,6 @@ bool SerialMaster::start(const MasterConfig &cfg)
 			return false;
 		}
 	}
-	// 调优字段合法性 (有默认但有界)
 	if (cfg.baudrate <= 0 || cfg.thread_priority < 0 || cfg.thread_priority > 99 ||
 		cfg.cpu_affinity < -1 || cfg.stale_cycles == 0)
 	{
@@ -170,17 +176,17 @@ bool SerialMaster::start(const MasterConfig &cfg)
 		}
 	}
 	impl_->cfg = cfg;
-	resetPumpState();
-	impl_->pump_.framer = Framer{impl_->proto->framespec()};
+	resetCycleState();
+	impl_->cycle_.framer = Framer{impl_->proto->framespec()};
 	impl_->stop_flag.store(false);
-	impl_->quick_stop_flag.store(false);   // 闩锁不跨生命周期
+	impl_->quick_stop_flag.store(false);
 	try
 	{
-		impl_->pump = std::thread([this] { pumpMain(); });
+		impl_->cycle_thread = std::thread([this] { busLoopMain(); });
 	}
 	catch (const std::system_error &e)
 	{
-		std::fprintf(stderr, "SerialMaster: 泵线程创建失败: %s\n", e.what());
+		std::fprintf(stderr, "SerialMaster: 总线线程创建失败: %s\n", e.what());
 		return false;
 	}
 	impl_->started.store(true);
@@ -188,13 +194,15 @@ bool SerialMaster::start(const MasterConfig &cfg)
 	return true;
 }
 
-void SerialMaster::pumpMain()
+void SerialMaster::busLoopMain()
 {
-	unistackbot_common::rt_tune::apply(impl_->cfg.cpu_affinity, impl_->cfg.thread_priority,
-		0, "serial_pump");
+	unistackbot_common::rt_tune::apply(impl_->cfg.cpu_affinity,
+		impl_->cfg.thread_priority, 0, "serial_bus");
 
-	const std::int64_t period_ns = static_cast<std::int64_t>(kNsPerSec / impl_->cfg.rate_hz);
-	const std::int64_t slot_ns = period_ns / static_cast<std::int64_t>(impl_->cfg.node_count);
+	const std::int64_t period_ns =
+		static_cast<std::int64_t>(kNsPerSec / impl_->cfg.rate_hz);
+	const std::int64_t slot_ns =
+		period_ns / static_cast<std::int64_t>(impl_->cfg.node_count);
 	const std::size_t n = impl_->cfg.node_count;
 	std::int64_t base = clockNowNs() + period_ns;
 
@@ -202,22 +210,21 @@ void SerialMaster::pumpMain()
 	{
 		for (std::size_t k = 0; k < n && !impl_->stop_flag.load(); ++k)
 		{
-			// 时隙 k 标称时刻: base + k*period/n (整数分摊, 无舍入累积)
 			std::int64_t target = base +
 				static_cast<std::int64_t>(k) * period_ns / static_cast<std::int64_t>(n);
-			// ── 落后追帧纪律: 逾期超一个时隙即跳未来, 绝不补发 ──
+			// ── 追帧跳过纪律: 逾期超一个时隙即跳未来, 绝不补发 ──
 			const std::int64_t behind = clockNowNs() - target;
 			if (behind > slot_ns)
 			{
 				const std::uint64_t skip = static_cast<std::uint64_t>(behind / slot_ns) + 1;
 				target += static_cast<std::int64_t>(skip) * slot_ns;
-				telemetry_.skipped_slots += skip;   // 单读者近似, 健康签名=0
+				telemetry_.skipped_slots += skip;
 			}
 			sleepUntilNs(target);
 			runSlot(k);
 		}
 		base += period_ns;
-		++impl_->pump_.cycle;
+		++impl_->cycle_.cycle;
 		publishSnapshot();
 	}
 }
@@ -226,7 +233,6 @@ void SerialMaster::runSlot(std::size_t k)
 {
 	resolveSlotCmd(k);
 
-	// 单帧单 write (绝不合并: USB 拼帧 → 线上背靠背碰撞)
 	const std::size_t fn = impl_->proto->encode(impl_->work_.tx_frame,
 		sizeof(impl_->work_.tx_frame), impl_->work_.slot_cmd,
 		impl_->cfg.node_id[k], impl_->cfg.ratio[k]);
@@ -242,29 +248,50 @@ void SerialMaster::runSlot(std::size_t k)
 	}
 	else
 	{
-		// 写失败/部分写不补写: 下一时隙发最新命令 (盲发语义即重试)
 		++telemetry_.tx_failed;
 	}
 
 	drainAndDecode();
+
+	// 状态机更新: 用刚收到的反馈推进 NodeSafety (零延迟——同线程零交接)
+	impl_->cycle_.safety[k].update(impl_->cycle_.fb[k]);
 }
 
 void SerialMaster::resolveSlotCmd(std::size_t k)
 {
+	NodeSafety &ns = impl_->cycle_.safety[k];
+
+	// ① 安全状态机优先: 使能/断使能请求 → 生成安全命令
+	if (ns.enable_requested())
+	{
+		impl_->work_.slot_cmd = ns.enable_command(kEnableGripKp, kEnableGripKd);
+		ns.clear_requests();
+		return;
+	}
+	if (ns.disable_requested())
+	{
+		impl_->work_.slot_cmd = ns.disable_command();
+		ns.clear_requests();
+		return;
+	}
+
+	// ② quick_stop 闩锁: 全体停机帧 + 锚定实测位
+	if (impl_->quick_stop_flag.load())
+	{
+		impl_->work_.slot_cmd.mode = NodeMode::kStop;
+		impl_->work_.slot_cmd.watchdog_enable = true;
+		impl_->work_.slot_cmd.tau = 0;
+		impl_->work_.slot_cmd.speed = 0;
+		impl_->work_.slot_cmd.kp = 0;
+		impl_->work_.slot_cmd.kd = 0;
+		impl_->work_.slot_cmd.position = impl_->cycle_.fb[k].position;
+		return;
+	}
+
+	// ③ 正常命令流: 取最新
 	uint64_t seq = 0;
 	impl_->cmd_ch.read(impl_->work_.cmd, seq);
 	impl_->work_.slot_cmd = impl_->work_.cmd.node[k];
-	if (impl_->quick_stop_flag.load())
-	{
-		NodeCommand &stop = impl_->work_.slot_cmd;
-		stop.mode = unistackbot_protocol::NodeMode::kStop;
-		stop.watchdog_enable = true;
-		stop.tau = 0;
-		stop.speed = 0;
-		stop.kp = 0;
-		stop.kd = 0;
-		stop.position = impl_->pump_.fb[k].position;   // 锚定实测位
-	}
 }
 
 void SerialMaster::drainAndDecode()
@@ -275,12 +302,13 @@ void SerialMaster::drainAndDecode()
 		{
 			break;
 		}
-		const ssize_t r = impl_->io->read(impl_->work_.rx_chunk, sizeof(impl_->work_.rx_chunk));
+		const ssize_t r = impl_->io->read(impl_->work_.rx_chunk,
+			sizeof(impl_->work_.rx_chunk));
 		if (r <= 0)
 		{
 			break;
 		}
-		const std::size_t produced = impl_->pump_.framer.push(
+		const std::size_t produced = impl_->cycle_.framer.push(
 			impl_->work_.rx_chunk, static_cast<std::size_t>(r),
 			impl_->work_.rx_frames, kRxBurst);
 		for (std::size_t f = 0; f < produced; ++f)
@@ -289,14 +317,13 @@ void SerialMaster::drainAndDecode()
 		}
 		if (static_cast<std::size_t>(r) < sizeof(impl_->work_.rx_chunk))
 		{
-			break;   // 排干
+			break;
 		}
 	}
 }
 
 void SerialMaster::classifyFrame(const ExtractedFrame &frame)
 {
-	// CRC 与 ratio 无关: 任一节点 ratio 解码一次即完成验帧并取出 node_id
 	if (!impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb,
 			impl_->cfg.ratio[0]))
 	{
@@ -310,9 +337,9 @@ void SerialMaster::classifyFrame(const ExtractedFrame &frame)
 		return;
 	}
 	(void)impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb,
-		impl_->cfg.ratio[i]);   // 以本节点 ratio 重解, 物理量按正确减速比换算
-	impl_->pump_.fb[i] = impl_->work_.rx_fb;
-	impl_->pump_.last_seen_cycle[i] = impl_->pump_.cycle;
+		impl_->cfg.ratio[i]);
+	impl_->cycle_.fb[i] = impl_->work_.rx_fb;
+	impl_->cycle_.last_seen_cycle[i] = impl_->cycle_.cycle;
 	++telemetry_.rx_frames;
 }
 
@@ -333,19 +360,19 @@ void SerialMaster::publishSnapshot()
 	const std::size_t n = impl_->cfg.node_count;
 	for (std::size_t i = 0; i < n; ++i)
 	{
-		impl_->work_.snap.node[i] = impl_->pump_.fb[i];
+		impl_->work_.snap.node[i] = impl_->cycle_.fb[i];
 		impl_->work_.snap.node_state[i] =
-			(impl_->pump_.cycle - impl_->pump_.last_seen_cycle[i] > impl_->cfg.stale_cycles)
+			(impl_->cycle_.cycle - impl_->cycle_.last_seen_cycle[i] > impl_->cfg.stale_cycles)
 			? NeutralState::kUnknown
-			: impl_->translator->map_state(impl_->pump_.fb[i]);
+			: impl_->cycle_.safety[i].state();
 	}
-	impl_->work_.snap.seq = impl_->pump_.cycle;
+	impl_->work_.snap.seq = impl_->cycle_.cycle;
 	impl_->state_ch.publish(impl_->work_.snap);
 }
 
-void SerialMaster::resetPumpState()
+void SerialMaster::resetCycleState()
 {
-	impl_->pump_ = Impl::PumpState{};   // fb/last_seen/cycle 归零; framer 随后由 start() 重设
+	impl_->cycle_ = Impl::CycleState{};
 }
 
 void SerialMaster::stop()
@@ -355,15 +382,15 @@ void SerialMaster::stop()
 		return;
 	}
 	impl_->stop_flag.store(true);
-	if (impl_->pump.joinable())
+	if (impl_->cycle_thread.joinable())
 	{
-		impl_->pump.join();
+		impl_->cycle_thread.join();
 	}
 	running_.store(false);
 	if (impl_->io)
 	{
 		impl_->io->close();
-		impl_->io.reset();   // 重启语义: 释放 transport, 二次 start 重开/重挂
+		impl_->io.reset();
 	}
 }
 
@@ -386,7 +413,6 @@ void SerialMaster::quick_stop()
 
 NeutralState SerialMaster::state() const
 {
-	// worst-of 聚合: FAULT > QUICK_STOP > UNKNOWN > ENABLED > READY
 	BusState st;
 	uint64_t seq = 0;
 	impl_->state_ch.read(st, seq);
