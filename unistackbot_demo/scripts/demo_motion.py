@@ -106,11 +106,13 @@ class DemoMotion(Node):
 		def inset(v, l, h):
 			return min(max(v, l + 0.02 * (h - l)), h - 0.02 * (h - l))
 		home = [inset(0.0, l, h) for l, h in zip(lo, hi)]
-		# 围绕零位的偏移量 = min(|lo-home|, |hi-home|) * factor (保守 30%)
-		factor = 0.3
-		amp = [min(abs(h - h0), abs(h0 - l)) * factor for l, h, h0 in zip(lo, hi, home)]
-		pos = [h0 + a for h0, a in zip(home, amp)]   # 正向偏移
-		neg = [h0 - a for h0, a in zip(home, amp)]   # 负向偏移
+		# 限位区间中点 ± 半区间 × factor (构型无关, 零位压限位线也能全幅运动)
+		# 零位在限位线上的臂 (stationlite j3: [-3.193, 0]) 用 min(|lo-home|,...) 算出振幅=0 完全不动
+		factor = 0.5
+		mid = [(l + h) / 2 for l, h in zip(lo, hi)]
+		half = [(h - l) / 2 for l, h in zip(lo, hi)]
+		pos = [m + hf * factor for m, hf in zip(mid, half)]
+		neg = [m - hf * factor for m, hf in zip(mid, half)]
 		schedule = [
 			(pos, 2.0, '快'),
 			(neg, 6.0, '慢'),
