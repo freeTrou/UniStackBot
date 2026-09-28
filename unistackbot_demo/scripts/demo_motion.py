@@ -88,7 +88,7 @@ class DemoMotion(Node):
 				raise RuntimeError("mimic 关节 '%s' 的主关节 '%s' 不在直控关节表" % (name, master))
 		return joints, lims, mimics
 
-	def run(self, hz, cycles):
+	def run(self, hz, cycles, amp_override=None):
 		joints, lims, mimics = self._fetch_contract()
 		self.get_logger().info('关节表 (读自链上 URDF): %s%s' % (
 			joints, ' + mimic %s' % [m[0] for m in mimics] if mimics else ''))
@@ -108,7 +108,10 @@ class DemoMotion(Node):
 		home = [inset(0.0, l, h) for l, h in zip(lo, hi)]
 		# 限位区间中点 ± 半区间 × factor (构型无关, 零位压限位线也能全幅运动)
 		# 零位在限位线上的臂 (stationlite j3: [-3.193, 0]) 用 min(|lo-home|,...) 算出振幅=0 完全不动
-		factor = 0.5
+		if amp_override is not None:
+			factor = amp_override
+		else:
+			factor = 0.15   # 保守默认; --amp 可调 (0.5 会砸地面)
 		mid = [(l + h) / 2 for l, h in zip(lo, hi)]
 		half = [(h - l) / 2 for l, h in zip(lo, hi)]
 		pos = [m + hf * factor for m, hf in zip(mid, half)]
@@ -179,6 +182,7 @@ class DemoMotion(Node):
 def main(args=None):
 	hz = 50
 	cycles = 1
+	amp_override = None
 	argv = sys.argv[1:]
 	while argv:
 		a = argv.pop(0)
@@ -191,7 +195,7 @@ def main(args=None):
 	rclpy.init(args=args)
 	node = DemoMotion()
 	try:
-		node.run(hz, cycles)
+		node.run(hz, cycles, amp_override)
 	finally:
 		node.destroy_node()
 		try:
