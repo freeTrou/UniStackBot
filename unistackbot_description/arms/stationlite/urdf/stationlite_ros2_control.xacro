@@ -2,16 +2,19 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
     <!-- stationlite ros2_control 块: 双臂 16 关节 (左右各 6 revolute + 2 prismatic) -->
-    <!-- 真机协议待确认 (R1-7A 485 / 新协议), 先按 SimControl 预留 -->
-    <xacro:macro name="stationlite_ros2_control" params="use_gazebo:=false">
+    <!-- use_gazebo: 'mujoco'=MuJoCo(mujoco_ros2_control), 其余=mock 插件 -->
+    <xacro:macro name="stationlite_ros2_control" params="use_gazebo:=false headless:=true">
 
         <ros2_control name="stationlite" type="system">
 
             <hardware>
-                <xacro:if value="$(arg use_gazebo)">
-                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                <xacro:if value="${use_gazebo == 'mujoco'}">
+                    <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+                    <param name="mujoco_model">$(find unistackbot_description)/arms/stationlite/mujoco/stationlite.xml</param>
+                    <param name="sim_speed_factor">1.0</param>
+                    <param name="headless">${'true' if headless in [True, 'true'] else 'false'}</param>
                 </xacro:if>
-                <xacro:unless value="$(arg use_gazebo)">
+                <xacro:unless value="${use_gazebo == 'mujoco'}">
                     <plugin>unistackbot_sim_control/SimControlHardware</plugin>
                     <param name="backend">kinematic</param>
                 </xacro:unless>

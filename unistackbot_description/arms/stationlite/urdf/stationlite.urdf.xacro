@@ -21,7 +21,7 @@
     <xacro:stationlite_dual_arm/>
 
     <xacro:if value="$(arg use_ros2_control)">
-        <xacro:stationlite_ros2_control use_gazebo="$(arg use_gazebo)"/>
+        <xacro:stationlite_ros2_control use_gazebo="$(arg use_gazebo)" headless="$(arg headless)"/>
     </xacro:if>
 
 </robot>
