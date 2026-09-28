@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- stationlite ros2_control 块: 双臂 16 关节 (左右各 6 revolute + 2 prismatic) -->
+    <!-- 真机协议待确认 (R1-7A 485 / 新协议), 先按 SimControl 预留 -->
+    <xacro:macro name="stationlite_ros2_control" params="use_gazebo:=false">
+
+        <ros2_control name="stationlite">
+
+            <hardware>
+                <xacro:if value="$(arg use_gazebo)">
+                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                </xacro:if>
+                <xacro:unless value="$(arg use_gazebo)">
+                    <plugin>unistackbot_sim_control/SimControlHardware</plugin>
+                    <param name="backend">kinematic</param>
+                </xacro:unless>
+            </hardware>
+
+            <!-- 左臂 6 关节 -->
+            <xacro:macro name="stationlite_revolute_joint" params="joint_name lo hi effort vel">
+                <joint name="${joint_name}">
+                    <command_interface name="position">
+                        <param name="min">${lo}</param>
+                        <param name="max">${hi}</param>
+                    </command_interface>
+                    <state_interface name="position"/>
+                    <state_interface name="velocity"/>
+                    <state_interface name="effort"/>
+                    <param name="min">${lo}</param>
+                    <param name="max">${hi}</param>
+                    <param name="max_velocity">${vel}</param>
+                </joint>
+            </xacro:macro>
+
+            <xacro:stationlite_revolute_joint joint_name="left_joint1" lo="-2.824" hi="2.824" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="left_joint2" lo="-0.209" hi="3.508" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="left_joint3" lo="-3.193" hi="0.0" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="left_joint4" lo="-1.710" hi="1.710" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="left_joint5" lo="-1.710" hi="1.710" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="left_joint6" lo="-2.856" hi="2.856" effort="10" vel="3.0"/>
+
+            <!-- 左夹爪 (prismatic 对指, mimic) -->
+            <joint name="left_gripper_joint1">
+                <command_interface name="position">
+                    <param name="min">-0.0425</param>
+                    <param name="max">0.0</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-0.0425</param>
+                <param name="max">0.0</param>
+                <param name="max_velocity">0.05</param>
+            </joint>
+            <joint name="left_gripper_joint2">
+                <command_interface name="position">
+                    <param name="min">0.0</param>
+                    <param name="max">0.0425</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">0.0</param>
+                <param name="max">0.0425</param>
+                <param name="max_velocity">0.05</param>
+                <param name="mimic">left_gripper_joint1</param>
+                <param name="multiplier">-1.0</param>
+            </joint>
+
+            <!-- 右臂 6 关节 (与左臂对称) -->
+            <xacro:stationlite_revolute_joint joint_name="right_joint1" lo="-2.824" hi="2.824" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="right_joint2" lo="-0.209" hi="3.508" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="right_joint3" lo="-3.193" hi="0.0" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="right_joint4" lo="-1.710" hi="1.710" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="right_joint5" lo="-1.710" hi="1.710" effort="10" vel="3.0"/>
+            <xacro:stationlite_revolute_joint joint_name="right_joint6" lo="-2.856" hi="2.856" effort="10" vel="3.0"/>
+
+            <!-- 右夹爪 -->
+            <joint name="right_gripper_joint1">
+                <command_interface name="position">
+                    <param name="min">-0.0425</param>
+                    <param name="max">0.0</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-0.0425</param>
+                <param name="max">0.0</param>
+                <param name="max_velocity">0.05</param>
+            </joint>
+            <joint name="right_gripper_joint2">
+                <command_interface name="position">
+                    <param name="min">0.0</param>
+                    <param name="max">0.0425</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">0.0</param>
+                <param name="max">0.0425</param>
+                <param name="max_velocity">0.05</param>
+                <param name="mimic">right_gripper_joint1</param>
+                <param name="multiplier">-1.0</param>
+            </joint>
+
+        </ros2_control>
+
+    </xacro:macro>
+
+</robot>

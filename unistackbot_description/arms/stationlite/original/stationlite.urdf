@@ -1,0 +1,1100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lumos Station Lite dual-arm URDF.
+  The arm inertial and mass values are retained from the original single-arm export.
+  New base and camera inertial properties are intentionally deferred.
+-->
+<robot name="stationlite">
+  <material name="station_gray">
+    <color rgba="0.75294 0.75294 0.75294 1" />
+  </material>
+
+  <!-- Root frame: coincides with the world frame when spawned at zero pose. -->
+  <link name="base">
+    <inertial>
+      <origin xyz="-0.008088 -0.000003 0.217476" rpy="0 0 0" />
+      <mass value="2.239" />
+      <inertia
+        ixx="0.265323119"
+        ixy="-0.000000063"
+        ixz="0.004959622"
+        iyy="0.217350657"
+        iyz="-0.000001195"
+        izz="0.049509934" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/base.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/base.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Left arm: ROS +Y is left. -->
+  <joint name="left_arm_mount_joint" type="fixed">
+    <origin xyz="0 0.3175 0" rpy="0 0 0" />
+    <parent link="base" />
+    <child link="left_armbase" />
+  </joint>
+  <link
+    name="left_armbase">
+    <inertial>
+      <origin xyz="-0.000021 -0.000047 0.037955" rpy="0 0 0" />
+      <mass value="0.510232" />
+      <inertia
+        ixx="0.000284"
+        ixy="0"
+        ixz="0"
+        iyy="0.000280"
+        iyz="-0.000001"
+        izz="0.000280" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/armbase.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/armbase.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="left_link1">
+    <inertial>
+      <origin
+        xyz="0.02 -0.002 0.109"
+        rpy="0 0 0" />
+      <mass
+        value="0.496" />
+      <inertia
+        ixx="0.000349"
+        ixy="0"
+        ixz="0"
+        iyy="0.000356"
+        iyz="0"
+        izz="0.000267" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link1.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_joint1"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="left_armbase" />
+    <child
+      link="left_link1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.824"
+      upper="2.824"
+      effort="27"
+      velocity="5.5" />
+  </joint>
+  <link
+    name="left_link2">
+    <inertial>
+      <origin
+        xyz="-0.19164 -0.001145 -5.7E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.774" />
+      <inertia
+        ixx="0.00037"
+        ixy="0"
+        ixz="0"
+        iyy="0.006613"
+        iyz="0"
+        izz="0.006701" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link2.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_joint2"
+    type="revolute">
+    <origin
+      xyz="0.024 0 0.117"
+      rpy="0 0 0" />
+    <parent
+      link="left_link1" />
+    <child
+      link="left_link2" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.209"
+      upper="3.508"
+      effort="27"
+      velocity="5.5" />
+  </joint>
+  <link
+    name="left_link3">
+    <inertial>
+      <origin
+        xyz="0.17632 -0.001549 0.054649"
+        rpy="0 0 0" />
+      <mass
+        value="0.67366" />
+      <inertia
+        ixx="0.000494"
+        ixy="0"
+        ixz="0.000806"
+        iyy="0.007196"
+        iyz="0"
+        izz="0.00709" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link3.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_joint3"
+    type="revolute">
+    <origin
+      xyz="-0.265 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="left_link2" />
+    <child
+      link="left_link3" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-3.193"
+      upper="0"
+      effort="27"
+      velocity="5.5" />
+  </joint>
+  <link
+    name="left_link4">
+    <inertial>
+      <origin
+        xyz="0.064717 0 0.047271"
+        rpy="0 0 0" />
+      <mass
+        value="0.45575" />
+      <inertia
+        ixx="0.000449"
+        ixy="0"
+        ixz="0.000246"
+        iyy="0.000662"
+        iyz="0"
+        izz="0.000513" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link4.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_joint4"
+    type="revolute">
+    <origin
+      xyz="0.265 0 0.062"
+      rpy="0 0 0" />
+    <parent
+      link="left_link3" />
+    <child
+      link="left_link4" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-1.710"
+      upper="1.710"
+      effort="7"
+      velocity="20.9" />
+  </joint>
+  <link
+    name="left_link5">
+    <inertial>
+      <origin
+        xyz="0.002443 0 0.002098"
+        rpy="0 0 0" />
+      <mass
+        value="0.37166" />
+      <inertia
+        ixx="0.000176"
+        ixy="-5.299E-11"
+        ixz="4E-06"
+        iyy="0.00017"
+        iyz="-5.3273E-08"
+        izz="0.000147" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link5.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link5.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_joint5"
+    type="revolute">
+    <origin
+      xyz="0.078 0 -0.00295"
+      rpy="0 0 0" />
+    <parent
+      link="left_link4" />
+    <child
+      link="left_link5" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.710"
+      upper="1.710"
+      effort="12.5"
+      velocity="20.9" />
+  </joint>
+  <link
+    name="left_linkgripper">
+    <inertial>
+      <origin
+        xyz="0.043232 0.000041 0.000635"
+        rpy="0 0 0" />
+      <mass
+        value="0.484919" />
+      <inertia
+        ixx="0.000344"
+        ixy="0"
+        ixz="0"
+        iyy="0.000318"
+        iyz="0"
+        izz="0.000433" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/gripper_base.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/gripper_base.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_joint6"
+    type="revolute">
+    <origin
+      xyz="0.0255 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="left_link5" />
+    <child
+      link="left_linkgripper" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-2.856"
+      upper="2.856"
+      effort="12.5"
+      velocity="20.9" />
+  </joint>
+  <link
+    name="left_griperlj_link1">
+    <inertial>
+      <origin xyz="-0.074793 -0.014951 0.000038" rpy="0 0 0" />
+      <mass value="0.049996" />
+      <inertia
+        ixx="0.000008474"
+        ixy="-0.000008882"
+        ixz="0.000000032"
+        iyy="0.000034639"
+        iyz="0.000000009"
+        izz="0.000035808" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link1.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_gripper_joint1"
+    type="prismatic">
+    <origin
+      xyz="0.1733 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="left_linkgripper" />
+    <child
+      link="left_griperlj_link1" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.0425"
+      upper="0"
+      effort="150"
+      velocity="0.8" />
+  </joint>
+  <link
+    name="left_griperlj_link2">
+    <inertial>
+      <origin xyz="-0.074793 0.014951 -0.000038" rpy="0 0 0" />
+      <mass value="0.050" />
+      <inertia
+        ixx="0.000008474"
+        ixy="0.000008882"
+        ixz="-0.000000032"
+        iyy="0.000034639"
+        iyz="0.000000009"
+        izz="0.000035808" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link2.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="left_gripper_joint2"
+    type="prismatic">
+    <origin
+      xyz="0.1733 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="left_linkgripper" />
+    <child
+      link="left_griperlj_link2" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="0"
+      upper="0.0425"
+      effort="150"
+      velocity="0.8" />
+  </joint>
+
+  <link name="left_handcam">
+    <inertial>
+      <origin xyz="0.010406 -0.000111 -0.027564" rpy="0 0 0" />
+      <mass value="0.046" />
+      <inertia
+        ixx="0.000038227"
+        ixy="-0.000000112"
+        ixz="0.000019170"
+        iyy="0.000047999"
+        iyz="0.000000136"
+        izz="0.000021864" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/handcam.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/handcam.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_handcam_joint" type="fixed">
+    <origin xyz="0.037112 0 0.100137" rpy="0 0.349065850399 0" />
+    <parent link="left_linkgripper" />
+    <child link="left_handcam" />
+  </joint>
+
+  <!-- Right arm: ROS -Y is right. -->
+  <joint name="right_arm_mount_joint" type="fixed">
+    <origin xyz="0 -0.3175 0" rpy="0 0 0" />
+    <parent link="base" />
+    <child link="right_armbase" />
+  </joint>
+  <link
+    name="right_armbase">
+    <inertial>
+      <origin xyz="-0.000021 -0.000047 0.037955" rpy="0 0 0" />
+      <mass value="0.510232" />
+      <inertia
+        ixx="0.000284"
+        ixy="0"
+        ixz="0"
+        iyy="0.000280"
+        iyz="-0.000001"
+        izz="0.000280" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/armbase.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/armbase.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="right_link1">
+    <inertial>
+      <origin
+        xyz="0.02 -0.002 0.109"
+        rpy="0 0 0" />
+      <mass
+        value="0.496" />
+      <inertia
+        ixx="0.000349"
+        ixy="0"
+        ixz="0"
+        iyy="0.000356"
+        iyz="0"
+        izz="0.000267" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link1.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_joint1"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="right_armbase" />
+    <child
+      link="right_link1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.824"
+      upper="2.824"
+      effort="27"
+      velocity="5.5" />
+  </joint>
+  <link
+    name="right_link2">
+    <inertial>
+      <origin
+        xyz="-0.19164 -0.001145 -5.7E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.774" />
+      <inertia
+        ixx="0.00037"
+        ixy="0"
+        ixz="0"
+        iyy="0.006613"
+        iyz="0"
+        izz="0.006701" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link2.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_joint2"
+    type="revolute">
+    <origin
+      xyz="0.024 0 0.117"
+      rpy="0 0 0" />
+    <parent
+      link="right_link1" />
+    <child
+      link="right_link2" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.209"
+      upper="3.508"
+      effort="27"
+      velocity="5.5" />
+  </joint>
+  <link
+    name="right_link3">
+    <inertial>
+      <origin
+        xyz="0.17632 -0.001549 0.054649"
+        rpy="0 0 0" />
+      <mass
+        value="0.67366" />
+      <inertia
+        ixx="0.000494"
+        ixy="0"
+        ixz="0.000806"
+        iyy="0.007196"
+        iyz="0"
+        izz="0.00709" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link3.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_joint3"
+    type="revolute">
+    <origin
+      xyz="-0.265 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="right_link2" />
+    <child
+      link="right_link3" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-3.193"
+      upper="0"
+      effort="27"
+      velocity="5.5" />
+  </joint>
+  <link
+    name="right_link4">
+    <inertial>
+      <origin
+        xyz="0.064717 0 0.047271"
+        rpy="0 0 0" />
+      <mass
+        value="0.45575" />
+      <inertia
+        ixx="0.000449"
+        ixy="0"
+        ixz="0.000246"
+        iyy="0.000662"
+        iyz="0"
+        izz="0.000513" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link4.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_joint4"
+    type="revolute">
+    <origin
+      xyz="0.265 0 0.062"
+      rpy="0 0 0" />
+    <parent
+      link="right_link3" />
+    <child
+      link="right_link4" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-1.710"
+      upper="1.710"
+      effort="7"
+      velocity="20.9" />
+  </joint>
+  <link
+    name="right_link5">
+    <inertial>
+      <origin
+        xyz="0.002443 0 0.002098"
+        rpy="0 0 0" />
+      <mass
+        value="0.37166" />
+      <inertia
+        ixx="0.000176"
+        ixy="-5.299E-11"
+        ixz="4E-06"
+        iyy="0.00017"
+        iyz="-5.3273E-08"
+        izz="0.000147" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link5.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/link5.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_joint5"
+    type="revolute">
+    <origin
+      xyz="0.078 0 -0.00295"
+      rpy="0 0 0" />
+    <parent
+      link="right_link4" />
+    <child
+      link="right_link5" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.710"
+      upper="1.710"
+      effort="12.5"
+      velocity="20.9" />
+  </joint>
+  <link
+    name="right_linkgripper">
+    <inertial>
+      <origin
+        xyz="0.043232 0.000041 0.000635"
+        rpy="0 0 0" />
+      <mass
+        value="0.484919" />
+      <inertia
+        ixx="0.000344"
+        ixy="0"
+        ixz="0"
+        iyy="0.000318"
+        iyz="0"
+        izz="0.000433" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/gripper_base.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/gripper_base.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_joint6"
+    type="revolute">
+    <origin
+      xyz="0.0255 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="right_link5" />
+    <child
+      link="right_linkgripper" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-2.856"
+      upper="2.856"
+      effort="12.5"
+      velocity="20.9" />
+  </joint>
+  <link
+    name="right_griperlj_link1">
+    <inertial>
+      <origin xyz="-0.074793 -0.014951 0.000038" rpy="0 0 0" />
+      <mass value="0.049996" />
+      <inertia
+        ixx="0.000008474"
+        ixy="-0.000008882"
+        ixz="0.000000032"
+        iyy="0.000034639"
+        iyz="0.000000009"
+        izz="0.000035808" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link1.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_gripper_joint1"
+    type="prismatic">
+    <origin
+      xyz="0.1733 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="right_linkgripper" />
+    <child
+      link="right_griperlj_link1" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.0425"
+      upper="0"
+      effort="150"
+      velocity="0.8" />
+  </joint>
+  <link
+    name="right_griperlj_link2">
+    <inertial>
+      <origin xyz="-0.074793 0.014951 -0.000038" rpy="0 0 0" />
+      <mass value="0.050" />
+      <inertia
+        ixx="0.000008474"
+        ixy="0.000008882"
+        ixz="-0.000000032"
+        iyy="0.000034639"
+        iyz="0.000000009"
+        izz="0.000035808" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link2.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://stationlite/meshes/griperlj_link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_gripper_joint2"
+    type="prismatic">
+    <origin
+      xyz="0.1733 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="right_linkgripper" />
+    <child
+      link="right_griperlj_link2" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="0"
+      upper="0.0425"
+      effort="150"
+      velocity="0.8" />
+  </joint>
+
+  <link name="right_handcam">
+    <inertial>
+      <origin xyz="0.010406 -0.000111 -0.027564" rpy="0 0 0" />
+      <mass value="0.046" />
+      <inertia
+        ixx="0.000038227"
+        ixy="-0.000000112"
+        ixz="0.000019170"
+        iyy="0.000047999"
+        iyz="0.000000136"
+        izz="0.000021864" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/handcam.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/handcam.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_handcam_joint" type="fixed">
+    <origin xyz="0.037112 0 0.100137" rpy="0 0.349065850399 0" />
+    <parent link="right_linkgripper" />
+    <child link="right_handcam" />
+  </joint>
+
+  <!-- Fixed cameras attached directly to the root base. -->
+  <link name="headcam">
+    <inertial>
+      <origin xyz="-0.019195 -0.001348 -0.022381" rpy="0 0 0" />
+      <mass value="0.167" />
+      <inertia
+        ixx="0.000108124"
+        ixy="0.000001122"
+        ixz="-0.000024935"
+        iyy="0.000116906"
+        iyz="0.000000259"
+        izz="0.000073168" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/headcam.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/headcam.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="headcam_joint" type="fixed">
+    <origin xyz="0.02402 0 0.78133" rpy="0 1.090830782496 0" />
+    <parent link="base" />
+    <child link="headcam" />
+  </joint>
+
+  <link name="refcam">
+    <inertial>
+      <origin xyz="-0.028850 -0.001235 -0.031737" rpy="0 0 0" />
+      <mass value="0.203" />
+      <inertia
+        ixx="0.000187340"
+        ixy="0.000002017"
+        ixz="-0.000037869"
+        iyy="0.000215609"
+        iyz="0.000001864"
+        izz="0.000108786" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/refcam.STL" />
+      </geometry>
+      <material name="station_gray" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://stationlite/meshes/refcam.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="refcam_joint" type="fixed">
+    <origin xyz="0.03987 0 0.9764" rpy="0 1.308996938996 0" />
+    <parent link="base" />
+    <child link="refcam" />
+  </joint>
+</robot>

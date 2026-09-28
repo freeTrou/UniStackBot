@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- stationlite 双臂 macro: base + 左右对称 6-DOF + 平移夹爪 -->
+  <!-- 资产来源: Lumos Station Lite 原始 URDF (arms/stationlite/original/) -->
+
+  <xacro:macro name="stationlite_dual_arm">
+    <link name="base">
+      <inertial>
+        <origin xyz="-0.008088 -0.000003 0.217476" rpy="0 0 0"/>
+        <mass value="2.239"/>
+        <inertia ixx="0.265323119" ixy="-0.000000063" ixz="0.004959622" iyy="0.217350657" iyz="-0.000001195" izz="0.049509934"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/base.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_armbase">
+      <inertial>
+        <origin xyz="-0.000021 -0.000047 0.037955" rpy="0 0 0"/>
+        <mass value="0.510232"/>
+        <inertia ixx="0.000284" ixy="0" ixz="0" iyy="0.000280" iyz="-0.000001" izz="0.000280"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/armbase.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_link1">
+      <inertial>
+        <origin xyz="0.02 -0.002 0.109" rpy="0 0 0"/>
+        <mass value="0.496"/>
+        <inertia ixx="0.000349" ixy="0" ixz="0" iyy="0.000356" iyz="0" izz="0.000267"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link1.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_link2">
+      <inertial>
+        <origin xyz="-0.19164 -0.001145 -5.7E-05" rpy="0 0 0"/>
+        <mass value="0.774"/>
+        <inertia ixx="0.00037" ixy="0" ixz="0" iyy="0.006613" iyz="0" izz="0.006701"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link2.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_link3">
+      <inertial>
+        <origin xyz="0.17632 -0.001549 0.054649" rpy="0 0 0"/>
+        <mass value="0.67366"/>
+        <inertia ixx="0.000494" ixy="0" ixz="0.000806" iyy="0.007196" iyz="0" izz="0.00709"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link3.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_link4">
+      <inertial>
+        <origin xyz="0.064717 0 0.047271" rpy="0 0 0"/>
+        <mass value="0.45575"/>
+        <inertia ixx="0.000449" ixy="0" ixz="0.000246" iyy="0.000662" iyz="0" izz="0.000513"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link4.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_link5">
+      <inertial>
+        <origin xyz="0.002443 0 0.002098" rpy="0 0 0"/>
+        <mass value="0.37166"/>
+        <inertia ixx="0.000176" ixy="-5.299E-11" ixz="4E-06" iyy="0.00017" iyz="-5.3273E-08" izz="0.000147"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link5.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_linkgripper">
+      <inertial>
+        <origin xyz="0.043232 0.000041 0.000635" rpy="0 0 0"/>
+        <mass value="0.484919"/>
+        <inertia ixx="0.000344" ixy="0" ixz="0" iyy="0.000318" iyz="0" izz="0.000433"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/gripper_base.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_griperlj_link1">
+      <inertial>
+        <origin xyz="-0.074793 -0.014951 0.000038" rpy="0 0 0"/>
+        <mass value="0.049996"/>
+        <inertia ixx="0.000008474" ixy="-0.000008882" ixz="0.000000032" iyy="0.000034639" iyz="0.000000009" izz="0.000035808"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link1.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_griperlj_link2">
+      <inertial>
+        <origin xyz="-0.074793 0.014951 -0.000038" rpy="0 0 0"/>
+        <mass value="0.050"/>
+        <inertia ixx="0.000008474" ixy="0.000008882" ixz="-0.000000032" iyy="0.000034639" iyz="0.000000009" izz="0.000035808"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link2.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="left_handcam">
+      <inertial>
+        <origin xyz="0.010406 -0.000111 -0.027564" rpy="0 0 0"/>
+        <mass value="0.046"/>
+        <inertia ixx="0.000038227" ixy="-0.000000112" ixz="0.000019170" iyy="0.000047999" iyz="0.000000136" izz="0.000021864"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/handcam.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <joint name="left_arm_mount_joint" type="fixed">
+      <parent link="base"/>
+      <child link="left_armbase"/>
+      <origin xyz="0 0.3175 0" rpy="0 0 0"/>
+    </joint>
+
+    <joint name="left_joint1" type="revolute">
+      <parent link="left_armbase"/>
+      <child link="left_link1"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-2.824" upper="2.824" effort="27" velocity="5.5"/>
+    </joint>
+
+    <joint name="left_joint2" type="revolute">
+      <parent link="left_link1"/>
+      <child link="left_link2"/>
+      <origin xyz="0.024 0 0.117" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-0.209" upper="3.508" effort="27" velocity="5.5"/>
+    </joint>
+
+    <joint name="left_joint3" type="revolute">
+      <parent link="left_link2"/>
+      <child link="left_link3"/>
+      <origin xyz="-0.265 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-3.193" upper="0" effort="27" velocity="5.5"/>
+    </joint>
+
+    <joint name="left_joint4" type="revolute">
+      <parent link="left_link3"/>
+      <child link="left_link4"/>
+      <origin xyz="0.265 0 0.062" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1.710" upper="1.710" effort="7" velocity="20.9"/>
+    </joint>
+
+    <joint name="left_joint5" type="revolute">
+      <parent link="left_link4"/>
+      <child link="left_link5"/>
+      <origin xyz="0.078 0 -0.00295" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-1.710" upper="1.710" effort="12.5" velocity="20.9"/>
+    </joint>
+
+    <joint name="left_joint6" type="revolute">
+      <parent link="left_link5"/>
+      <child link="left_linkgripper"/>
+      <origin xyz="0.0255 0 0" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="-2.856" upper="2.856" effort="12.5" velocity="20.9"/>
+    </joint>
+
+    <joint name="left_gripper_joint1" type="prismatic">
+      <parent link="left_linkgripper"/>
+      <child link="left_griperlj_link1"/>
+      <origin xyz="0.1733 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-0.0425" upper="0" effort="150" velocity="0.8"/>
+    </joint>
+
+    <joint name="left_gripper_joint2" type="prismatic">
+      <parent link="left_linkgripper"/>
+      <child link="left_griperlj_link2"/>
+      <origin xyz="0.1733 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="0" upper="0.0425" effort="150" velocity="0.8"/>
+    </joint>
+
+    <joint name="left_handcam_joint" type="fixed">
+      <parent link="left_linkgripper"/>
+      <child link="left_handcam"/>
+      <origin xyz="0.037112 0 0.100137" rpy="0 0.349065850399 0"/>
+    </joint>
+
+    <!-- 右臂: 从原始 URDF 复制 (y 轴镜像对称) -->
+    <link name="right_armbase">
+      <inertial>
+        <origin xyz="-0.000021 -0.000047 0.037955" rpy="0 0 0"/>
+        <mass value="0.510232"/>
+        <inertia ixx="0.000284" ixy="0" ixz="0" iyy="0.000280" iyz="-0.000001" izz="0.000280"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/armbase.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_link1">
+      <inertial>
+        <origin xyz="0.02 -0.002 0.109" rpy="0 0 0"/>
+        <mass value="0.496"/>
+        <inertia ixx="0.000349" ixy="0" ixz="0" iyy="0.000356" iyz="0" izz="0.000267"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link1.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_link2">
+      <inertial>
+        <origin xyz="-0.19164 -0.001145 -5.7E-05" rpy="0 0 0"/>
+        <mass value="0.774"/>
+        <inertia ixx="0.00037" ixy="0" ixz="0" iyy="0.006613" iyz="0" izz="0.006701"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link2.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_link3">
+      <inertial>
+        <origin xyz="0.17632 -0.001549 0.054649" rpy="0 0 0"/>
+        <mass value="0.67366"/>
+        <inertia ixx="0.000494" ixy="0" ixz="0.000806" iyy="0.007196" iyz="0" izz="0.00709"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link3.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_link4">
+      <inertial>
+        <origin xyz="0.064717 0 0.047271" rpy="0 0 0"/>
+        <mass value="0.45575"/>
+        <inertia ixx="0.000449" ixy="0" ixz="0.000246" iyy="0.000662" iyz="0" izz="0.000513"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link4.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_link5">
+      <inertial>
+        <origin xyz="0.002443 0 0.002098" rpy="0 0 0"/>
+        <mass value="0.37166"/>
+        <inertia ixx="0.000176" ixy="-5.299E-11" ixz="4E-06" iyy="0.00017" iyz="-5.3273E-08" izz="0.000147"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/link5.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_linkgripper">
+      <inertial>
+        <origin xyz="0.043232 0.000041 0.000635" rpy="0 0 0"/>
+        <mass value="0.484919"/>
+        <inertia ixx="0.000344" ixy="0" ixz="0" iyy="0.000318" iyz="0" izz="0.000433"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/gripper_base.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_griperlj_link1">
+      <inertial>
+        <origin xyz="-0.074793 -0.014951 0.000038" rpy="0 0 0"/>
+        <mass value="0.049996"/>
+        <inertia ixx="0.000008474" ixy="-0.000008882" ixz="0.000000032" iyy="0.000034639" iyz="0.000000009" izz="0.000035808"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link1.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_griperlj_link2">
+      <inertial>
+        <origin xyz="-0.074793 0.014951 -0.000038" rpy="0 0 0"/>
+        <mass value="0.050"/>
+        <inertia ixx="0.000008474" ixy="0.000008882" ixz="-0.000000032" iyy="0.000034639" iyz="0.000000009" izz="0.000035808"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/griperlj_link2.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <link name="right_handcam">
+      <inertial>
+        <origin xyz="0.010406 -0.000111 -0.027564" rpy="0 0 0"/>
+        <mass value="0.046"/>
+        <inertia ixx="0.000038227" ixy="-0.000000112" ixz="0.000019170" iyy="0.000047999" iyz="0.000000136" izz="0.000021864"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://unistackbot_description/arms/stationlite/meshes/handcam.STL"/></geometry>
+        <material name="station_gray"/>
+      </visual>
+    </link>
+
+    <joint name="right_arm_mount_joint" type="fixed">
+      <parent link="base"/>
+      <child link="right_armbase"/>
+      <origin xyz="0 -0.3175 0" rpy="0 0 0"/>
+    </joint>
+
+    <joint name="right_joint1" type="revolute">
+      <parent link="right_armbase"/>
+      <child link="right_link1"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-2.824" upper="2.824" effort="27" velocity="5.5"/>
+    </joint>
+
+    <joint name="right_joint2" type="revolute">
+      <parent link="right_link1"/>
+      <child link="right_link2"/>
+      <origin xyz="0.024 0 0.117" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-0.209" upper="3.508" effort="27" velocity="5.5"/>
+    </joint>
+
+    <joint name="right_joint3" type="revolute">
+      <parent link="right_link2"/>
+      <child link="right_link3"/>
+      <origin xyz="-0.265 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-3.193" upper="0" effort="27" velocity="5.5"/>
+    </joint>
+
+    <joint name="right_joint4" type="revolute">
+      <parent link="right_link3"/>
+      <child link="right_link4"/>
+      <origin xyz="0.265 0 0.062" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1.710" upper="1.710" effort="7" velocity="20.9"/>
+    </joint>
+
+    <joint name="right_joint5" type="revolute">
+      <parent link="right_link4"/>
+      <child link="right_link5"/>
+      <origin xyz="0.078 0 -0.00295" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-1.710" upper="1.710" effort="12.5" velocity="20.9"/>
+    </joint>
+
+    <joint name="right_joint6" type="revolute">
+      <parent link="right_link5"/>
+      <child link="right_linkgripper"/>
+      <origin xyz="0.0255 0 0" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="-2.856" upper="2.856" effort="12.5" velocity="20.9"/>
+    </joint>
+
+    <joint name="right_gripper_joint1" type="prismatic">
+      <parent link="right_linkgripper"/>
+      <child link="right_griperlj_link1"/>
+      <origin xyz="0.1733 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-0.0425" upper="0" effort="150" velocity="0.8"/>
+    </joint>
+
+    <joint name="right_gripper_joint2" type="prismatic">
+      <parent link="right_linkgripper"/>
+      <child link="right_griperlj_link2"/>
+      <origin xyz="0.1733 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="0" upper="0.0425" effort="150" velocity="0.8"/>
+    </joint>
+
+    <joint name="right_handcam_joint" type="fixed">
+      <parent link="right_linkgripper"/>
+      <child link="right_handcam"/>
+      <origin xyz="0.037112 0 0.100137" rpy="0 0.349065850399 0"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>
