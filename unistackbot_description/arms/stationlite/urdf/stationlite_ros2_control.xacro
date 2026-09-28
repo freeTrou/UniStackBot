@@ -5,7 +5,7 @@
     <!-- 真机协议待确认 (R1-7A 485 / 新协议), 先按 SimControl 预留 -->
     <xacro:macro name="stationlite_ros2_control" params="use_gazebo:=false">
 
-        <ros2_control name="stationlite">
+        <ros2_control name="stationlite" type="system">
 
             <hardware>
                 <xacro:if value="$(arg use_gazebo)">
