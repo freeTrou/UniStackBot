@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "unistackbot_bus/master_base.hpp"
+#include "unistackbot_protocol/protocol_core.hpp"
+#include "unistackbot_statemachine/state_translator.hpp"
 #include "unistackbot_serial/framer.hpp"
 #include "unistackbot_serial/io_transport.hpp"
 
@@ -50,6 +52,10 @@ public:
 	// 装配期注入 transport (测试/假从站/智能 dongle); 不注入则 start() 按
 	// cfg.endpoint 打开 TermiosTransport。必须在 start() 之前调用。
 	void attach_transport(std::unique_ptr<IoTransport> io);
+
+	void set_protocol(std::unique_ptr<unistackbot_protocol::ProtocolCore> proto) override;
+	void set_translator(
+		std::unique_ptr<unistackbot_statemachine::StateTranslator> translator) override;
 
 	[[nodiscard]] bool start(const unistackbot_bus::MasterConfig &cfg) override;
 	void stop() override;

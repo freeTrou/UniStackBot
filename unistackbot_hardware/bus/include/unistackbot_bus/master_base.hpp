@@ -2,11 +2,13 @@
 #define UNISTACKBOT_BUS__MASTER_BASE_HPP_
 
 #include <cstddef>
+#include <memory>
 #include <cstdint>
 #include <string>
 
 #include "unistackbot_protocol/protocol_core.hpp"
 #include "unistackbot_statemachine/neutral_state.hpp"
+#include "unistackbot_statemachine/state_translator.hpp"
 
 // MasterBase —— 总线主站父类 (2026-09-24 立轴, 同 protocol/statemachine 组织:
 // 父类定接口 · 子类实现 · 工厂按名创建 · 型号↔总线由机器配置显式声明)。
@@ -38,8 +40,6 @@ constexpr std::size_t kMaxNodes = 16;
 struct MasterConfig
 {
 	// ── 拓扑 (必填, 无默认纪律) ──
-	std::string protocol;    // 协议内芯名 (protocol 工厂口径)
-	std::string translator;  // 状态翻译器名 (statemachine 工厂口径)
 	std::string endpoint;    // 总线端点 (串口=设备路径; CAN=接口名; EC=网卡——中立载体)
 	double rate_hz = 0.0;    // 总线拍频 (>0 必填)
 	std::size_t node_count = 0;                       // 节点表长度
@@ -81,7 +81,14 @@ class MasterBase
 public:
 	virtual ~MasterBase() = default;
 
-	// 生命周期: 装配配置并启动 (含线程/transport; 任一非法或打开失败 → false)
+	// ── 装配注入 (组合根在 start() 之前调用; 组件不自己创建依赖) ──
+	// 协议内芯与状态翻译器由组合根从工厂创建后注入——总线骨架只消费,
+	// 不知道也不关心底下是哪个协议 (依赖倒置)。
+	virtual void set_protocol(std::unique_ptr<unistackbot_protocol::ProtocolCore> proto) = 0;
+	virtual void set_translator(
+		std::unique_ptr<unistackbot_statemachine::StateTranslator> translator) = 0;
+
+	// 生命周期: 装配配置并启动 (须先注入 protocol/translator; 任一缺失或非法 → false)
 	[[nodiscard]] virtual bool start(const MasterConfig &cfg) = 0;
 	// 停止并释放 (阻塞到泵线程退出; 安全语义: 帧停 → 驱动器看门狗兜底)
 	virtual void stop() = 0;

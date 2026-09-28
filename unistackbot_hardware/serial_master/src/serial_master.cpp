@@ -6,11 +6,9 @@
 #include <thread>
 
 #include "unistackbot_bus/master_factory.hpp"
-#include "unistackbot_protocol/protocol_factory.hpp"
 #include "unistackbot_protocol/unitree_im_core.hpp"
 #include "unistackbot_serial/framer.hpp"
 #include "unistackbot_serial/termios_transport.hpp"
-#include "unistackbot_statemachine/state_translator_factory.hpp"
 
 #include "rt_tune/rt_tune.hpp"
 #include "sp_latest/sp_latest.hpp"
@@ -114,6 +112,23 @@ void SerialMaster::attach_transport(std::unique_ptr<IoTransport> io)
 	}
 }
 
+void SerialMaster::set_protocol(std::unique_ptr<unistackbot_protocol::ProtocolCore> proto)
+{
+	if (!impl_->started.load())
+	{
+		impl_->proto = std::move(proto);
+	}
+}
+
+void SerialMaster::set_translator(
+	std::unique_ptr<unistackbot_statemachine::StateTranslator> translator)
+{
+	if (!impl_->started.load())
+	{
+		impl_->translator = std::move(translator);
+	}
+}
+
 bool SerialMaster::start(const MasterConfig &cfg)
 {
 	if (impl_->started.load())
@@ -138,10 +153,9 @@ bool SerialMaster::start(const MasterConfig &cfg)
 	{
 		return false;
 	}
-	impl_->proto = unistackbot_protocol::createProtocolCore(cfg.protocol);
-	impl_->translator = unistackbot_statemachine::createStateTranslator(cfg.translator);
 	if (impl_->proto == nullptr || impl_->translator == nullptr)
 	{
+		std::fprintf(stderr, "SerialMaster: start 前须注入 protocol/translator (组合根职责)\n");
 		return false;
 	}
 	if (impl_->io == nullptr)

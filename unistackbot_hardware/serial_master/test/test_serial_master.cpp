@@ -32,6 +32,8 @@
 #include <thread>
 
 #include "unistackbot_bus/master_factory.hpp"
+#include "unistackbot_protocol/protocol_factory.hpp"
+#include "unistackbot_statemachine/state_translator_factory.hpp"
 #include "unistackbot_protocol/unitree_im_core.hpp"
 #include "unistackbot_serial/fake_transport.hpp"
 #include "unistackbot_serial/serial_master.hpp"
@@ -148,8 +150,6 @@ private:
 MasterConfig makeCfg()
 {
 	MasterConfig cfg;
-	cfg.protocol = "unitree_im";
-	cfg.translator = "unitree_im";
 	cfg.endpoint = "fake";
 	cfg.rate_hz = 250.0;   // 测试提速 (2 节点 slot 2ms)
 	cfg.baudrate = 6000000;
@@ -228,7 +228,11 @@ int main()
 	FakeTransport *fake_raw = fake.get();
 	m->attach_transport(std::move(fake));
 
-	check(m->start(makeCfg()), "start with fake transport");
+	// 组合根注入 (协议+翻译器从工厂创建后注入, 总线不自己创建依赖)
+	m->set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
+	m->set_translator(unistackbot_statemachine::createStateTranslator("unitree_im"));
+
+	check(m->start(makeCfg()), "start with injected deps");
 	check(m->running(), "running");
 
 	// ① 安全怠速: 等 10 拍, 线上全是停机帧+看dog位
