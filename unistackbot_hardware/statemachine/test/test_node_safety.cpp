@@ -73,9 +73,15 @@ int main()
 	ns.update(fbWith(NodeMode::kStop, 0.0, false, 0x10u));
 	check(ns.state() == NeutralState::kFault, "error → FAULT");
 
-	// 故障恢复: 清后回 DE-ENERGIZED
+	// 故障粘性: error 消失也不自动离开 (间歇故障防复撞)
 	ns.update(fbWith(NodeMode::kStop));
-	check(ns.state() == NeutralState::kReady, "fault cleared → DE-ENERGIZED");
+	check(ns.state() == NeutralState::kFault, "FAULT sticky (error gone but stays)");
+
+	// 正确恢复路径: request_clear → confirm → READY
+	ns.request_fault_clear();
+	check(ns.fault_clear_requested(), "fault clear requested");
+	ns.confirm_fault_cleared();
+	check(ns.state() == NeutralState::kReady, "confirmed clear → DE-ENERGIZED");
 
 	// ── ② 使能守卫 ──
 	NodeSafety ns2;

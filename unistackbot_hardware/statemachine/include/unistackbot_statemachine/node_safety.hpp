@@ -70,14 +70,16 @@ public:
 	[[nodiscard]] bool fault_clear_requested() const { return fault_clear_req_; }
 	void acknowledge_fault_clear() { fault_clear_req_ = false; }
 
-	// ── 状态推进（泵线程或外部触发） ──
+	// ── 状态推进（总线线程或外部触发） ──
 
-	// 请求使能（设置意图标志; 下一拍 update() 时检查守卫并推进）
+	// 请求使能（设置意图标志; 下一拍总线循环消费请求并生成安全命令）
 	void request_enable();
 	// 请求断使能
 	void request_disable();
 	// 请求清故障（只在 FAULT 态有效; 过热/过流类不可自动恢复由上层判断）
 	void request_fault_clear();
+	// 确认故障已清（外部发清故障帧且 error 持续为 0 后调用 → FAULT → READY）
+	void confirm_fault_cleared();
 
 	// ── 内部 ──
 	[[nodiscard]] bool enable_requested() const { return enable_req_; }

@@ -11,38 +11,109 @@ void NodeSafety::update(const NodeFeedback &fb)
 {
 	last_fb_ = fb;
 
-	// 状态推进优先级: FAULT > 超时 > 模式（故障是最重事实）
-	if (fb.error_raw != 0u)
+	// ── 标准状态机: switch(当前态) × 输入事件 → 下一态 ──
+	// 每个 case 明确列出合法迁移; 非法迁移不发生 (状态保持)。
+	// FAULT 是粘性的: 一旦进入, 只有 request_fault_clear() + error=0 确认才能离开。
+
+	switch (state_)
 	{
-		state_ = NeutralState::kFault;
-		// 故障进入时清使能请求（不允许带故障使能）
-		enable_req_ = false;
-		return;
-	}
+	// ── OFFLINE: 无反馈, 等第一帧 ──
+	case NeutralState::kUnknown:
+		if (fb.error_raw != 0u)
+		{
+			state_ = NeutralState::kFault;
+			enable_req_ = false;
+		}
+		else if (fb.mode == NodeMode::kRun)
+		{
+			state_ = NeutralState::kEnabled;
+		}
+		else
+		{
+			state_ = NeutralState::kReady;
+		}
+		break;
 
-	if (fb.timeout_triggered)
+	// ── DE-ENERGIZED: mode=0, 电机自由 ──
+	case NeutralState::kReady:
+		if (fb.error_raw != 0u)
+		{
+			state_ = NeutralState::kFault;
+			enable_req_ = false;
+		}
+		else if (fb.timeout_triggered)
+		{
+			state_ = NeutralState::kQuickStop;
+		}
+		else if (fb.mode == NodeMode::kRun)
+		{
+			state_ = NeutralState::kEnabled;
+		}
+		// mode=0 无异常 → 保持 kReady
+		break;
+
+	// ── ENERGIZED: mode=1, 执行命令 ──
+	case NeutralState::kEnabled:
+		if (fb.error_raw != 0u)
+		{
+			state_ = NeutralState::kFault;
+			enable_req_ = false;
+		}
+		else if (fb.timeout_triggered)
+		{
+			state_ = NeutralState::kQuickStop;
+		}
+		else if (fb.mode == NodeMode::kStop)
+		{
+			state_ = NeutralState::kReady;
+		}
+		// mode=1 无异常 → 保持 kEnabled
+		break;
+
+	// ── QUICK_STOP: 看门狗触发, 受控减速 ──
+	case NeutralState::kQuickStop:
+		if (fb.error_raw != 0u)
+		{
+			state_ = NeutralState::kFault;
+			enable_req_ = false;
+		}
+		else if (!fb.timeout_triggered && fb.mode == NodeMode::kRun)
+		{
+			// 超时已清 + FOC 确认 → 回使能
+			state_ = NeutralState::kEnabled;
+		}
+		else if (!fb.timeout_triggered && fb.mode == NodeMode::kStop)
+		{
+			// 超时已清 + 停机确认 → 回安全态
+			state_ = NeutralState::kReady;
+		}
+		// 超时未清 → 保持 kQuickStop
+		break;
+
+	// ── FAULT: 粘性——不自动离开, 须显式清 ──
+	case NeutralState::kFault:
+		// 即使 error 瞬间回零也不离开——间歇性故障不能自动恢复 (防复撞)。
+		// 离开路径: request_fault_clear() → 外部发清故障帧 → error 持续为 0
+		//          → confirm_fault_cleared() 由外部在确认后调用。
+		break;
+
+	default:
+		break;
+	}
+}
+
+void NodeSafety::confirm_fault_cleared()
+{
+	// 只在 FAULT 态且 error 确实为 0 时生效 (由外部在发送清故障帧后调用)
+	if (state_ == NeutralState::kFault && last_fb_.error_raw == 0u)
 	{
-		state_ = NeutralState::kQuickStop;
-		return;
+		state_ = NeutralState::kReady;
+		fault_clear_req_ = false;
 	}
-
-	if (fb.mode == NodeMode::kRun)
-	{
-		state_ = NeutralState::kEnabled;
-		return;
-	}
-
-	// mode=0 且无故障无超时
-	state_ = NeutralState::kReady;
-
-	// 如果有使能请求且守卫满足 → 标记为待使能（泵会取 enable_command()）
-	// 注意: 实际的状态转换要等反馈确认 mode=1 才算完成
-	// 这里只是预检——真正的 ENERGIZED 由下一拍 update() 确认
 }
 
 bool NodeSafety::can_enable() const
 {
-	// 守卫: 有反馈（非 OFFLINE）+ 无故障 + 非超时态
 	return state_ == NeutralState::kReady;
 }
 
@@ -54,9 +125,6 @@ bool NodeSafety::can_clear_fault() const
 NodeCommand NodeSafety::enable_command(double lock_kp, double lock_kd) const
 {
 	NodeCommand cmd;
-	// 核心安全: position = 实测位（防跳变）
-	// 如果在 DE-ENERGIZED 期间臂因重力下垂了, last_fb_.position 就是新位置
-	// 使能命令锁在这里 → 电机原地锁定 → 零跳变
 	cmd.mode = NodeMode::kRun;
 	cmd.position = last_fb_.position;
 	cmd.kp = lock_kp;
@@ -76,7 +144,7 @@ NodeCommand NodeSafety::disable_command() const
 	cmd.kd = 0.0;
 	cmd.speed = 0.0;
 	cmd.tau = 0.0;
-	cmd.watchdog_enable = true;   // 断使能也开着门狗——总线断时电机自停
+	cmd.watchdog_enable = true;
 	return cmd;
 }
 
@@ -91,7 +159,6 @@ void NodeSafety::request_enable()
 
 void NodeSafety::request_disable()
 {
-	// 任何非 OFFLINE 状态都可以请求断使能
 	if (state_ != NeutralState::kUnknown)
 	{
 		disable_req_ = true;
