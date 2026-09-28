@@ -153,6 +153,17 @@ int main()
 	check(std::fabs(ec2.position - 1.3) < 1e-12,
 		"enable pos = latest measured (1.3), not old (1.0) or zero");
 
+	// ── ⑥ 批量更新 (EC: 一次全推进) ──
+	NodeSafety batch[3];
+	NodeFeedback bfs[3];
+	bfs[0] = fbWith(NodeMode::kStop, 0.1);
+	bfs[1] = fbWith(NodeMode::kRun, 0.5);
+	bfs[2] = fbWith(NodeMode::kStop, 0.0, false, 0x10u);
+	NodeSafety::update_batch(batch, bfs, 3);
+	check(batch[0].state() == NeutralState::kReady, "batch[0] READY");
+	check(batch[1].state() == NeutralState::kEnabled, "batch[1] ENABLED");
+	check(batch[2].state() == NeutralState::kFault, "batch[2] FAULT");
+
 	// ── 请求清理 ──
 	ns9.clear_requests();
 	check(!ns9.enable_requested() && !ns9.disable_requested(), "requests cleared");

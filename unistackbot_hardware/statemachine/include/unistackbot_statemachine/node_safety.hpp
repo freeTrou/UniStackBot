@@ -36,8 +36,13 @@ enum class TransitionResult : std::uint8_t
 class NodeSafety
 {
 public:
-	// 每拍更新（泵线程调用；喂最新反馈，内部推进状态）
+	// 单节点更新（串口/CAN: 逐节点轮询, 总线循环每时隙喂一帧）
 	void update(const unistackbot_protocol::NodeFeedback &fb);
+
+	// 批量更新（EC: 一次拿到全部从站反馈, 一拍全推进）
+	// nodes 和 fbs 均为定长数组, count = 节点数
+	static void update_batch(NodeSafety *nodes,
+		const unistackbot_protocol::NodeFeedback *fbs, std::size_t count);
 
 	// 当前状态
 	[[nodiscard]] NeutralState state() const { return state_; }

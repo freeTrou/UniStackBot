@@ -102,6 +102,15 @@ void NodeSafety::update(const NodeFeedback &fb)
 	}
 }
 
+void NodeSafety::update_batch(NodeSafety *nodes,
+	const NodeFeedback *fbs, std::size_t count)
+{
+	for (std::size_t i = 0; i < count; ++i)
+	{
+		nodes[i].update(fbs[i]);
+	}
+}
+
 void NodeSafety::confirm_fault_cleared()
 {
 	// 只在 FAULT 态且 error 确实为 0 时生效 (由外部在发送清故障帧后调用)
