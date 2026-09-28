@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
+  <material name="station_gray">
+    <color rgba="0.75294 0.75294 0.75294 1"/>
+  </material>
+
   <!-- stationlite 双臂 macro: base + 左右对称 6-DOF + 平移夹爪 -->
   <!-- 资产来源: Lumos Station Lite 原始 URDF (arms/stationlite/original/) -->
 
