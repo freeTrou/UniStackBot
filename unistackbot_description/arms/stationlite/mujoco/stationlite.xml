@@ -8,31 +8,31 @@
     <body name="base" pos="0 0 0">
       <geom name="base_c" type="box" size="0.1 0.3 0.05" pos="0 0 0.05" contype="1" conaffinity="0"/>
       <body name="left_armbase" pos="0 0.3175 0">
-        <geom name="left_armbase_c" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+        <geom name="left_armbase_c" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_joint1_b" pos="0.05 0 0">
           <joint name="left_joint1" type="hinge" axis="0 0 1" range="-2.824 2.824"/>
-          <geom name="left_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_joint2_b" pos="0.05 0 0">
           <joint name="left_joint2" type="hinge" axis="0 1 0" range="-0.209 3.508"/>
-          <geom name="left_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_joint3_b" pos="0.05 0 0">
           <joint name="left_joint3" type="hinge" axis="0 1 0" range="-3.193 0"/>
-          <geom name="left_joint3_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_joint3_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_joint4_b" pos="0.05 0 0">
           <joint name="left_joint4" type="hinge" axis="0 1 0" range="-1.71 1.71"/>
-          <geom name="left_joint4_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_joint4_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_joint5_b" pos="0.05 0 0">
           <joint name="left_joint5" type="hinge" axis="0 0 1" range="-1.71 1.71"/>
-          <geom name="left_joint5_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_joint5_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_joint6_b" pos="0.05 0 0">
           <joint name="left_joint6" type="hinge" axis="1 0 0" range="-2.856 2.856"/>
-          <geom name="left_joint6_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_joint6_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_gripper_joint1_b" pos="0.05 0 0">
           <joint name="left_gripper_joint1" type="slide" axis="0 0 1" range="-0.0425 0"/>
-          <geom name="left_gripper_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_gripper_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="left_gripper_joint2_b" pos="0.05 0 0">
           <joint name="left_gripper_joint2" type="slide" axis="0 1 0" range="0 0.0425"/>
-          <geom name="left_gripper_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="left_gripper_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         </body>
         </body>
         </body>
@@ -44,31 +44,31 @@
 
       </body>
       <body name="right_armbase" pos="0 -0.3175 0">
-        <geom name="right_armbase_c" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+        <geom name="right_armbase_c" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_joint1_b" pos="0.05 0 0">
           <joint name="right_joint1" type="hinge" axis="0 0 1" range="-2.824 2.824"/>
-          <geom name="right_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_joint2_b" pos="0.05 0 0">
           <joint name="right_joint2" type="hinge" axis="0 1 0" range="-0.209 3.508"/>
-          <geom name="right_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_joint3_b" pos="0.05 0 0">
           <joint name="right_joint3" type="hinge" axis="0 1 0" range="-3.193 0"/>
-          <geom name="right_joint3_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_joint3_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_joint4_b" pos="0.05 0 0">
           <joint name="right_joint4" type="hinge" axis="0 1 0" range="-1.71 1.71"/>
-          <geom name="right_joint4_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_joint4_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_joint5_b" pos="0.05 0 0">
           <joint name="right_joint5" type="hinge" axis="0 0 1" range="-1.71 1.71"/>
-          <geom name="right_joint5_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_joint5_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_joint6_b" pos="0.05 0 0">
           <joint name="right_joint6" type="hinge" axis="1 0 0" range="-2.856 2.856"/>
-          <geom name="right_joint6_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_joint6_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_gripper_joint1_b" pos="0.05 0 0">
           <joint name="right_gripper_joint1" type="slide" axis="0 0 1" range="-0.0425 0"/>
-          <geom name="right_gripper_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_gripper_joint1_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         <body name="right_gripper_joint2_b" pos="0.05 0 0">
           <joint name="right_gripper_joint2" type="slide" axis="0 1 0" range="0 0.0425"/>
-          <geom name="right_gripper_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="1" conaffinity="1"/>
+          <geom name="right_gripper_joint2_c" type="capsule" size="0.02" fromto="0 0 0 0.05 0 0" contype="0" conaffinity="0"/>
         </body>
         </body>
         </body>
