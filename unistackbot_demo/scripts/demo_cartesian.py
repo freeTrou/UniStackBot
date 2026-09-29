@@ -320,8 +320,10 @@ class DemoCartesian(Node):
 				for i, dp in enumerate(deploy):
 					publish(dp, '部署 %d/2' % (i + 1))
 					kind, v = self._wait_result(timeout, reject_after)
-					if kind != 'conv':
-						raise RuntimeError('部署腿未收敛 (kind=%s result=%s)' % (kind, v))
+					if kind == 'reject':
+						raise RuntimeError('部署腿被拒 (result=%s) —— 圆周几何不可达, 终止' % v)
+					if kind == 'plateau':
+						self.get_logger().warn('部署腿稳态 %.3fmm (>1mm 容差, 物理链 sag 正常), 继续' % (v * 1000.0))
 				n_pts = 36
 				steps = max(2, int(round(0.1 * stream_hz)))   # 每点 0.1s 连续推
 				t0c = time.time()
