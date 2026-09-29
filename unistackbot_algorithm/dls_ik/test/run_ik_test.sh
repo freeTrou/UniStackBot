@@ -24,13 +24,17 @@ g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
 	-o /tmp/test_dls_ik
 
 echo "== 运行 ($ROBOT) =="
-TIP=link7
-[ "$ROBOT" = "piper" ] && TIP=link6
+# per-robot 末端 link (2026-09-29 r1_7a 参数化; 新臂加一行)
+case "$ROBOT" in
+	piper) TIP=link6; BASE=base_link ;;
+	r1_7a) TIP=Link7; BASE=base_link ;;
+	*) TIP=link7; BASE=link_base ;;
+esac
 LIB="$REPO_ROOT/unistackbot_description/arms/$ROBOT/ik/seed_lib_${ROBOT}.txt"
 if [ -f "$LIB" ]; then
 	echo "种子库: $LIB"
-	/tmp/test_dls_ik "$URDF" "$ORACLE" "$TIP" "$LIB"
+	/tmp/test_dls_ik "$URDF" "$ORACLE" "$TIP" "$BASE" "$LIB"
 else
 	echo "种子库: 无 ($LIB) —— 走分支+随机阶梯"
-	/tmp/test_dls_ik "$URDF" "$ORACLE" "$TIP"
+	/tmp/test_dls_ik "$URDF" "$ORACLE" "$TIP" "$BASE"
 fi

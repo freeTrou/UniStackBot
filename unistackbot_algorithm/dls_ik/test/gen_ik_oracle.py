@@ -27,8 +27,12 @@ ROBOT = sys.argv[1] if len(sys.argv) > 1 else "xarm7"
 SAMPLES = int(sys.argv[2]) if len(sys.argv) > 2 else 600
 URDF = f"/tmp/verify_{ROBOT}.urdf"
 OUT = f"{__file__.rsplit('/', 2)[0]}/test/ik_oracle_{ROBOT}.txt"
-TIP = "link7"
-BASE = "link_base"
+# per-robot 链端配置 (2026-09-29 r1_7a 接入参数化; 新臂加一行)
+ROBOT_CHAIN = {
+    "xarm7": ("link_base", "link7"),
+    "r1_7a": ("base_link", "Link7"),
+}
+BASE, TIP = ROBOT_CHAIN.get(ROBOT, ("link_base", "link7"))
 
 import xml.etree.ElementTree as ET
 lim = {}
@@ -50,6 +54,18 @@ BRANCH = np.array([
     [-0.07, -1.44, -2.73, +1.39, -0.07, -0.03, +0.09]])
 
 m = ssik.Manipulator.from_urdf(URDF, base=BASE, ee=TIP)
+
+# ssik 解析复核可用性探测 (playbook §7 预案): 零位 FK 目标回代 solve, 0 解/异常
+# = 该构型解析解不可用 (r1_7a 实测: dispatch 判 spherical_shoulder 但非严格共点,
+# solve 恒 0 解) → 降级 FK 自证模式: 可达真值 = 采样关节角自身 (单解非全解, 诚实注记);
+# 不可达样本只用远超臂展带 (无解析复核无法证贴边界带不可达)
+try:
+    _probe = m.solve(m.fk(np.zeros(m.dof)), respect_limits=True)
+    FK_ONLY = not _probe
+except Exception:
+    FK_ONLY = True
+if FK_ONLY:
+    print("== ssik 解析复核不可用, 降级 FK 自证模式 (playbook §7) ==")
 import importlib.metadata
 try:
     ssik_ver = importlib.metadata.version("ssik")
@@ -99,33 +115,42 @@ while n_reach < n_target_reach and idx < n_target_reach * 20:
     pose = m.fk(q0)
     T[:3, :3] = pose[:3, :3]
     T[:3, 3] = pose[:3, 3]
-    sols = m.solve(T, respect_limits=True)
-    if not sols:
-        continue   # FK 可达但限位内无解 (罕见; Halton 点位可能贴界) —— 跳过
-    # 记录: 位置由 FK 精确给出, ssik 解集含 q0 自身 (容差内)
+    if FK_ONLY:
+        qs = [list(map(float, q0))]   # 真值 = 采样关节角自身 (单解, 非全解)
+    else:
+        sols = m.solve(T, respect_limits=True)
+        if not sols:
+            continue   # FK 可达但限位内无解 (罕见; Halton 点位可能贴界) —— 跳过
+        qs = [list(map(float, s.q)) for s in sols]
     p = T[:3, 3]
     quat = Rrot.from_matrix(T[:3, :3]).as_quat()   # x,y,z,w
     r = float(np.linalg.norm(p))
     br, d_br = branch_of(q0)
-    qs = [list(map(float, s.q)) for s in sols]
     lines.append(("P", p, quat, len(qs), qs, f"r={r:.2f} br{br} d_br={d_br:.1f}"))
     n_reach += 1
     if n_reach % 100 == 0:
         print(f"  可达 {n_reach}/{n_target_reach}")
 
 # ---- 不可达样本: 笛卡尔带 + ssik 复核无解 ----
+R_MAX = max(float(np.linalg.norm(m.fk(sample_joints_halton(i))[:3, 3]))
+            for i in range(1000))   # 实测臂展 (FK_ONLY 的不可达带基准; 有解析时也可用于带标定)
 while n_unreach < n_target_unreach:
-    # 混两类: 70% 远超臂展 (r>0.95), 30% 贴边界带 (0.82~0.95, 近奇异不可达候选)
-    if rng.random() < 0.7:
-        r = 0.95 + rng.random() * 0.35
+    if FK_ONLY:
+        r = R_MAX * (1.1 + rng.random() * 0.4)   # 仅远超臂展带 (几何确定不可达)
+        d = rng.normal(size=3)
+        p = d / np.linalg.norm(d) * r
     else:
-        r = 0.82 + rng.random() * 0.13
-    d = rng.normal(size=3)
-    p = d / np.linalg.norm(d) * r
-    T = np.eye(4)
-    T[:3, 3] = p
-    if m.solve(T, respect_limits=True):
-        continue   # 贴边界带可能可达 —— 剔除 (诚实: 只收 ssik 确认无解的)
+        # 混两类: 70% 远超臂展 (r>0.95), 30% 贴边界带 (0.82~0.95, 近奇异不可达候选)
+        if rng.random() < 0.7:
+            r = 0.95 + rng.random() * 0.35
+        else:
+            r = 0.82 + rng.random() * 0.13
+        d = rng.normal(size=3)
+        p = d / np.linalg.norm(d) * r
+        T = np.eye(4)
+        T[:3, 3] = p
+        if m.solve(T, respect_limits=True):
+            continue   # 贴边界带可能可达 —— 剔除 (诚实: 只收 ssik 确认无解的)
     quat = np.array([0.0, 1.0, 0.0, 0.0])   # 朝下姿态 (与 v1 一致)
     lines.append(("U", p, quat, 0, [], f"r={r:.2f}"))
     n_unreach += 1
@@ -155,7 +180,8 @@ for ci in check_idx:
 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 with open(OUT, "w") as f:
     f.write(f"# IK oracle for {ROBOT} (v2 关节正推采样)\n")
-    f.write(f"# generator: ssik {ssik_ver} + Halton 关节采样 + FK 正推 + ssik 复核\n")
+    f.write(f"# generator: ssik {ssik_ver} + Halton 关节采样 + FK 正推 + "
+            f"{'FK自证(降级,单解真值)' if FK_ONLY else 'ssik 复核'}\n")
     f.write(f"# generated: {now}  samples={SAMPLES} reachable={n_reach} unreachable={n_unreach}\n")
     f.write(f"# self-check: {'; '.join(selfcheck)}\n")
     f.write(f"# format: P x y z qw qx qy qz | n_solutions | meta | n lines of 7 joint values\n")

@@ -60,28 +60,34 @@ struct OracleEntry
 	bool reachable;
 	std::vector<std::vector<double>> sols;
 	int n_sols_header{0};   // 头部声明的解数 (v2; 用于一致性检查)
+	std::string meta;   // oracle 行尾标签 (r=/br=; 失败画像用)
 };
 
 int main(int argc, char ** argv)
 {
 	if (argc < 4)
 	{
-		std::printf("用法: test_dls_ik <urdf> <oracle文件> <tip>\n");
+		std::printf("用法: test_dls_ik <urdf> <oracle文件> <tip> [base] [种子库]\n");
 		return 2;
 	}
+	const char * base = (argc >= 5) ? argv[4] : "link_base";   // argv[5]=种子库 (可选)
 	UrdfFk fk;
 	std::string msg;
-	CHECK(fk.init(loadFile(argv[1]), "link_base", argv[3], msg));
+	if (!fk.init(loadFile(argv[1]), base, argv[3], msg))
+	{
+		std::printf("FAIL: fk.init base=%s tip=%s: %s\n", base, argv[3], msg.c_str());
+		return 1;   // 建链失败 fail-loud, 勿带 n=0 继续跑 (R1 段错误教训 2026-09-29)
+	}
 	const unsigned int n = fk.jointCount();
 
 	DlsIk ik;
 	CHECK(ik.init(&fk, msg));
 
-	// 种子库 (可选 argv[4]): COLD_START 阶梯级0.5 的目标导向种子
-	if (argc >= 5)
+	// 种子库 (可选 argv[5]; base 参数化后从 argv[4] 错位修正, 2026-09-29)
+	if (argc >= 6)
 	{
-		CHECK(ik.loadSeedLibrary(argv[4], msg));
-		std::printf("[种子库] %zu 条 (%s)\n", ik.seedLibrarySize(), argv[4]);
+		CHECK(ik.loadSeedLibrary(argv[5], msg));
+		std::printf("[种子库] %zu 条 (%s)\n", ik.seedLibrarySize(), argv[5]);
 	}
 
 	// 解析 oracle
@@ -109,6 +115,19 @@ int main(int argc, char ** argv)
 					{
 						const auto bar1 = line.find('|');
 						const auto bar2 = line.find('|', bar1 + 1);
+						if (bar2 != std::string::npos)
+						{
+							auto m0 = line.find_first_not_of(' ', bar2 + 1);
+							if (m0 != std::string::npos)
+							{
+								e.meta = line.substr(m0);
+								while (!e.meta.empty() &&
+								       (e.meta.back() == '\n' || e.meta.back() == '\r' || e.meta.back() == ' '))
+								{
+									e.meta.pop_back();
+								}
+							}
+						}
 						if (bar1 != std::string::npos)
 						{
 							// bar2 存在 = v2 (n | meta); 不存在 = v1 (n 结尾)
@@ -223,6 +242,53 @@ int main(int argc, char ** argv)
 	// 真正的达标线在层3 (流式 = 主场景): 101/101 + 增量阈值
 	
 
+		// 圆弧锚 (层3/层6-3 共用, 2026-09-29 机型自适应): 锚 = oracle 中径带
+		// (0.35~0.7 rmax) 首个可达样本真解构型 —— xarm7 硬编码几何对 R1 超工作域、
+		// 限位中点构型在 R1 是奇异邻域 (探针实锤), 采样构型天然可达且远离奇异
+		double arc_rmax = 0.0;
+		for (int t = 0; t < 200; ++t)
+		{
+			std::vector<double> qs(n);
+			for (unsigned k = 0; k < n; ++k)
+			{
+				qs[k] = fk.qMin()[k] + ((t * 37 + k * 101) % 997) / 997.0 *
+				        (fk.qMax()[k] - fk.qMin()[k]);
+			}
+			CartesianPose pp;
+			if (fk.fk(qs, pp))
+			{
+				arc_rmax = std::max(arc_rmax,
+					std::sqrt(pp.x * pp.x + pp.y * pp.y + pp.z * pp.z));
+			}
+		}
+		CartesianPose arc_anchor;
+		std::vector<double> arc_anchor_q;
+		for (const auto & e : entries)
+		{
+			if (!e.reachable || e.sols.empty()) {continue;}
+			const double rr = std::sqrt(e.pose.x * e.pose.x + e.pose.y * e.pose.y +
+				e.pose.z * e.pose.z);
+			if (rr < 0.35 * arc_rmax || rr > 0.7 * arc_rmax) {continue;}
+			CartesianPose ap;
+			if (!fk.fk(e.sols[0], ap)) {continue;}
+			arc_anchor = ap;
+			arc_anchor_q = e.sols[0];
+			break;
+		}
+		CHECK(!arc_anchor_q.empty());
+		const double arc_r = std::max(0.02, 0.15 * arc_rmax);
+		// 切向圆 (2026-09-29 R1 教训: 全向圆朝基座外那半圈超工作域 → 54/101 半圈):
+		// 圆平面 ⊥ 径向, 圆上点距基座近似恒定 → 可达性全程一致
+		double ax = arc_anchor.x, ay = arc_anchor.y, az = arc_anchor.z;
+		const double an = std::sqrt(ax * ax + ay * ay + az * az);
+		ax /= an; ay /= an; az /= an;   // 径向单位
+		double ux = -ay, uy = ax, uz = 0.0;   // u = dir × z (水平切向)
+		const double un = std::sqrt(ux * ux + uy * uy + uz * uz);
+		if (un < 1e-6) {ux = 1; uy = 0; uz = 0;} else {ux /= un; uy /= un; uz /= un;}
+		const double vx = ay * uz - az * uy, vy = az * ux - ax * uz, vz = ax * uy - ay * ux;   // v = dir × u
+		const double cx = arc_anchor.x + arc_r * ax, cy = arc_anchor.y + arc_r * ay,
+			cz = arc_anchor.z + arc_r * az;   // 圆心沿径向外推, 圆过锚点
+
 	// ============ 层3: 轨迹连续性 (100 点圆弧) ============
 	std::printf("== 层3: 轨迹连续性 ==\n");
 	{
@@ -236,15 +302,15 @@ int main(int argc, char ** argv)
 		{
 			const double th = 2 * M_PI * i / 100.0;
 			CartesianPose p;
-			p.x = 0.35 + 0.10 * std::cos(th);
-			p.y = 0.10 * std::sin(th);
-			p.z = 0.45;
-			p.qw = 0.0; p.qx = 1.0;   // 末端朝下
+			p.x = cx + arc_r * (std::cos(th) * ux + std::sin(th) * vx);
+			p.y = cy + arc_r * (std::cos(th) * uy + std::sin(th) * vy);
+			p.z = cz + arc_r * (std::cos(th) * uz + std::sin(th) * vz);
+			p.qw = arc_anchor.qw; p.qx = arc_anchor.qx;
+			p.qy = arc_anchor.qy; p.qz = arc_anchor.qz;
 			std::vector<double> q(n, 0.0);
 			if (i == 0)
 			{
-				// 首点: 从中心种子起步
-				for (unsigned k = 0; k < n; ++k) {q[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
+				q = arc_anchor_q;   // 首点: 锚构型起步 (中点构型可能是奇异邻域)
 			}
 			else
 			{
@@ -390,7 +456,7 @@ int main(int argc, char ** argv)
 			{"500Hz 分层r40",          2000000ull, 200, 40, 88},
 		};
 		// 1ms 目标行只在种子库就绪时有意义 (无库 90% 上下, 有库预期 >=95%)
-		if (argc >= 5)
+		if (argc >= 6)
 		{
 			cases.push_back({"1ms 全局30 (目标行)", 1000000ull, 30, 0, 92});
 		}
@@ -434,6 +500,39 @@ int main(int argc, char ** argv)
 			std::printf("  %s: 成功 %d/%d (%.1f%%) 超时中断 %d  p50=%.2fms p99=%.2fms max=%.2fms\n",
 				bc.label, ok, total, 100.0 * ok / std::max(total, 1), n_timeout, p50, p99,
 				max_us / 1000.0);
+			if (ok * 100 / std::max(total, 1) < 90)
+			{
+				// 失败画像 (playbook §3 第 3 环) + 第 0 环主循环无辜性: 失败样本以
+				// 自身真解作种子重解 —— 1 迭代收敛 = DLS/误差/限位处理全对, 失败纯属种子远
+				std::printf("  [画像] 失败样本 (前 8):\n");
+				int shown = 0;
+				int ring0_ok = 0, ring0_n = 0;
+				for (std::size_t ei = 0; ei < entries.size() && shown < 8; ++ei)
+				{
+					const auto & e = entries[ei];
+					if (!e.reachable || e.sols.empty()) {continue;}
+					// 重解判失败 (同种子同配置)
+					std::vector<double> seed(n);
+					for (unsigned k = 0; k < n; ++k) {seed[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
+					std::vector<double> q = seed;
+					DlsIkStats st;
+					const IkResult r0 = ik.solve(e.pose, seed, preserve, q, &st,
+						unistackbot_algorithm::SolveMode::COLD_START);
+					if (r0 == IkResult::OK) {continue;}
+					++shown;
+					// 第 0 环: 真解种子
+					std::vector<double> q2 = e.sols[0];
+					DlsIkStats st2;
+					const IkResult r1 = ik.solve(e.pose, e.sols[0], preserve, q2, &st2,
+						unistackbot_algorithm::SolveMode::COLD_START);
+					++ring0_n; ring0_ok += (r1 == IkResult::OK);
+					std::printf("    %s | 真解J6=%.3f (限±0.52) J2=%.2f J4=%.2f | 真解种子:%s\n",
+						e.meta.c_str(), e.sols[0][5], e.sols[0][1], e.sols[0][3],
+						r1 == IkResult::OK ? "OK" : "仍失败");
+				}
+				std::printf("  [第0环] 失败样本真解种子复解: %d/%d OK (全 OK = 主循环无辜, 失败=种子远)\n",
+					ring0_ok, ring0_n);
+			}
 			// 恪守边界: 实际耗时 ≤ 预算 + 单次迭代粒度 (~40µs) + 调度抖动余量
 			CHECK(max_us <= static_cast<double>(budget_ns) / 1000.0 + 300.0);
 			// 成功率底线 (防回归线, 非验收线): 无预算基线 99.5%, 尾部难样本需要多轮
@@ -451,18 +550,20 @@ int main(int argc, char ** argv)
 			std::vector<double> prev_q;
 			int ok_pts = 0;
 			double worst_step = 0.0, max_us = 0.0;
+			// 圆弧几何 = 共享锚 (见层 3 前锚块; 本层只改预算 500µs)
 			for (int i = 0; i <= 100; ++i)
 			{
 				const double th = 2 * M_PI * i / 100.0;
 				CartesianPose p;
-				p.x = 0.35 + 0.10 * std::cos(th);
-				p.y = 0.10 * std::sin(th);
-				p.z = 0.45;
-				p.qw = 0.0; p.qx = 1.0;   // 末端朝下
+				p.x = cx + arc_r * (std::cos(th) * ux + std::sin(th) * vx);
+				p.y = cy + arc_r * (std::cos(th) * uy + std::sin(th) * vy);
+				p.z = cz + arc_r * (std::cos(th) * uz + std::sin(th) * vz);
+				p.qw = arc_anchor.qw; p.qx = arc_anchor.qx;
+				p.qy = arc_anchor.qy; p.qz = arc_anchor.qz;
 				std::vector<double> q(n);
 				if (i == 0 || prev_q.empty())
 				{
-					for (unsigned k = 0; k < n; ++k) {q[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
+					q = arc_anchor_q;
 				}
 				else
 				{

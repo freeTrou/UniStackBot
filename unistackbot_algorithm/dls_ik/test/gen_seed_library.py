@@ -24,7 +24,9 @@ TARGET = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
 URDF = f"/tmp/verify_{ROBOT}.urdf"
 REPO_ROOT = __file__.rsplit("/", 3)[0]
 OUT = f"{REPO_ROOT}/unistackbot_description/arms/{ROBOT}/ik/seed_lib_{ROBOT}.txt"
-TIP, BASE = "link7", "link_base"
+# per-robot 链端 (同 gen_ik_oracle 表, 2026-09-29)
+CHAINS = {"xarm7": ("link7", "link_base"), "r1_7a": ("Link7", "base_link")}
+TIP, BASE = CHAINS.get(ROBOT, ("link7", "link_base"))
 
 lim = {}
 for j in ET.parse(URDF).getroot().iter("joint"):
