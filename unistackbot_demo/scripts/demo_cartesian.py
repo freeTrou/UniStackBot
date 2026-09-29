@@ -343,11 +343,32 @@ class DemoCartesian(Node):
 					self.get_logger().info('终态收敛 err=%.3fmm (连续流验收)' % (v * 1000.0))
 				else:
 					self.get_logger().warn('终态 %s (result=%s) —— 连续流收尾未收敛' % (kind, v))
-				for dp, tag in (((0.0, 0.0, lift), '回中'), ((0.0, 0.0, 0.0), '落回起点')):
-					publish(dp, tag)
+				# 收尾腿走流式插值 (2026-09-29 修正: 单发大跳跨 ~30cm 重构型, DLS
+				# 冷启动种子收敛不进预算被诚实拒——小步连续流才是数值解的正确喂法)
+				cur = (fwd + span, 0.0, lift)   # 圆周流终点 (th=0)
+				for target, tag in (((fwd, 0.0, lift), '回圆心'), ((0.0, 0.0, lift), '回中'),
+				                     ((0.0, 0.0, 0.0), '落回起点')):
+					dist = sum((target[i] - cur[i]) ** 2 for i in range(3)) ** 0.5
+					steps_c = max(2, int(round(dist / 0.005)))   # ~5mm/步
+					tw = time.time()
+					for i in range(1, steps_c + 1):
+						a = i / steps_c
+						publish(tuple(cur[j] + (target[j] - cur[j]) * a for j in range(3)),
+						        tag, quiet=True)
+						if pace(tw, i, dt):
+							self._late += 1
 					kind, v = self._wait_result(timeout, reject_after)
-					if kind != 'conv':
-						raise RuntimeError('%s 未收敛 (kind=%s)' % (tag, kind))
+					if kind == 'reject' and tag == '落回起点':
+						# 零位奇异邻域是构型事实 (stationlite: 蛇形折叠 j2/j3/j4 三轴
+						# 平行, 零位即奇异邻域, DLS 诚实 NEAR_SINGULAR)——停在近零位,
+						# 切回 JS 后断流刹停于此, 安全收尾
+						self.get_logger().warn('落回起点被拒 (result=%s, 零位奇异邻域?), 停在近零位收尾' % v)
+						break
+					if kind == 'reject':
+						raise RuntimeError('%s 被拒 (result=%s)' % (tag, v))
+					if kind == 'plateau':
+						self.get_logger().warn('%s 稳态 %.3fmm (>1mm, 物理链 sag), 继续' % (tag, v * 1000.0))
+					cur = target
 			else:   # sweep: 大幅运动 —— 部署(抬升+前伸) → 圆周整圈 → 上浮/回心 → 收回落零
 				cur = (0.0, 0.0, 0.0)   # 相对快照的当前偏移 (链式插值起点)
 
