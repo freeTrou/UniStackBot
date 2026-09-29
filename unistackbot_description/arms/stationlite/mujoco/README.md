@@ -93,21 +93,26 @@ MJCF 模型。**与 piper 不同: 手写策展**, 未走 `robot_description_to_m
   链定位是动力学回归, 亚毫米精度评估走 mock 链。若需再压: timestep 0.001
   (微颤 ~×¼, CPU ×2) 或 j2/j4 继续降 kp (下垂账尚有余量)。
 
-### #6 运动中连杆"完全分离" (静态却完美)
+### #6 运动中连杆"完全分离" (静态却完美) —— 两层错叠加
 
 - **症状**: 零位静态显示完美; 一跑 demo, 连杆整段甩离正确位置, 关节与臂脱开。
-- **根因**: URDF 的关节轴**永远过 child link 原点** (URDF 标准, 无轴偏移语法)。
-  转 MJCF 时 joint origin 平移量只该给 `body pos`; 我在 `joint pos` 上又写了一遍
-  (同一向量用两次) → 关节锚点被放到 child 系错误位置 → 旋转绕错点甩。静态
-  qpos=0 不旋转时锚点无感, 所以零位完美——**静态验收永远抓不住这类错**。
-- **修复**: 全部 14 个 `joint pos="0 0 0"` (body pos 保留 origin)。转换器生成的
-  piper.xml 全部 pos="0 0 0" 是铁证。
-- **验证**: 单关节 45° 时相邻 body 距离 = URDF origin 模长逐个分毫不差
-  (0.1194/0.265/0.2722/0.0781/0.0255); demo 0.15/0.3 两档双臂全程连续。
-- **教训**: **MJCF 关节锚点=child 系坐标, URDF origin=parent→child 平移**——
-  两个语义不同的量, 转换时 origin 只进 body pos, joint pos 恒 0 (除非 URDF
-  有虚构的轴偏移, 而标准 URDF 没有)。机型 MJCF 验收必须含**运动中**帧检查,
-  静态零位对 ≠ 模型对。
+- **两层根因** (先后修掉):
+  1. `joint pos` 写了 URDF origin 平移量 (同一向量与 body pos 用两次)。URDF 轴
+     过 child 原点, joint pos 恒 0——piper.xml (转换器产物) 全部 pos="0 0 0" 为证。
+  2. **joint 挂在 parent body 里** (真凶): MJCF 语义 = body 内声明的 joint 旋转
+     **该 body 自己**; URDF 的 joint i 属于 child link i。挂错一层后 j2 转动变成
+     "link1 壳绕 j1 轴心甩" 而 armbase 壳不动 → 两壳脱开。零位时相邻两层原点
+     重合 (link1 pos=0) → 静态完美, 一动才暴露。
+- **修复**: joint pos 全部 0 + 每个 joint 移入其 child body 开标签之后。
+- **验证 (防复发的硬方法)**: 与 MuJoCo 直载原始 URDF 的模型做**同 qpos 全 body
+  世界坐标对照**——零位/j2/j2+j3/j1+j2+j3+j4 四组全部偏差 0.00000000 m。
+- **教训**:
+  - "相邻 body 原点距离" 是树结构数学恒等式, 任何挂法都成立, **抓不住挂载错**;
+    必须与 URDF 基准做全 body FK 对照。
+  - 静态零位对 ≠ 模型对 (零位是多层错误的共同盲区); 机型 MJCF 验收必须含
+    **多关节非零 qpos 的 FK 数值对照 + 运动中帧检查**。
+  - MuJoCo URDF 导入器会 weld 合并 fixed 链上的无关节 body (base/armbase 被并进
+    world), 对照脚本注意 body 缺失 (name2id 返回 -1, 负索引坑)。
 
 ## 验证状态 (2026-09-29)
 
