@@ -1,7 +1,7 @@
 <mujoco model="stationlite">
   <!-- v4 (2026-09-29): visual mesh + capsule collision(disabled) + URDF 实际位置/惯量 -->
   <compiler angle="radian" meshdir="../meshes/visual/"/>
-  <option timestep="0.002"/>
+  <option timestep="0.001"/>
   <asset>
     <mesh name="base" file="base.STL"/>
     <mesh name="armbase" file="armbase.STL"/>
@@ -32,19 +32,19 @@
         <inertial pos="-2.1e-05 -4.7e-05 0.037955" mass="0.510232" diaginertia="0.000284 0.000280 0.000280"/>
         <geom name="left_armbase_vis" mesh="armbase" pos="0 0 0" class="vis"/>
         <body name="left_link1" pos="0 0 0">
-        <joint name="left_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
+        <joint name="left_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824" damping="0.3" frictionloss="0.1" actuatorfrcrange="-27 27"/>
           <inertial pos="0.02 -0.002 0.109" mass="0.496" diaginertia="0.000349 0.000356 0.000267"/>
           <geom name="left_link1_vis" mesh="link1" pos="0 0 0" class="vis"/>
           <body name="left_link2" pos="0.024 0 0.117">
-          <joint name="left_joint2" type="hinge" pos="0 0 0" axis="0 1 0" range="-0.209 3.508" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
+          <joint name="left_joint2" type="hinge" pos="0 0 0" axis="0 1 0" range="-0.209 3.508" damping="0.3" frictionloss="0.1" actuatorfrcrange="-27 27"/>
             <inertial pos="-0.19164 -0.001145 -5.7e-05" mass="0.774" diaginertia="0.00037 0.006613 0.006701"/>
             <geom name="left_link2_vis" mesh="link2" pos="0 0 0" class="vis"/>
             <body name="left_link3" pos="-0.265 0 0">
-            <joint name="left_joint3" type="hinge" pos="0 0 0" axis="0 1 0" range="-3.193 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
+            <joint name="left_joint3" type="hinge" pos="0 0 0" axis="0 1 0" range="-3.193 0" damping="0.3" frictionloss="0.1" actuatorfrcrange="-27 27"/>
               <inertial pos="0.17632 -0.001549 0.054649" mass="0.67366" diaginertia="0.000494 0.007196 0.00709"/>
               <geom name="left_link3_vis" mesh="link3" pos="0 0 0" class="vis"/>
               <body name="left_link4" pos="0.265 0 0.062">
-              <joint name="left_joint4" type="hinge" pos="0 0 0" axis="0 1 0" range="-1.71 1.71" damping="0.1" frictionloss="0.1" actuatorfrcrange="-7 7"/>
+              <joint name="left_joint4" type="hinge" pos="0 0 0" axis="0 1 0" range="-1.71 1.71" damping="0.3" frictionloss="0.1" actuatorfrcrange="-7 7"/>
                 <inertial pos="0.064717 0 0.047271" mass="0.45575" diaginertia="0.000449 0.000662 0.000513"/>
                 <geom name="left_link4_vis" mesh="link4" pos="0 0 0" class="vis"/>
                 <body name="left_link5" pos="0.078 0 -0.00295">
@@ -56,7 +56,7 @@
                     <inertial pos="0.043232 4.1e-05 0.000635" mass="0.484919" diaginertia="0.000344 0.000318 0.000433"/>
                     <geom name="left_linkgripper_vis" mesh="gripper_base" pos="0 0 0" class="vis"/>
                     <body name="left_griperlj_link1" pos="0.1733 0 0">
-                    <joint name="left_gripper_joint1" type="slide" pos="0 0 0" axis="0 1 0" range="-0.0425 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-150 150"/>
+                    <joint name="left_gripper_joint1" type="slide" pos="0 0 0" axis="0 1 0" range="-0.0425 0" damping="0.3" frictionloss="0.1" actuatorfrcrange="-150 150"/>
                       <inertial pos="-0.074793 -0.014951 3.8e-05" mass="0.049996" diaginertia="0.000008474 0.000034639 0.000035808"/>
                       <geom name="left_griperlj_link1_vis" mesh="griperlj_link1" pos="0 0 0" class="vis"/>
                     </body>
@@ -75,19 +75,19 @@
         <inertial pos="-2.1e-05 -4.7e-05 0.037955" mass="0.510232" diaginertia="0.000284 0.000280 0.000280"/>
         <geom name="right_armbase_vis" mesh="armbase" pos="0 0 0" class="vis"/>
         <body name="right_link1" pos="0 0 0">
-        <joint name="right_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
+        <joint name="right_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824" damping="0.3" frictionloss="0.1" actuatorfrcrange="-27 27"/>
           <inertial pos="0.02 -0.002 0.109" mass="0.496" diaginertia="0.000349 0.000356 0.000267"/>
           <geom name="right_link1_vis" mesh="link1" pos="0 0 0" class="vis"/>
           <body name="right_link2" pos="0.024 0 0.117">
-          <joint name="right_joint2" type="hinge" pos="0 0 0" axis="0 1 0" range="-0.209 3.508" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
+          <joint name="right_joint2" type="hinge" pos="0 0 0" axis="0 1 0" range="-0.209 3.508" damping="0.3" frictionloss="0.1" actuatorfrcrange="-27 27"/>
             <inertial pos="-0.19164 -0.001145 -5.7e-05" mass="0.774" diaginertia="0.00037 0.006613 0.006701"/>
             <geom name="right_link2_vis" mesh="link2" pos="0 0 0" class="vis"/>
             <body name="right_link3" pos="-0.265 0 0">
-            <joint name="right_joint3" type="hinge" pos="0 0 0" axis="0 1 0" range="-3.193 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
+            <joint name="right_joint3" type="hinge" pos="0 0 0" axis="0 1 0" range="-3.193 0" damping="0.3" frictionloss="0.1" actuatorfrcrange="-27 27"/>
               <inertial pos="0.17632 -0.001549 0.054649" mass="0.67366" diaginertia="0.000494 0.007196 0.00709"/>
               <geom name="right_link3_vis" mesh="link3" pos="0 0 0" class="vis"/>
               <body name="right_link4" pos="0.265 0 0.062">
-              <joint name="right_joint4" type="hinge" pos="0 0 0" axis="0 1 0" range="-1.71 1.71" damping="0.1" frictionloss="0.1" actuatorfrcrange="-7 7"/>
+              <joint name="right_joint4" type="hinge" pos="0 0 0" axis="0 1 0" range="-1.71 1.71" damping="0.3" frictionloss="0.1" actuatorfrcrange="-7 7"/>
                 <inertial pos="0.064717 0 0.047271" mass="0.45575" diaginertia="0.000449 0.000662 0.000513"/>
                 <geom name="right_link4_vis" mesh="link4" pos="0 0 0" class="vis"/>
                 <body name="right_link5" pos="0.078 0 -0.00295">
@@ -99,7 +99,7 @@
                     <inertial pos="0.043232 4.1e-05 0.000635" mass="0.484919" diaginertia="0.000344 0.000318 0.000433"/>
                     <geom name="right_linkgripper_vis" mesh="gripper_base" pos="0 0 0" class="vis"/>
                     <body name="right_griperlj_link1" pos="0.1733 0 0">
-                    <joint name="right_gripper_joint1" type="slide" pos="0 0 0" axis="0 1 0" range="-0.0425 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-150 150"/>
+                    <joint name="right_gripper_joint1" type="slide" pos="0 0 0" axis="0 1 0" range="-0.0425 0" damping="0.3" frictionloss="0.1" actuatorfrcrange="-150 150"/>
                       <inertial pos="-0.074793 -0.014951 3.8e-05" mass="0.049996" diaginertia="0.000008474 0.000034639 0.000035808"/>
                       <geom name="right_griperlj_link1_vis" mesh="griperlj_link1" pos="0 0 0" class="vis"/>
                     </body>
@@ -120,15 +120,15 @@
   <actuator>
     <position name="left_joint1" joint="left_joint1" kp="1500" dampratio="1.0" ctrlrange="-2.824 2.824"/>
     <position name="left_joint2" joint="left_joint2" kp="6000" dampratio="1.0" ctrlrange="-0.209 3.508"/>
-    <position name="left_joint3" joint="left_joint3" kp="4000" dampratio="1.0" ctrlrange="-3.193 0"/>
-    <position name="left_joint4" joint="left_joint4" kp="1000" dampratio="1.0" ctrlrange="-1.71 1.71"/>
+    <position name="left_joint3" joint="left_joint3" kp="2000" dampratio="1.0" ctrlrange="-3.193 0"/>
+    <position name="left_joint4" joint="left_joint4" kp="500" dampratio="1.0" ctrlrange="-1.71 1.71"/>
     <position name="left_joint5" joint="left_joint5" kp="100" dampratio="1.0" ctrlrange="-1.71 1.71"/>
     <position name="left_joint6" joint="left_joint6" kp="80" dampratio="1.0" ctrlrange="-2.856 2.856"/>
     <position name="left_gripper_joint1" joint="left_gripper_joint1" kp="120" dampratio="1.0" ctrlrange="-0.0425 0"/>
     <position name="right_joint1" joint="right_joint1" kp="1500" dampratio="1.0" ctrlrange="-2.824 2.824"/>
     <position name="right_joint2" joint="right_joint2" kp="6000" dampratio="1.0" ctrlrange="-0.209 3.508"/>
-    <position name="right_joint3" joint="right_joint3" kp="4000" dampratio="1.0" ctrlrange="-3.193 0"/>
-    <position name="right_joint4" joint="right_joint4" kp="1000" dampratio="1.0" ctrlrange="-1.71 1.71"/>
+    <position name="right_joint3" joint="right_joint3" kp="2000" dampratio="1.0" ctrlrange="-3.193 0"/>
+    <position name="right_joint4" joint="right_joint4" kp="500" dampratio="1.0" ctrlrange="-1.71 1.71"/>
     <position name="right_joint5" joint="right_joint5" kp="100" dampratio="1.0" ctrlrange="-1.71 1.71"/>
     <position name="right_joint6" joint="right_joint6" kp="80" dampratio="1.0" ctrlrange="-2.856 2.856"/>
     <position name="right_gripper_joint1" joint="right_gripper_joint1" kp="120" dampratio="1.0" ctrlrange="-0.0425 0"/>
