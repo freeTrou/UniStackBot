@@ -31,6 +31,8 @@ controller_interface::CallbackReturn JointStreamController::on_init()
 	// 断流受控减速 (0c): 0=关闭; ms→周期数在首拍校准 (Humble: configure 期取不到 update_rate)
 	auto_declare<double>("stale_timeout_ms", 0.0);
 	auto_declare<double>("stale_decel_ms", 200.0);
+	// 应用命令观测面 (~/applied_command): 默认关 —— 透传原则, 观测不默认占资源
+	auto_declare<bool>("observe_applied_command", false);
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -94,6 +96,26 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 	stale_decel_ms_cfg_ = get_node()->get_parameter("stale_decel_ms").as_double();
 	stale_cycles_ = 0u;
 	stale_decel_cycles_ = 1u;
+
+	// 观测面 (可选): 全率发布插值后的应用命令 (与 CM status 同款 RealtimePublisher)
+	observe_applied_ = get_node()->get_parameter("observe_applied_command").as_bool();
+	if (observe_applied_)
+	{
+		auto pub = get_node()->create_publisher<unistackbot_interface::msg::JointCommand>(
+			"~/applied_command", rclcpp::QoS(rclcpp::KeepLast(50)).reliable());
+		rt_applied_ = std::make_shared<realtime_tools::RealtimePublisher<
+			unistackbot_interface::msg::JointCommand>>(pub);
+		// 预分配复用载体: RT 热路径只写 position 值, 零分配
+		applied_msg_.mode = unistackbot_interface::msg::JointCommand::MODE_CSP;
+		applied_msg_.joint_names = joint_names_;
+		applied_msg_.position.assign(joint_names_.size(), 0.0);
+		applied_msg_.velocity.clear();
+		applied_msg_.effort.clear();
+		applied_msg_.kp.clear();
+		applied_msg_.kd.clear();
+		ULOG_INFO("%s: 应用命令观测 ~/applied_command @全率 (tryPublish, 丢拍可接受)",
+			kPluginName);
+	}
 	watch_ = unistackbot_common::StaleWatch(0u);
 	rate_calibrated_ = false;
 	period_n_ = 0;
@@ -366,6 +388,7 @@ controller_interface::return_type JointStreamController::update(
 		{
 			command_interfaces_[i].set_value(cmd_[i]);
 		}
+		publishApplied();
 		return controller_interface::return_type::OK;
 	}
 
@@ -428,7 +451,21 @@ controller_interface::return_type JointStreamController::update(
 	{
 		command_interfaces_[i].set_value(cmd_[i]);
 	}
+	publishApplied();
 	return controller_interface::return_type::OK;
+}
+
+void JointStreamController::publishApplied()
+{
+	if (!rt_applied_)
+	{
+		return;   // 观测关 (默认) —— 单虚调用开销, 零分配零锁
+	}
+	for (std::size_t i = 0; i < applied_msg_.position.size(); ++i)
+	{
+		applied_msg_.position[i] = cmd_[i];
+	}
+	rt_applied_->tryPublish(applied_msg_);   // trylock 非阻塞; 拿不到跳本拍
 }
 
 controller_interface::CallbackReturn JointStreamController::on_deactivate(
@@ -442,6 +479,7 @@ controller_interface::CallbackReturn JointStreamController::on_cleanup(
 	const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	cmd_sub_.reset();
+	rt_applied_.reset();   // 观测面随清理卸载 (CM status 同款收尾)
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 

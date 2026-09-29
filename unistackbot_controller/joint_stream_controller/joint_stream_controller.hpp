@@ -69,6 +69,9 @@ private:
 	// 命令消毒: NaN 门 → 限位 clamp; 返回 false = NaN (整拍保持)
 	bool sanitize(std::vector<double> & q) const;
 
+	// 观测面: 当拍应用命令 (cmd_) 发布; tryPublish 非阻塞 (拿不到锁跳拍)
+	void publishApplied();
+
 	// 值通道快照 (POD): 回调线程做名映射 → RT 侧零 string 零 vector。
 	// JointCommand rosidl 类型非 POD, 不能直接进 SpLatest —— 快照即翻译层
 	struct CmdSnapshot
@@ -114,6 +117,16 @@ private:
 	uint64_t dropped_mode_{0};       // 非 CSP 模式拒绝计数
 	uint64_t dropped_len_{0};        // 关节数不匹配拒绝计数
 	uint64_t stale_events_{0};       // 断流事件计数 (观测; 进入即 +1)
+
+	// ---- 应用命令观测面 (~/applied_command, 2026-09-29; 默认关) ----
+	// 录包诊断: 50Hz 上层 ~/command vs 500Hz 插值后下发 vs /joint_states 反馈三层对账。
+	// 架构 (ROS I/O 纪律①): RT 侧 RealtimePublisher tryPublish = trylock 非阻塞,
+	// 拿不到锁跳本拍 (观测流丢拍可接受), 序列化/DDS 在官方后台线程;
+	// 消息预分配复用 (names/configure 期预填), 热路径只写 position 值 —— 零分配。
+	bool observe_applied_{false};
+	std::shared_ptr<realtime_tools::RealtimePublisher<
+		unistackbot_interface::msg::JointCommand>> rt_applied_;
+	unistackbot_interface::msg::JointCommand applied_msg_;   // 复用载体 (勿在 RT 内重建)
 
 };
 

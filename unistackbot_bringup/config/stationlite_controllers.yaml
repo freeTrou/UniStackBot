@@ -24,6 +24,7 @@ joint_stream_controller:
     max_jerk: 20.0
     stale_timeout_ms: 200.0
     stale_decel_ms: 200.0
+    observe_applied_command: true   # 观测面: ~/applied_command 500Hz 插值后命令 (录包三层对账)
 
 cartesian_motion_controller:
   ros__parameters:
