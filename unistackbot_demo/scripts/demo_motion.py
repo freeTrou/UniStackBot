@@ -190,8 +190,10 @@ def main(args=None):
 			hz = int(argv.pop(0))
 		elif a == '--cycles':
 			cycles = int(argv.pop(0))
+		elif a == '--amp':
+			amp_override = float(argv.pop(0))
 		else:
-			raise SystemExit("未知参数 '%s' (支持: --hz <n> --cycles <n>)" % a)
+			raise SystemExit("未知参数 '%s' (支持: --hz <n> --cycles <n> --amp <0.05-0.45>)" % a)
 	rclpy.init(args=args)
 	node = DemoMotion()
 	try:
