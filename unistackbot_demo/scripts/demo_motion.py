@@ -63,6 +63,7 @@ class DemoMotion(Node):
 		uv = self._get_param('/robot_state_publisher', 'robot_description')
 		if not uv.string_value:
 			raise RuntimeError('读取 robot_state_publisher 的 robot_description 失败')
+		self._urdf_xml = uv.string_value
 		joints, lims, mimics = [], [], []
 		for j in ET.fromstring(uv.string_value).iter('joint'):
 			if j.get('name') is None or j.find('command_interface') is None:
@@ -88,10 +89,80 @@ class DemoMotion(Node):
 				raise RuntimeError("mimic 关节 '%s' 的主关节 '%s' 不在直控关节表" % (name, master))
 		return joints, lims, mimics
 
+	# ---- 轻量 URDF FK (地面安全检查用, 2026-09-29) ----
+	# 动机: 航点是纯关节行程算术, 无末端几何意识——stationlite 折叠构型下
+	# j2 压低方向把夹爪送进地板 ("运动时夹爪戳到地面")。
+	# 修法: 全 link FK 取最低 z, 航点+插值中间点低于门槛 → 自动收缩幅度。
+	# 机型无关 (origin/axis 全读 URDF, 零硬编码), 纯 python 3×4 变换连乘。
+
+	@staticmethod
+	def _rpy_mat(r, p, y):
+		cr, sr, cp, sp, cy, sy = (math.cos(r), math.sin(r), math.cos(p),
+		                          math.sin(p), math.cos(y), math.sin(y))
+		return [
+			[cy*cp, cy*sp*sr - sy*cr, cy*sp*cr + sy*sr],
+			[sy*cp, sy*sp*sr + cy*cr, sy*sp*cr - cy*sr],
+			[-sp,   cp*sr,            cp*cr]]
+
+	@staticmethod
+	def _axis_rot(axis, q):
+		"""axis-angle 旋转矩阵 (URDF axis 归一化前提)。"""
+		n = math.sqrt(sum(a*a for a in axis))
+		x, y, z = axis[0]/n, axis[1]/n, axis[2]/n
+		c, s = math.cos(q), math.sin(q)
+		t = 1.0 - c
+		return [
+			[t*x*x + c,   t*x*y - s*z, t*x*z + s*y],
+			[t*x*y + s*z, t*y*y + c,   t*y*z - s*x],
+			[t*x*z - s*y, t*y*z + s*x, t*z*z + c]]
+
+	def _fk_pos(self, q_map):
+		"""全 link FK。返回 (pos: link→(x,y,z), moving: 活动链下游 link 集)。"""
+		pos = {'base': (0.0, 0.0, 0.0)}
+		moving = set()
+		changed = True
+		joints = self._fk_joints
+		while changed:
+			changed = False
+			for name, parent, child, xyz, rpy, axis, jtype in joints:
+				if parent not in pos or child in pos:
+					continue
+				R = self._rpy_mat(*rpy)
+				q = q_map.get(name, 0.0)
+				if jtype in ('revolute', 'continuous', 'prismatic'):
+					A = self._axis_rot(axis, q)
+					R = [[sum(R[i][k]*A[k][j] for k in range(3)) for j in range(3)]
+					     for i in range(3)]
+				p = pos[parent]
+				pos[child] = tuple(
+					p[i] + sum(R[i][k]*xyz[k] for k in range(3)) for i in range(3))
+				if jtype in ('revolute', 'continuous', 'prismatic') or parent in moving:
+					moving.add(child)
+				changed = True
+		return pos, moving
+
+
+	def _load_fk_model(self, urdf_xml, mimic_names):
+		"""URDF 关节表 (origin xyz/rpy + axis), 供下游计数与 FK。"""
+		self._fk_joints = []
+		for j in ET.fromstring(urdf_xml).iter('joint'):
+			if j.find('parent') is None or j.find('child') is None:
+				continue   # ros2_control 块的 <joint> (接口声明) 不是运动学关节
+			if j.get('name') in mimic_names or j.find('mimic') is not None:
+				continue   # mimic 随主关节, 非独立自由度 (下游计数不计)
+			o = j.find('origin')
+			xyz = [float(v) for v in (o.get('xyz', '0 0 0') if o is not None else '0 0 0').split()]
+			rpy = [float(v) for v in (o.get('rpy', '0 0 0') if o is not None else '0 0 0').split()]
+			ax = j.find('axis')
+			axis = [float(v) for v in (ax.get('xyz', '0 0 0') if ax is not None else '0 0 0').split()]
+			self._fk_joints.append((j.get('name'), j.find('parent').get('link'),
+			                        j.find('child').get('link'), xyz, rpy, axis, j.get('type')))
+
 	def run(self, hz, cycles, amp_override=None):
 		joints, lims, mimics = self._fetch_contract()
 		self.get_logger().info('关节表 (读自链上 URDF): %s%s' % (
 			joints, ' + mimic %s' % [m[0] for m in mimics] if mimics else ''))
+		self._load_fk_model(self._urdf_xml, set(m[0] for m in mimics))
 
 		qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
 		                 history=HistoryPolicy.KEEP_LAST, depth=1)
@@ -114,8 +185,33 @@ class DemoMotion(Node):
 			factor = 0.15   # 保守默认; --amp 可调 (0.5 会砸地面)
 		mid = [(l + h) / 2 for l, h in zip(lo, hi)]
 		half = [(h - l) / 2 for l, h in zip(lo, hi)]
-		pos = [m + hf * factor for m, hf in zip(mid, half)]
-		neg = [m - hf * factor for m, hf in zip(mid, half)]
+		# 末梢两级关节 (下游活动关节数 ≤1, 即腕末与夹爪) 幅度自动减半 ——
+		# 姿态关节大幅旋转会把末端执行器长杆扫向地面 (stationlite 2026-09-29
+		# 实测: 关节航点本身下沉仅 5mm, 戳地全来自腕部旋转的手指扫掠, 指尖
+		# 在 link 原点外 10cm——link 原点级 FK 抓不到, 关节域减幅是务实解)。
+		# 通用规则 (下游计数), 零机型硬编码。
+		children = {}
+		for name, parent, child, _xyz, _rpy, _axis, jtype in self._fk_joints:
+			if jtype in ('revolute', 'continuous', 'prismatic'):
+				children.setdefault(name, []).append(child)
+		downstream = {}
+		cmd_joints = set(joints)   # 只数直控关节 (非命令的随动关节不计)
+		def count_down(name):
+			if name in downstream:
+				return downstream[name]
+			n = 0
+			for c in children.get(name, []):
+				for jn, _p, ch, _x, _r, _a, jt in self._fk_joints:
+					if jn != name and _p == c and jt in ('revolute', 'continuous', 'prismatic') and jn in cmd_joints:
+						n += 1 + count_down(jn)
+			downstream[name] = n
+			return n
+		factors = [factor * 0.5 if count_down(n) <= 1 else factor for n in joints]
+		pos = [m + hf * f for m, hf, f in zip(mid, half, factors)]
+		neg = [m - hf * f for m, hf, f in zip(mid, half, factors)]
+		if any(f != factor for f in factors):
+			self.get_logger().info('末梢两级减半: %s' % [
+				n for n, f in zip(joints, factors) if f != factor])
 		schedule = [
 			(pos, 2.0, '快'),
 			(neg, 6.0, '慢'),
