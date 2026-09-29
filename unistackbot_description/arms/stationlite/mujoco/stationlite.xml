@@ -18,7 +18,9 @@
     <mesh name="refcam" file="refcam.STL"/>
   </asset>
   <default>
-    <default class="vis"><geom contype="0" conaffinity="0" group="1" rgba="0.75 0.75 0.75 1"/></default>
+    <!-- v5 修复 (2026-09-29): MuJoCo 3.x 里 mesh= 属性不隐式设 type, geom 落到默认
+         SPHERE (渲染成一串惯量等效球) — default 类须显式 type="mesh" (piper.xml 同款) -->
+    <default class="vis"><geom type="mesh" contype="0" conaffinity="0" group="1" rgba="0.75 0.75 0.75 1"/></default>
     <default class="col"><geom contype="0" conaffinity="0" group="2"/></default>
   </default>
   <worldbody>
