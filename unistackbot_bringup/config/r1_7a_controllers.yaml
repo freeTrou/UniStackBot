@@ -1,0 +1,42 @@
+/**:
+  ros__parameters:
+    update_rate: 500
+
+controller_manager:
+  ros__parameters:
+    thread_priority: 80
+    cpu_affinity: 1
+    lock_memory: true
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    joint_stream_controller:
+      type: unistackbot_controller/JointStreamController
+    cartesian_motion_controller:
+      type: unistackbot_controller/CartesianMotionController
+    ee_state_broadcaster:
+      type: unistackbot_controller/EeStateBroadcaster
+
+joint_stream_controller:
+  ros__parameters:
+    interpolation: ruckig
+    max_acceleration: 5.0
+    max_jerk: 20.0
+    stale_timeout_ms: 200.0
+    stale_decel_ms: 200.0
+
+# 7 轴冗余 → DLS 主场 (对齐 xarm7; 决策卡见 arms/xarm7 先例)
+cartesian_motion_controller:
+  ros__parameters:
+    base_link: base_link
+    tip_link: Link7
+    ik_solver: dls
+    ik_timeout_ms: 50.0
+    max_acceleration: 5.0
+    max_jerk: 20.0
+
+ee_state_broadcaster:
+  ros__parameters:
+    base_link: base_link
+    tip_link: Link7
+    publish_hz: 50.0

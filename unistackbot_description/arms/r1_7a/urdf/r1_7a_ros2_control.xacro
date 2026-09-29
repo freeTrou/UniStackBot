@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- r1_7a ros2_control 块: J1-J7 position 命令接口 (仿真链 CSP); mujoco 分支走
+         mujoco_ros2_control, 其余走 SimControlHardware kinematic 后端 -->
+    <xacro:macro name="r1_7a_ros2_control" params="use_gazebo:=false headless:=true">
+        <ros2_control name="r1_7a" type="system">
+            <hardware>
+                <xacro:if value="${use_gazebo == 'mujoco'}">
+                    <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+                    <param name="mujoco_model">$(find unistackbot_description)/arms/r1_7a/mujoco/r1_7a.xml</param>
+                    <param name="sim_speed_factor">1.0</param>
+                    <param name="headless">${'true' if headless in [True, 'true'] else 'false'}</param>
+                </xacro:if>
+                <xacro:unless value="${use_gazebo == 'mujoco'}">
+                    <plugin>unistackbot_sim_control/SimControlHardware</plugin>
+                    <param name="backend">kinematic</param>
+                </xacro:unless>
+            </hardware>
+            <joint name="J1">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.723</param>
+                <param name="max">2.723</param>
+                <param name="max_velocity">18.7</param>
+            </joint>
+            <joint name="J2">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">0</param>
+                <param name="max">3.1416</param>
+                <param name="max_velocity">18.7</param>
+            </joint>
+            <joint name="J3">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-0.349</param>
+                <param name="max">3.491</param>
+                <param name="max_velocity">33.4</param>
+            </joint>
+            <joint name="J4">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">0</param>
+                <param name="max">3.1415</param>
+                <param name="max_velocity">33.4</param>
+            </joint>
+            <joint name="J5">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.269</param>
+                <param name="max">2.269</param>
+                <param name="max_velocity">33.4</param>
+            </joint>
+            <joint name="J6">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-0.524</param>
+                <param name="max">0.524</param>
+                <param name="max_velocity">37.7</param>
+            </joint>
+            <joint name="J7">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-1.571</param>
+                <param name="max">1.571</param>
+                <param name="max_velocity">37.7</param>
+            </joint>
+        </ros2_control>
+    </xacro:macro>
+</robot>

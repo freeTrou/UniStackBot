@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- r1_7a 机械臂 macro: 宇树 R1-7A 七轴 (官方 SDK URDF V1.1-0915 程序化转换, 2026-09-29)
+         厂商关节名 J1-J7 原样保留 (与真机 SDK/日志对账零翻译); 零位压限位线注意:
+         J2/J4 下限=0 (stationlite j3 同款, MJCF 侧有预案权衡) -->
+    <xacro:macro name="r1_7a_arm">
+        <link name="base_link">
+            <inertial>
+                <origin rpy="0 0 0" xyz="-0.00010643 0.0010041 0.023203"/>
+                <mass value="1.7759"/>
+                <inertia ixx="0.0014112" ixy="1.7968E-06" ixz="1.2255E-06" iyy="0.001783" iyz="-8.2296E-06" izz="0.0025584"/>
+            </inertial>
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/base_link.STL"/>
+                </geometry>
+                <material name="r1_gray"/>
+            </visual>
+        </link>
+        <joint name="J1" type="revolute">
+            <parent link="base_link"/>
+            <child link="Link1"/>
+            <origin rpy="0 0 0" xyz="0 0 0.069"/>
+            <axis xyz="0 0 -1"/>
+            <limit effort="60" lower="-2.723" upper="2.723" velocity="18.7"/>
+        </joint>
+        <link name="Link1">
+            <inertial>
+                <origin rpy="0 0 0" xyz="2.156E-08 -9.6233E-09 0.045314"/>
+                <mass value="0.89452"/>
+                <inertia ixx="0.00082526" ixy="1.1484E-09" ixz="-7.1331E-10" iyy="0.0006531" iyz="5.9698E-10" izz="0.00059909"/>
+            </inertial>
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/Link1.STL"/>
+                </geometry>
+                <material name="r1_gray"/>
+            </visual>
+        </link>
+                <joint name="J2" type="revolute">
+                    <parent link="Link1"/>
+                    <child link="Link2"/>
+                    <origin rpy="0 0 0" xyz="0 0 0.0469"/>
+                    <axis xyz="1 0 0"/>
+                    <limit effort="60" lower="0" upper="3.1416" velocity="18.7"/>
+                </joint>
+                <link name="Link2">
+                    <inertial>
+                        <origin rpy="0 0 0" xyz="0.0017013 0.063321 -0.0042531"/>
+                        <mass value="0.74773"/>
+                        <inertia ixx="0.001137" ixy="9.3E-05" ixz="-6E-06" iyy="0.000672" iyz="3.2E-05" izz="0.001314"/>
+                    </inertial>
+                    <visual>
+                        <origin rpy="0 0 0" xyz="0 0 0"/>
+                        <geometry>
+                            <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/Link2.STL"/>
+                        </geometry>
+                        <material name="r1_gray"/>
+                    </visual>
+                </link>
+                        <joint name="J3" type="revolute">
+                            <parent link="Link2"/>
+                            <child link="Link3"/>
+                            <origin rpy="0 0 0" xyz="0 0.1085 -0.0047926"/>
+                            <axis xyz="0 1 0"/>
+                            <limit effort="33" lower="-0.349" upper="3.491" velocity="33.4"/>
+                        </joint>
+                        <link name="Link3">
+                            <inertial>
+                                <origin rpy="0 0 0" xyz="-0.0062069 0.075751 0.012556"/>
+                                <mass value="0.71845"/>
+                                <inertia ixx="0.000746" ixy="2.9E-05" ixz="1.3E-05" iyy="0.000558" iyz="-0.000086" izz="0.000728"/>
+                            </inertial>
+                            <visual>
+                                <origin rpy="0 0 0" xyz="0 0 0"/>
+                                <geometry>
+                                    <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/Link3.STL"/>
+                                </geometry>
+                                <material name="r1_gray"/>
+                            </visual>
+                        </link>
+                                <joint name="J4" type="revolute">
+                                    <parent link="Link3"/>
+                                    <child link="Link4"/>
+                                    <origin rpy="0 0 0" xyz="0.025 0.082408 0.016191"/>
+                                    <axis xyz="-1 0 0"/>
+                                    <limit effort="33" lower="0" upper="3.1415" velocity="33.4"/>
+                                </joint>
+                                <link name="Link4">
+                                    <inertial>
+                                        <origin rpy="0 0 0" xyz="-0.020915 -0.070455 0.060056"/>
+                                        <mass value="0.85572"/>
+                                        <inertia ixx="0.001009" ixy="-8.4E-05" ixz="6.3E-05" iyy="0.000707" iyz="0.000139" izz="0.00093"/>
+                                    </inertial>
+                                    <visual>
+                                        <origin rpy="0 0 0" xyz="0 0 0"/>
+                                        <geometry>
+                                            <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/Link4.STL"/>
+                                        </geometry>
+                                        <material name="r1_gray"/>
+                                    </visual>
+                                </link>
+                                        <joint name="J5" type="revolute">
+                                            <parent link="Link4"/>
+                                            <child link="Link5"/>
+                                            <origin rpy="-0.017453 0 0" xyz="-0.022314 -0.10786 0.062877"/>
+                                            <axis xyz="0 1 0"/>
+                                            <limit effort="33" lower="-2.269" upper="2.269" velocity="33.4"/>
+                                        </joint>
+                                        <link name="Link5">
+                                            <inertial>
+                                                <origin rpy="0 0 0" xyz="0.00042498 -0.043121 0.00020709"/>
+                                                <mass value="0.59294"/>
+                                                <inertia ixx="0.000506" ixy="2E-06" ixz="-1E-06" iyy="0.000349" iyz="-1E-06" izz="0.000501"/>
+                                            </inertial>
+                                            <visual>
+                                                <origin rpy="0 0 0" xyz="0 0 0"/>
+                                                <geometry>
+                                                    <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/Link5.STL"/>
+                                                </geometry>
+                                                <material name="r1_gray"/>
+                                            </visual>
+                                        </link>
+                                                <joint name="J6" type="revolute">
+                                                    <parent link="Link5"/>
+                                                    <child link="Link6"/>
+                                                    <origin rpy="0 -0.016375 0" xyz="-1.1462E-05 -0.1072 0.00069991"/>
+                                                    <axis xyz="-1 0 0"/>
+                                                    <limit effort="10" lower="-0.524" upper="0.524" velocity="37.7"/>
+                                                </joint>
+                                                <link name="Link6">
+                                                    <inertial>
+                                                        <origin rpy="0 0 0" xyz="-1.3033E-07 -0.0098039 8.3267E-17"/>
+                                                        <mass value="0.391"/>
+                                                        <inertia ixx="0.00014242" ixy="0" ixz="0" iyy="0.00014737" iyz="0" izz="0.00015188"/>
+                                                    </inertial>
+                                                    <visual>
+                                                        <origin rpy="0 0 0" xyz="0 0 0"/>
+                                                        <geometry>
+                                                            <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/Link6.STL"/>
+                                                        </geometry>
+                                                        <material name="r1_gray"/>
+                                                    </visual>
+                                                </link>
+                                                        <joint name="J7" type="revolute">
+                                                            <parent link="Link6"/>
+                                                            <child link="Link7"/>
+                                                            <origin rpy="-3.1416 0 -3.1416" xyz="0 -0.01 0"/>
+                                                            <axis xyz="0 0 -1"/>
+                                                            <limit effort="10" lower="-1.571" upper="1.571" velocity="37.7"/>
+                                                        </joint>
+                                                        <link name="Link7">
+                                                            <inertial>
+                                                                <origin rpy="0 0 0" xyz="-3.7143E-07 -0.018577 0.00595"/>
+                                                                <mass value="0.1048"/>
+                                                                <inertia ixx="0.000105" ixy="0" ixz="0" iyy="7.3E-05" iyz="0" izz="6.7E-05"/>
+                                                            </inertial>
+                                                            <visual>
+                                                                <origin rpy="0 0 0" xyz="0 0 0"/>
+                                                                <geometry>
+                                                                    <mesh filename="package://unistackbot_description/arms/r1_7a/meshes/visual/Link7.STL"/>
+                                                                </geometry>
+                                                                <material name="r1_gray"/>
+                                                            </visual>
+                                                        </link>
+    </xacro:macro>
+    <material name="r1_gray"><color rgba="0.72 0.72 0.75 1"/></material>
+</robot>

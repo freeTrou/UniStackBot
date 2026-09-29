@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="r1_7a">
+    <!-- r1_7a 顶层: 宇树 R1-7A 七轴 (官方 SDK URDF 导入, 2026-09-29)
+         args 与全机型对齐: use_ros2_control 决定 ros2_control 块, use_gazebo 四向分支 -->
+    <xacro:arg name="use_world" default="true"/>
+    <xacro:arg name="use_ros2_control" default="false"/>
+    <xacro:arg name="use_gazebo" default="false"/>
+    <xacro:arg name="headless" default="true"/>
+
+    <xacro:if value="$(arg use_world)">
+        <link name="world"/>
+        <joint name="r1_7a_world" type="fixed">
+            <parent link="world"/>
+            <child link="base_link"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+        </joint>
+    </xacro:if>
+
+    <xacro:include filename="$(find unistackbot_description)/arms/r1_7a/urdf/r1_7a_macro.xacro"/>
+    <xacro:r1_7a_arm/>
+
+    <xacro:if value="$(arg use_ros2_control)">
+        <xacro:include filename="$(find unistackbot_description)/arms/r1_7a/urdf/r1_7a_ros2_control.xacro"/>
+        <xacro:r1_7a_ros2_control use_gazebo="$(arg use_gazebo)" headless="$(arg headless)"/>
+    </xacro:if>
+</robot>
