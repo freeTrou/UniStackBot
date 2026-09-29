@@ -22,3 +22,4 @@ unistackbot_common/**/test_ulog
 unistackbot_common/**/bench_ulog
 __pycache__/
 *.pyc
+MUJOCO_LOG.TXT

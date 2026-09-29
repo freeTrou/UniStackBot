@@ -51,12 +51,7 @@
                 <param name="max_velocity">0.05</param>
             </joint>
             <!-- left_gripper_joint2 (mimic): MuJoCo 模式下 state-only (equality 耦合) -->
-            <xacro:if value="${use_gazebo == 'mujoco'}">
-                <joint name="left_gripper_joint2">
-                    <state_interface name="position"/>
-                    <state_interface name="velocity"/>
-                </joint>
-            </xacro:if>
+            <!-- gripper_joint2 removed for MuJoCo testing -->
             <xacro:unless value="${use_gazebo == 'mujoco'}">
                 <joint name="left_gripper_joint2">
                     <command_interface name="position"/>
@@ -90,12 +85,7 @@
                 <param name="max_velocity">0.05</param>
             </joint>
             <!-- right_gripper_joint2 (mimic): MuJoCo 模式下 state-only -->
-            <xacro:if value="${use_gazebo == 'mujoco'}">
-                <joint name="right_gripper_joint2">
-                    <state_interface name="position"/>
-                    <state_interface name="velocity"/>
-                </joint>
-            </xacro:if>
+            <!-- gripper_joint2 removed for MuJoCo testing -->
             <xacro:unless value="${use_gazebo == 'mujoco'}">
                 <joint name="right_gripper_joint2">
                     <command_interface name="position"/>
