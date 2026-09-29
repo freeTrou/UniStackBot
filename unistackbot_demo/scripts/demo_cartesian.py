@@ -20,7 +20,7 @@
 
 前置: 三链任一已启动 (control/ign/mujoco.launch.py) 且 joint_stream_controller active。
 
-用法: ros2 run unistackbot_demo demo_cartesian.py [--pattern up|axes|sweep|reject]
+用法: ros2 run unistackbot_demo demo_cartesian.py [--pattern up|axes|sweep|circle|reject]
   reject = 负路径验证 (2026-09-23 用户裁决: 上层不完美是常态, 诚实拒绝路径也是验收面):
   不可达目标弹幕 (远超臂展/边界/穿底) 逐点断言被拒 (result!=0) + 恢复目标收敛
         [--offset 0.03] [--sweep 0.02] [--timeout 30] [--reject-after 1.5]
@@ -312,6 +312,40 @@ class DemoCartesian(Node):
 						len(tally_conv), len(AXES), len(tally_rej), len(AXES),
 						('[' + ', '.join(tally_rej) + ']') if tally_rej else '',
 						time.time() - t0))
+			elif pattern == 'circle':   # 连续小步圆周流 (测试工况, 2026-09-29):
+				# 与 sweep 的差别: 36 点连续流式推进, 不逐点等待收敛 —— 探针是
+				# IK 解连续性/分支跳变 (目标微步移动时解序列应平滑, 跳变=分支切换
+				# 或数值边界), 以及流式跟踪误差曲线。收尾统一验收。
+				deploy = [(0.0, 0.0, lift), (fwd, 0.0, lift)]
+				for i, dp in enumerate(deploy):
+					publish(dp, '部署 %d/2' % (i + 1))
+					kind, v = self._wait_result(timeout, reject_after)
+					if kind != 'conv':
+						raise RuntimeError('部署腿未收敛 (kind=%s result=%s)' % (kind, v))
+				n_pts = 36
+				steps = max(2, int(round(0.1 * stream_hz)))   # 每点 0.1s 连续推
+				t0c = time.time()
+				dt = 1.0 / stream_hz
+				idx = 0
+				for k in range(1, n_pts + 1):   # 整圈, 每步沿弧插值连续推
+					for i in range(1, steps + 1):
+						idx += 1
+						th_i = 2.0 * math.pi * (k - 1 + i / steps) / n_pts
+						publish((fwd + span * math.cos(th_i), span * math.sin(th_i), lift),
+						        'circle', quiet=True)
+						if pace(t0c, idx, dt):
+							self._late += 1
+				self.get_logger().info('圆周流: %d 点连续推完 (%.1fs), 读终态...' % (n_pts, time.time() - t0c))
+				kind, v = self._wait_result(timeout, reject_after)
+				if kind == 'conv':
+					self.get_logger().info('终态收敛 err=%.3fmm (连续流验收)' % (v * 1000.0))
+				else:
+					self.get_logger().warn('终态 %s (result=%s) —— 连续流收尾未收敛' % (kind, v))
+				for dp, tag in (((0.0, 0.0, lift), '回中'), ((0.0, 0.0, 0.0), '落回起点')):
+					publish(dp, tag)
+					kind, v = self._wait_result(timeout, reject_after)
+					if kind != 'conv':
+						raise RuntimeError('%s 未收敛 (kind=%s)' % (tag, kind))
 			else:   # sweep: 大幅运动 —— 部署(抬升+前伸) → 圆周整圈 → 上浮/回心 → 收回落零
 				cur = (0.0, 0.0, 0.0)   # 相对快照的当前偏移 (链式插值起点)
 
@@ -450,7 +484,7 @@ def main(args=None):
 	if stream_hz <= 0.0:
 		print('--stream-hz 必须为正 (收到 %s)' % stream_hz)
 		return 2
-	if pattern not in ('up', 'axes', 'sweep', 'reject'):
+	if pattern not in ('up', 'axes', 'sweep', 'reject', 'circle'):
 		print('未知 pattern: %s (可用: up | axes | sweep | reject)' % pattern)
 		return 2
 	rclpy.init(args=args)

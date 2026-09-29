@@ -147,7 +147,8 @@ int main(int argc, char ** argv)
 {
 	rclcpp::init(argc, argv);
 	auto node = rclcpp::Node::make_shared("demo_joint_fullrate");
-	node->declare_parameter<double>("duration", 14.5);   // 四段快慢总时长 (设计值, 2026-09-24)
+	node->declare_parameter<double>("duration", 14.5);
+	node->declare_parameter<std::string>("pattern", "broad");   // 四段快慢总时长 (设计值, 2026-09-24)
 	node->declare_parameter<double>("hz", 0.0);
 	node->declare_parameter<std::string>("robot", "");   // 机型名 (多份配置时必填)
 
@@ -358,21 +359,62 @@ int main(int argc, char ** argv)
 	}
 	std::printf("控制频率: %.1f Hz (%s)\n", hz, hz_src);
 
-	// ③ 计划: 多段快慢变速大幅序列 (2026-09-24 用户需求: >10s + 大幅 + 有快有慢)。
-	//    段目标 = 限位区间百分比 (frac<0 = 回实测 home); 段时长显式, 快/慢腿交替
-	//    (同跨度命令速度对比 ~3×)。每段起止位置一次性预展开成表 —— 定时器回调
-	//    内只查表插值, 零分配。
+	// ③ 计划: 测试工况库 (2026-09-29; 与 demo_motion.py 同口径)。
+	//    段目标 = 每关节限位区间百分比 (frac<0 = home); 段时长显式。
+	//    pattern: broad=四段快慢大幅 (默认, 2026-09-24 需求) / single=逐关节单轴
+	//    扫 (隔离诊断) / couple=同相+反相 (耦合惯量与哥氏扰动) / agile=快速小幅
+	//    往返 (伺服带宽/振荡探针)。起止位置一次性预展开成表 —— 回调零分配。
 	struct Leg
 	{
-		double frac;
+		std::vector<double> frac;   // per-joint 限位百分比; <0 = home
 		double dur;
 	};
-	const std::vector<Leg> legs = {
-		{0.85, 2.0},   // 快: 部署大跨
-		{0.15, 6.0},   // 慢: 摆到对侧 (~70% 限位区间)
-		{0.85, 2.5},   // 快: 回摆全跨度
-		{-1.0, 4.0},   // 慢: 收尾回实测位
+	const std::string pattern = node->get_parameter("pattern").as_string();
+	const std::size_t nj = joints.size();
+	std::vector<Leg> legs;
+	const auto uniform = [&](double f, double d)
+	{
+		return Leg{std::vector<double>(nj, f), d};
 	};
+	if (pattern == "broad")
+	{
+		legs = {uniform(0.85, 2.0), uniform(0.15, 6.0), uniform(0.85, 2.5), uniform(-1.0, 4.0)};
+	}
+	else if (pattern == "single")
+	{
+		for (std::size_t k = 0; k < nj; ++k)
+		{
+			std::vector<double> f_hi(nj, -1.0), f_lo(nj, -1.0);
+			f_hi[k] = 0.9; f_lo[k] = 0.1;   // 单关节 90%/10% 扫, 其余锁 home
+			legs.push_back({f_hi, 1.5});
+			legs.push_back({f_lo, 2.0});
+			legs.push_back({std::vector<double>(nj, -1.0), 1.5});
+		}
+	}
+	else if (pattern == "couple")
+	{
+		std::vector<double> anti_a(nj), anti_b(nj);
+		for (std::size_t k = 0; k < nj; ++k)
+		{
+			anti_a[k] = (k % 2 == 0) ? 0.9 : 0.1;
+			anti_b[k] = (k % 2 == 0) ? 0.1 : 0.9;
+		}
+		legs = {uniform(0.9, 2.5), uniform(0.1, 4.0), uniform(0.9, 2.5),
+			{anti_a, 2.5}, {anti_b, 4.0}, {anti_a, 2.5}, uniform(-1.0, 3.0)};
+	}
+	else if (pattern == "agile")
+	{
+		for (int k = 0; k < 10; ++k)
+		{
+			legs.push_back(uniform(k % 2 == 0 ? 0.58 : 0.42, 0.8));   // mid±8% 往返
+		}
+		legs.push_back(uniform(-1.0, 2.0));
+	}
+	else
+	{
+		std::printf("FAIL: 未知 pattern '%s' (broad|single|couple|agile)\n", pattern.c_str());
+		return 1;
+	}
 	double design_total = 0.0;
 	for (const auto & l : legs) {design_total += l.dur;}
 	const double scale = duration / design_total;
@@ -391,9 +433,9 @@ int main(int argc, char ** argv)
 			leg_from[l] = prev;
 			for (std::size_t i = 0; i < joints.size(); ++i)
 			{
-				if (legs[l].frac >= 0.0 && joints[i].has_limits)
+				if (legs[l].frac[i] >= 0.0 && joints[i].has_limits)
 				{
-					leg_to[l][i] = joints[i].qmin + legs[l].frac * (joints[i].qmax - joints[i].qmin);
+					leg_to[l][i] = joints[i].qmin + legs[l].frac[i] * (joints[i].qmax - joints[i].qmin);
 				}
 				else
 				{
@@ -445,8 +487,8 @@ int main(int argc, char ** argv)
 	const double period = 1.0 / hz;
 	const auto t0 = std::chrono::steady_clock::now();
 	uint64_t count = 0;
-	std::printf("发送满速流 @%.1fHz, 时长 %.1fs (四段快慢: 85%%→15%%→85%%→回实测位, 正弦过渡)...\n",
-		hz, duration);
+	std::printf("发送满速流 @%.1fHz, 时长 %.1fs (pattern=%s, %zu 段, 正弦过渡)...\n",
+		hz, duration, pattern.c_str(), legs.size());
 	rclcpp::TimerBase::SharedPtr timer;
 	timer = node->create_wall_timer(
 		std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(period)),

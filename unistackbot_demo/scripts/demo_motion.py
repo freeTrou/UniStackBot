@@ -158,7 +158,7 @@ class DemoMotion(Node):
 			self._fk_joints.append((j.get('name'), j.find('parent').get('link'),
 			                        j.find('child').get('link'), xyz, rpy, axis, j.get('type')))
 
-	def run(self, hz, cycles, amp_override=None):
+	def run(self, hz, cycles, amp_override=None, pattern='broad'):
 		joints, lims, mimics = self._fetch_contract()
 		self.get_logger().info('关节表 (读自链上 URDF): %s%s' % (
 			joints, ' + mimic %s' % [m[0] for m in mimics] if mimics else ''))
@@ -212,12 +212,42 @@ class DemoMotion(Node):
 		if any(f != factor for f in factors):
 			self.get_logger().info('末梢两级减半: %s' % [
 				n for n, f in zip(joints, factors) if f != factor])
-		schedule = [
-			(pos, 2.0, '快'),
-			(neg, 6.0, '慢'),
-			(pos, 2.5, '快'),
-			(home, 4.0, '慢'),
-		]
+		# ---- 测试工况库 (2026-09-29): 代表性点位 = 能暴露问题的工况 ----
+		lo_i = [l + 0.1 * (h - l) for l, h in zip(lo, hi)]   # 10% / 90% 内缩扫描位
+		hi_i = [h - 0.1 * (h - l) for l, h in zip(lo, hi)]
+		if pattern == 'broad':
+			schedule = [
+				(pos, 2.0, '快'), (neg, 6.0, '慢'), (pos, 2.5, '快'), (home, 4.0, '慢'),
+			]
+		elif pattern == 'single':
+			# 逐关节单轴扫 (其余锁 home): 单关节隔离诊断——跟踪/限位/振荡无耦合干扰
+			schedule = []
+			for k, name in enumerate(joints):
+				q_hi = list(home); q_hi[k] = hi_i[k]
+				q_lo = list(home); q_lo[k] = lo_i[k]
+				schedule.append((q_hi, 1.5, '%s→90%%' % name.split('_')[-1]))
+				schedule.append((q_lo, 2.0, '→10%'))
+				schedule.append((list(home), 1.5, '→home'))
+		elif pattern == 'couple':
+			# 同相 (最大同向耦合惯量) + 相邻反相 (最大哥氏扰动)
+			same_hi = list(hi_i); same_lo = list(lo_i)
+			anti_a = [hi_i[k] if k % 2 == 0 else lo_i[k] for k in range(len(joints))]
+			anti_b = [lo_i[k] if k % 2 == 0 else hi_i[k] for k in range(len(joints))]
+			schedule = [
+				(same_hi, 2.5, '同相→'), (same_lo, 4.0, '同相←'), (same_hi, 2.5, '同相→'),
+				(anti_a, 2.5, '反相A'), (anti_b, 4.0, '反相B'), (anti_a, 2.5, '反相A'),
+				(list(home), 3.0, '回home'),
+			]
+		elif pattern == 'agile':
+			# 快速小幅往返: 伺服带宽/振荡探针 (2026-09-29 j4 振动工况的复现器)
+			amp8 = [0.08 * (h - l) for l, h in zip(lo, hi)]
+			schedule = []
+			for k in range(10):
+				wp = [m + (a if k % 2 == 0 else -a) for m, a in zip(mid, amp8)]
+				schedule.append((wp, 0.8, '快%d' % (k + 1)))
+			schedule.append((list(home), 2.0, '回home'))
+		else:
+			raise RuntimeError("未知 pattern '%s' (broad|single|couple|agile)" % pattern)
 		plan = []
 		prev = list(home)
 		for wp, dur, tag in schedule:
@@ -279,6 +309,7 @@ def main(args=None):
 	hz = 50
 	cycles = 1
 	amp_override = None
+	pattern = 'broad'
 	argv = sys.argv[1:]
 	while argv:
 		a = argv.pop(0)
@@ -288,12 +319,14 @@ def main(args=None):
 			cycles = int(argv.pop(0))
 		elif a == '--amp':
 			amp_override = float(argv.pop(0))
+		elif a == '--pattern':
+			pattern = argv.pop(0)
 		else:
-			raise SystemExit("未知参数 '%s' (支持: --hz <n> --cycles <n> --amp <0.05-0.45>)" % a)
+			raise SystemExit("未知参数 '%s' (支持: --hz <n> --cycles <n> --amp <0.05-0.45> --pattern <broad|single|couple|agile>)" % a)
 	rclpy.init(args=args)
 	node = DemoMotion()
 	try:
-		node.run(hz, cycles, amp_override)
+		node.run(hz, cycles, amp_override, pattern)
 	finally:
 		node.destroy_node()
 		try:
