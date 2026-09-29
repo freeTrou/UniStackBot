@@ -21,7 +21,6 @@
     <!-- v5 修复 (2026-09-29): MuJoCo 3.x 里 mesh= 属性不隐式设 type, geom 落到默认
          SPHERE (渲染成一串惯量等效球) — default 类须显式 type="mesh" (piper.xml 同款) -->
     <default class="vis"><geom type="mesh" contype="0" conaffinity="0" group="1" rgba="0.75 0.75 0.75 1"/></default>
-    <default class="col"><geom contype="0" conaffinity="0" group="2"/></default>
   </default>
   <worldbody>
     <light pos="0 0 2.0" dir="0 0 -1" directional="true"/>
@@ -29,51 +28,41 @@
     <body name="base" pos="0 0 0">
       <inertial pos="-0.008088 -3e-06 0.217476" mass="2.239" diaginertia="0.265323119 0.217350657 0.049509934"/>
       <geom name="base_vis" mesh="base" pos="0 0 0" class="vis"/>
-      <geom name="base_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
       <body name="left_armbase" pos="0 0.3175 0">
         <inertial pos="-2.1e-05 -4.7e-05 0.037955" mass="0.510232" diaginertia="0.000284 0.000280 0.000280"/>
         <geom name="left_armbase_vis" mesh="armbase" pos="0 0 0" class="vis"/>
-        <geom name="left_armbase_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
         <joint name="left_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
         <body name="left_link1" pos="0 0 0">
           <inertial pos="0.02 -0.002 0.109" mass="0.496" diaginertia="0.000349 0.000356 0.000267"/>
           <geom name="left_link1_vis" mesh="link1" pos="0 0 0" class="vis"/>
-          <geom name="left_link1_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
           <joint name="left_joint2" type="hinge" pos="0.024 0 0.117" axis="0 1 0" range="-0.209 3.508" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
           <body name="left_link2" pos="0.024 0 0.117">
             <inertial pos="-0.19164 -0.001145 -5.7e-05" mass="0.774" diaginertia="0.00037 0.006613 0.006701"/>
             <geom name="left_link2_vis" mesh="link2" pos="0 0 0" class="vis"/>
-            <geom name="left_link2_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
             <joint name="left_joint3" type="hinge" pos="-0.265 0 0" axis="0 1 0" range="-3.193 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
             <body name="left_link3" pos="-0.265 0 0">
               <inertial pos="0.17632 -0.001549 0.054649" mass="0.67366" diaginertia="0.000494 0.007196 0.00709"/>
               <geom name="left_link3_vis" mesh="link3" pos="0 0 0" class="vis"/>
-              <geom name="left_link3_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
               <joint name="left_joint4" type="hinge" pos="0.265 0 0.062" axis="0 1 0" range="-1.71 1.71" damping="0.1" frictionloss="0.1" actuatorfrcrange="-7 7"/>
               <body name="left_link4" pos="0.265 0 0.062">
                 <inertial pos="0.064717 0 0.047271" mass="0.45575" diaginertia="0.000449 0.000662 0.000513"/>
                 <geom name="left_link4_vis" mesh="link4" pos="0 0 0" class="vis"/>
-                <geom name="left_link4_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                 <joint name="left_joint5" type="hinge" pos="0.078 0 -0.00295" axis="0 0 1" range="-1.71 1.71" damping="0.1" frictionloss="0.1" actuatorfrcrange="-12.5 12.5"/>
                 <body name="left_link5" pos="0.078 0 -0.00295">
                   <inertial pos="0.002443 0 0.002098" mass="0.37166" diaginertia="0.000176 0.00017 0.000147"/>
                   <geom name="left_link5_vis" mesh="link5" pos="0 0 0" class="vis"/>
-                  <geom name="left_link5_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                   <joint name="left_joint6" type="hinge" pos="0.0255 0 0" axis="1 0 0" range="-2.856 2.856" damping="0.1" frictionloss="0.1" actuatorfrcrange="-12.5 12.5"/>
                   <body name="left_linkgripper" pos="0.0255 0 0">
                     <inertial pos="0.043232 4.1e-05 0.000635" mass="0.484919" diaginertia="0.000344 0.000318 0.000433"/>
                     <geom name="left_linkgripper_vis" mesh="gripper_base" pos="0 0 0" class="vis"/>
-                    <geom name="left_linkgripper_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                     <joint name="left_gripper_joint1" type="slide" pos="0.1733 0 0" axis="0 1 0" range="-0.0425 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-150 150"/>
                     <body name="left_griperlj_link1" pos="0.1733 0 0">
                       <inertial pos="-0.074793 -0.014951 3.8e-05" mass="0.049996" diaginertia="0.000008474 0.000034639 0.000035808"/>
                       <geom name="left_griperlj_link1_vis" mesh="griperlj_link1" pos="0 0 0" class="vis"/>
-                      <geom name="left_griperlj_link1_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                     </body>
                                         <body name="left_griperlj_link2" pos="0.1733 0 0">
                       <inertial pos="-0.074793 0.014951 -3.8e-05" mass="0.05" diaginertia="0.000008474 0.000034639 0.000035808"/>
                       <geom name="left_griperlj_link2_vis" mesh="griperlj_link2" pos="0 0 0" class="vis"/>
-                      <geom name="left_griperlj_link2_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                     </body>
                   </body>
                 </body>
@@ -85,48 +74,39 @@
       <body name="right_armbase" pos="0 -0.3175 0">
         <inertial pos="-2.1e-05 -4.7e-05 0.037955" mass="0.510232" diaginertia="0.000284 0.000280 0.000280"/>
         <geom name="right_armbase_vis" mesh="armbase" pos="0 0 0" class="vis"/>
-        <geom name="right_armbase_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
         <joint name="right_joint1" type="hinge" pos="0 0 0" axis="0 0 1" range="-2.824 2.824" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
         <body name="right_link1" pos="0 0 0">
           <inertial pos="0.02 -0.002 0.109" mass="0.496" diaginertia="0.000349 0.000356 0.000267"/>
           <geom name="right_link1_vis" mesh="link1" pos="0 0 0" class="vis"/>
-          <geom name="right_link1_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
           <joint name="right_joint2" type="hinge" pos="0.024 0 0.117" axis="0 1 0" range="-0.209 3.508" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
           <body name="right_link2" pos="0.024 0 0.117">
             <inertial pos="-0.19164 -0.001145 -5.7e-05" mass="0.774" diaginertia="0.00037 0.006613 0.006701"/>
             <geom name="right_link2_vis" mesh="link2" pos="0 0 0" class="vis"/>
-            <geom name="right_link2_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
             <joint name="right_joint3" type="hinge" pos="-0.265 0 0" axis="0 1 0" range="-3.193 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-27 27"/>
             <body name="right_link3" pos="-0.265 0 0">
               <inertial pos="0.17632 -0.001549 0.054649" mass="0.67366" diaginertia="0.000494 0.007196 0.00709"/>
               <geom name="right_link3_vis" mesh="link3" pos="0 0 0" class="vis"/>
-              <geom name="right_link3_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
               <joint name="right_joint4" type="hinge" pos="0.265 0 0.062" axis="0 1 0" range="-1.71 1.71" damping="0.1" frictionloss="0.1" actuatorfrcrange="-7 7"/>
               <body name="right_link4" pos="0.265 0 0.062">
                 <inertial pos="0.064717 0 0.047271" mass="0.45575" diaginertia="0.000449 0.000662 0.000513"/>
                 <geom name="right_link4_vis" mesh="link4" pos="0 0 0" class="vis"/>
-                <geom name="right_link4_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                 <joint name="right_joint5" type="hinge" pos="0.078 0 -0.00295" axis="0 0 1" range="-1.71 1.71" damping="0.1" frictionloss="0.1" actuatorfrcrange="-12.5 12.5"/>
                 <body name="right_link5" pos="0.078 0 -0.00295">
                   <inertial pos="0.002443 0 0.002098" mass="0.37166" diaginertia="0.000176 0.00017 0.000147"/>
                   <geom name="right_link5_vis" mesh="link5" pos="0 0 0" class="vis"/>
-                  <geom name="right_link5_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                   <joint name="right_joint6" type="hinge" pos="0.0255 0 0" axis="1 0 0" range="-2.856 2.856" damping="0.1" frictionloss="0.1" actuatorfrcrange="-12.5 12.5"/>
                   <body name="right_linkgripper" pos="0.0255 0 0">
                     <inertial pos="0.043232 4.1e-05 0.000635" mass="0.484919" diaginertia="0.000344 0.000318 0.000433"/>
                     <geom name="right_linkgripper_vis" mesh="gripper_base" pos="0 0 0" class="vis"/>
-                    <geom name="right_linkgripper_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                     <joint name="right_gripper_joint1" type="slide" pos="0.1733 0 0" axis="0 1 0" range="-0.0425 0" damping="0.1" frictionloss="0.1" actuatorfrcrange="-150 150"/>
                     <body name="right_griperlj_link1" pos="0.1733 0 0">
                       <inertial pos="-0.074793 -0.014951 3.8e-05" mass="0.049996" diaginertia="0.000008474 0.000034639 0.000035808"/>
                       <geom name="right_griperlj_link1_vis" mesh="griperlj_link1" pos="0 0 0" class="vis"/>
-                      <geom name="right_griperlj_link1_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                     </body>
                     
                     <body name="right_griperlj_link2" pos="0.1733 0 0">
                       <inertial pos="-0.074793 0.014951 -3.8e-05" mass="0.05" diaginertia="0.000008474 0.000034639 0.000035808"/>
                       <geom name="right_griperlj_link2_vis" mesh="griperlj_link2" pos="0 0 0" class="vis"/>
-                      <geom name="right_griperlj_link2_col" type="capsule" size="0.03" fromto="0 0 0 0.05 0 0" class="col"/>
                     </body>
                   </body>
                 </body>
