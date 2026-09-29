@@ -4,7 +4,12 @@
 
 - **构型**: base_link → Link7, 厂商关节名 **J1-J7 原样保留** (与真机 SDK/日志对账零翻译); 无夹爪
 - **总质量**: ~6.1 kg (8 links); 限位/力矩 (60/60/33/33/33/10/10 N·m) 全套官方值
-- **IK**: 7 轴冗余 → **dls** (xarm7 同款主场; IK 决策对齐 `arms/xarm7/ik_decision_card.md`)
+- **IK**: 7 轴冗余 → **dls** (xarm7 同款主场; 决策对齐 `arms/xarm7/ik_decision_card.md`)。
+  **几何验证 (2026-09-29)**: 全交替垂直轴 (相邻轴点积全 0, 无任何平行段) ——
+  非 Pieper (7 轴冗余无闭式) 且**非 SRS** (球肩 J3 锚距 J1/J2 轴 108mm 不共点;
+  腕 J5/J6/J7 近共点但 J7→J6 轴偏 10mm 真偏置非舍入) —— 臂角半解析解路线不通,
+  DLS 数值解是几何事实下的标准答案。冗余零空间价值: 避奇异/避障/肘形偏好
+  (DlsIk 冗余偏好 + 契约 RedundancyPreference.psi 预留)。
 - **零位压限位线**: J2/J4 下限=0 (stationlite j3 同款) —— mock/mujoco 实测未触发异常
 - 资产: `original/` 官方包死档案 · `urdf/` xacro 三件套 (生成器逻辑见提交) ·
   `meshes/visual/` 官方 STL (视觉/碰撞共用, package:// 路径已规范化) ·
