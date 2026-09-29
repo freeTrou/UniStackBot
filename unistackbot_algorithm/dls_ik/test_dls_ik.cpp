@@ -263,6 +263,8 @@ int main(int argc, char ** argv)
 		}
 		CartesianPose arc_anchor;
 		std::vector<double> arc_anchor_q;
+		const double arc_r = std::max(0.02, 0.15 * arc_rmax);
+		int anchor_try = 0;
 		for (const auto & e : entries)
 		{
 			if (!e.reachable || e.sols.empty()) {continue;}
@@ -271,12 +273,38 @@ int main(int argc, char ** argv)
 			if (rr < 0.35 * arc_rmax || rr > 0.7 * arc_rmax) {continue;}
 			CartesianPose ap;
 			if (!fk.fk(e.sols[0], ap)) {continue;}
+			// 圆周预检 (2026-09-29 R1 J6 窄限位 ±0.52: 工作空间内部有带状难解区,
+			// 锚圆穿带 → 半圈失败+跳变): 12 点切向圆 COLD_START 试解, 全 OK 才采纳
+			double d0[3] = {ap.x, ap.y, ap.z};
+			const double dn = std::sqrt(d0[0]*d0[0] + d0[1]*d0[1] + d0[2]*d0[2]);
+			d0[0] /= dn; d0[1] /= dn; d0[2] /= dn;
+			double u0[3] = {-d0[1], d0[0], 0.0};
+			double unn = std::sqrt(u0[0]*u0[0] + u0[1]*u0[1] + u0[2]*u0[2]);
+			if (unn < 1e-6) {u0[0] = 1; u0[1] = 0; u0[2] = 0;} else {u0[0] /= unn; u0[1] /= unn; u0[2] /= unn;}
+			double v0[3] = {d0[1]*u0[2] - d0[2]*u0[1], d0[2]*u0[0] - d0[0]*u0[2], d0[0]*u0[1] - d0[1]*u0[0]};
+			bool circle_ok = true;
+			for (int ci = 0; ci < 12 && circle_ok; ++ci)
+			{
+				const double cth = 2 * M_PI * ci / 12.0;
+				CartesianPose cp = ap;
+				cp.x += arc_r * (std::cos(cth) * u0[0] + std::sin(cth) * v0[0]);
+				cp.y += arc_r * (std::cos(cth) * u0[1] + std::sin(cth) * v0[1]);
+				cp.z += arc_r * (std::cos(cth) * u0[2] + std::sin(cth) * v0[2]);
+				std::vector<double> qc = e.sols[0], qo = qc;
+				DlsIkStats cst;
+				if (ik.solve(cp, qc, {}, qo, &cst,
+					unistackbot_algorithm::SolveMode::COLD_START) != IkResult::OK)
+				{
+					circle_ok = false;
+				}
+			}
+			++anchor_try;
+			if (!circle_ok && anchor_try <= 8) {continue;}   // 前 8 个候选挑拣, 全不过则将就用首个
 			arc_anchor = ap;
 			arc_anchor_q = e.sols[0];
 			break;
 		}
 		CHECK(!arc_anchor_q.empty());
-		const double arc_r = std::max(0.02, 0.15 * arc_rmax);
 		// 切向圆 (2026-09-29 R1 教训: 全向圆朝基座外那半圈超工作域 → 54/101 半圈):
 		// 圆平面 ⊥ 径向, 圆上点距基座近似恒定 → 可达性全程一致
 		double ax = arc_anchor.x, ay = arc_anchor.y, az = arc_anchor.z;
@@ -454,6 +482,9 @@ int main(int argc, char ** argv)
 			{"200Hz 全局40",           5000000ull, 40,  0,  95},
 			{"500Hz 全局40 (达标行)",  2000000ull, 40,  0,  93},
 			{"500Hz 分层r40",          2000000ull, 200, 40, 88},
+			// 生产档 (2026-09-29 R1): CM 链上 ik_timeout_ms=50ms 的回调线程预算——
+			// 回调线程非 RT, 大预算+多轮重启是 COLD 场景的真实语义 (预算档是紧约束下限)
+			{"50ms 生产档 (CM 配置)",  50000000ull, 200, 80, 95},
 		};
 		// 1ms 目标行只在种子库就绪时有意义 (无库 90% 上下, 有库预期 >=95%)
 		if (argc >= 6)
