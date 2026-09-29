@@ -160,6 +160,8 @@ class DemoCartesian(Node):
 			self.get_logger().warn('--stream-hz %.0f 超出 rclpy 舒适区 (~100 稳/200 勉强): '
 				'实际达成率看结束时的诚实报告, 矩阵测试建议 ≤100' % stream_hz)
 		self._late = 0
+		self._gaps = []
+		self._t_last = None
 		self._sent_n = 0
 		self._t_first = None
 
@@ -190,6 +192,10 @@ class DemoCartesian(Node):
 			# 在途帧 —— conv 只认 target_pose 对得上本次发布值的 status
 			self._sent = (t.pose.position.x, t.pose.position.y, t.pose.position.z)
 			pub.publish(t)
+			now = time.time()
+			if self._t_last is not None:
+				self._gaps.append(now - self._t_last)
+			self._t_last = now
 			self._sent_n += 1
 			if self._t_first is None:
 				self._t_first = time.time()
@@ -437,13 +443,15 @@ class DemoCartesian(Node):
 				self.get_logger().info('汇总: %d 腿收敛 · %d 腿稳态未达容差 · %d 腿诚实拒 · 总用时 %.1fs' % (
 					ok_n, pl_n, rej_n, time.time() - t0))
 		finally:
-			# 诚实报告实际达成率 (名义 stream_hz 是切分粒度请求值, rclpy 未必跟得上)
+			# 诚实报告实际达成率: 发布窗计时 (2026-09-29 口径修正——等待窗不发条,
+			# 计入分母会把 50Hz 流报成 ~12Hz 的假低读; gap>0.5s 视为腿间等待边界)
 			if self._t_first is not None and self._sent_n > 1:
 				wall = time.time() - self._t_first
+				flow = sum(g for g in self._gaps if g <= 0.5) if self._gaps else wall
 				late_note = ('; %d 拍落后' % self._late) if self._late else ''
-				self.get_logger().info('发布流: 名义 %.0fHz, 实际达成 %.1fHz (%d 条 / %.1fs)%s' % (
-					stream_hz, self._sent_n / wall if wall > 0 else 0.0,
-					self._sent_n, wall, late_note))
+				self.get_logger().info('发布流: 名义 %.0fHz, 实际达成 %.1fHz (%d 条 / 发布窗 %.1fs + 等待 %.1fs)%s' % (
+					stream_hz, (self._sent_n - 1) / flow if flow > 0 else 0.0,
+					self._sent_n, flow, wall - flow, late_note))
 			try:
 				self._switch('--deactivate', 'cartesian_motion_controller',
 				             '--activate', 'joint_stream_controller')
