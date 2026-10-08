@@ -48,6 +48,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import JointState
 from tf2_ros import Buffer, TransformListener
 
 from unistackbot_interface.msg import CartesianMotionStatus
@@ -376,6 +377,19 @@ class DemoCartesian(Node):
 						self.get_logger().warn('%s 稳态 %.3fmm (>1mm, 物理链 sag), 继续' % (tag, v * 1000.0))
 					cur = target
 			else:   # sweep: 大幅运动 —— 部署(抬升+前伸) → 圆周整圈 → 上浮/回心 → 收回落零
+				# 非零位起跑前置检查 (2026-09-23 sweep 拒解开案教训: 偏移几何假设
+				# 零位快照, 非零位起跑的部署目标可能落在臂展边界外)
+				jsq = {}
+				sub_js = self.create_subscription(JointState, '/joint_states',
+					lambda m: jsq.update(zip(m.name, m.position)), 10)
+				t0w = time.time()
+				while not jsq and time.time() - t0w < 2.0:
+					rclpy.spin_once(self, timeout_sec=0.1)
+				self.destroy_subscription(sub_js)
+				if jsq and max(abs(v) for v in jsq.values()) > 0.1:
+					self.get_logger().warn(
+						'非零位起跑: sweep 偏移几何假设零位快照, 部署目标可能落在'
+						'臂展边界外 (诚实拒风险) —— 建议先回零再跑')
 				cur = (0.0, 0.0, 0.0)   # 相对快照的当前偏移 (链式插值起点)
 
 				def leg(target, tag, must=False, spd=1.0):

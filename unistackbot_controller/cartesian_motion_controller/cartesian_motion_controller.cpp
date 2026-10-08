@@ -369,12 +369,13 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 			solved_ch_.publish(sol);
 			if (!sol.ok)
 			{
-				// 诚实拒绝要可见但不刷屏 (流式上游持续不可达时按条数限流)
-				static thread_local uint64_t rej_n = 0;
-				if (rej_n++ % 50 == 0)
+				// 诚实拒绝要可见但不刷屏 (流式上游持续不可达时按条数限流);
+				// 计数是实例成员 (rej_n_), 激活重置 —— 原函数 static 的生命周期
+				// 与控制器脱钩 (2026-09-23 开案, 2026-10-08 收口)
+				if (rej_n_++ % 50 == 0)
 				{
 					ULOG_WARN("cm: IK 未解出 (result=%u, 第 %lu 条不可达类目标; 保持上一目标)",
-						sol.result, static_cast<unsigned long>(rej_n));
+						sol.result, static_cast<unsigned long>(rej_n_));
 				}
 			}
 		});

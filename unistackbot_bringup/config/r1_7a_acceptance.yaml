@@ -1,0 +1,20 @@
+# r1_7a 机型验收登记表 —— 测试判据登记值单一事实源 (verify_robot.sh 消费)
+# 定义依据: docs/sim/sim_validation_pipeline.md; 建表同 piper_acceptance.yaml 型
+# 纪律: 改模型/改判据阈值 → 先改这里 (登记值变更要说明理由), verify 按此断言
+fingerprint:                # 静态判据 (2026-10-08 实测登记)
+  subchain_count: 9         # 判据②: check_urdf child 数 (use_world + use_ros2_control 展开)
+  joints_by_chain:          # 判据③: 各形态命令关节集 (顺序=URDF <ros2_control> 序; 无夹爪, 三链同集)
+    mock:   [J1, J2, J3, J4, J5, J6, J7]
+    ign:    [J1, J2, J3, J4, J5, J6, J7]
+    mujoco: [J1, J2, J3, J4, J5, J6, J7]
+tolerance:                  # 测试容差登记 (初始=历史常数, 同 piper 建表口径)
+  js_mock: 0.01
+  cm_mock: 0.002
+  js_gz: 0.05
+  cm_gz: 0.005
+  js_mujoco: 0.02
+  cm_mujoco: 0.003
+mimic:                      # mimic 契约登记 (r1_7a 无夹爪无 mimic)
+  pairs: ""
+soft_joints:                # 已知回归不计失败
+  gz: ""

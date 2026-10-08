@@ -128,6 +128,8 @@ private:
 	CartesianPose target_pose_{};        // 当前采纳目标 (base 系; 来自解算载荷)
 	uint64_t target_seq_{0};
 	int consecutive_fail_{0};            // 连续求解失败计数 (回调按消息报, RT 采纳时记账)
+	uint64_t rej_n_{0};                  // 不可达类目标累计 (诚实拒绝限流记账; 实例成员
+	                                     // 而非函数 static —— 生命周期随控制器, 激活重置)
 	uint8_t last_result_{0};             // IkResult (status 透传)
 	bool last_timed_out_{false};
 	double last_min_sigma_{-1.0};

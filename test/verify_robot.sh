@@ -59,7 +59,7 @@ CYAML="$BRINGUP_SHARE/config/${ROBOT}_controllers.yaml"
 # 机型验收登记表 (§5.7 定义判据的登记值单一事实源): 形态指纹 + 容差/mimic/软关节收口于此
 AYAML="$BRINGUP_SHARE/config/${ROBOT}_acceptance.yaml"
 [ -f "$AYAML" ] || { echo "机型 '$ROBOT' 缺验收登记表: $AYAML (建表见 piper_acceptance.yaml 同型)"; exit 1; }
-IFS='|' read -r SUBCHAIN_EXP JM_EXP JI_EXP JJ_EXP TJS_MOCK TCM_MOCK TJS_GZ TCM_GZ TJS_MJ TCM_MJ SOFT_GZ MIM_PAIRS <<< "$(python3 - "$AYAML" <<'PY'
+IFS='|' read -r SUBCHAIN_EXP JM_EXP JI_EXP JJ_EXP TJS_MOCK TCM_MOCK TJS_GZ TCM_GZ TJS_MJ TCM_MJ SOFT_GZ MIM_PAIRS MIM_MJ <<< "$(python3 - "$AYAML" <<'PY'
 import sys, yaml
 d = yaml.safe_load(open(sys.argv[1]))
 fp, tol = d.get('fingerprint') or {}, d.get('tolerance') or {}
@@ -72,6 +72,9 @@ print('|'.join([
     str(tol.get('js_mujoco', 0)), str(tol.get('cm_mujoco', 0)),
     (d.get('soft_joints') or {}).get('gz') or '',
     (d.get('mimic') or {}).get('pairs') or '',
+    # mujoco 链 mimic 覆盖 (链上模型与 mock/ign 不同构时用, 如手指 passive/removed);
+    # 缺省回退全局 pairs —— 老登记表零改动
+    ((d.get('mimic') or {}).get('pairs_mujoco', (d.get('mimic') or {}).get('pairs')) or ''),
 ]))
 PY
 )"
@@ -285,8 +288,8 @@ if [ "$WITH_MJ" -eq 1 ]; then
 		cleanup_launch "$LPID"; exit 1
 	fi
 	timeout 6 ros2 topic echo /clock --once >/dev/null 2>&1 && ok "/clock 仿真时间在流" || bad "/clock 无数据"
-	# mimic 断言对登记 (§5.7: 被动关节=主关节×multiplier, 对来自登记表 mimic.pairs)
-	run_motion mujoco "$TJS_MJ" "$TCM_MJ" "" "$MIM_PAIRS"
+	# mimic 断言对登记 (§5.7: 被动关节=主关节×multiplier, mujoco 链对 pairs_mujoco 覆盖)
+	run_motion mujoco "$TJS_MJ" "$TCM_MJ" "" "$MIM_MJ"
 	cleanup_launch "$LPID"
 	fi
 fi

@@ -1,0 +1,24 @@
+# stationlite 机型验收登记表 —— 测试判据登记值单一事实源 (verify_robot.sh 消费)
+# 定义依据: docs/sim/sim_validation_pipeline.md; 建表同 piper_acceptance.yaml 型
+# 纪律: 改模型/改判据阈值 → 先改这里 (登记值变更要说明理由), verify 按此断言
+# 注: CM 只配左臂 (left_* 链 left_armbase→left_linkgripper); 双臂 CM 裁决未开
+fingerprint:                # 静态判据 (2026-10-08 实测登记)
+  subchain_count: 22        # 判据②: check_urdf child 数 (use_world + use_ros2_control 展开)
+  joints_by_chain:          # 判据③: 各形态命令关节集 (mock/ign 含 mimic 手指命令关节, 16; mujoco 手指整removed, 14)
+    mock:   [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6, left_gripper_joint1, left_gripper_joint2, right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6, right_gripper_joint1, right_gripper_joint2]
+    ign:    [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6, left_gripper_joint1, left_gripper_joint2, right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6, right_gripper_joint1, right_gripper_joint2]
+    mujoco: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6, left_gripper_joint1, right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6, right_gripper_joint1]
+tolerance:                  # 测试容差登记 (初始=历史常数, 同 piper 建表口径)
+  js_mock: 0.01
+  cm_mock: 0.002
+  js_gz: 0.05
+  cm_gz: 0.005
+  js_mujoco: 0.02
+  cm_mujoco: 0.003
+mimic:                      # mimic 契约登记 (mock/ign 链手指跟随)
+  pairs: "left_gripper_joint1:left_gripper_joint2:-1.0,right_gripper_joint1:right_gripper_joint2:-1.0"
+  # mujoco 覆盖: 手指关节2 在 mujoco xacro 分支被整 removed ("for MuJoCo testing"),
+  # MJCF equality 补回在 stationlite 待办 —— 补回后此覆盖应删除 (回退全局 pairs)
+  pairs_mujoco: ""
+soft_joints:                # 已知回归不计失败 (gz 链未验收, 暂无登记项)
+  gz: ""
