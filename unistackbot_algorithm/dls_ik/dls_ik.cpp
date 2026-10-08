@@ -604,6 +604,17 @@ IkResult DlsIk::solve(
 	// 前半中心带 ±30% (典型构型邻域), 后半全区间均匀 (逃局部极小) —— 纯均匀
 	// 重启浪费在远离解的种子上, 2026-09-17)
 	// 分支粘性: 重启解距原种子超阈值 = 跳分支, 不输出 (报 ITERATION_LIMIT)
+	// 窄限位关节 (range < kNarrowJointRad, 2026-09-29 R1 J6 ±0.52 实锤): 其解空间
+	// 被限位切出带状难区, 随机阶梯种子爬不过限位鞍 (J6 高幅区 8/8 失败归因) ——
+	// 重启阶梯显式加幅值扫描档: 种子直接落限位深部两侧。通用规则零机型硬编码,
+	// 无窄关节机型 (xarm7) 档位数为零零影响。
+	static constexpr double kNarrowJointRad = 1.2;
+	std::vector<std::size_t> narrow_j;
+	for (std::size_t i = 0; i < n; ++i)
+	{
+		if (hi[i] - lo[i] < kNarrowJointRad) {narrow_j.push_back(i);}
+	}
+	const std::size_t narrow_slots = 2 * narrow_j.size();
 	auto heuristic_seed = [&](std::size_t attempt)
 	{
 		std::vector<double> s(n);
@@ -629,6 +640,19 @@ IkResult DlsIk::solve(
 				std::uniform_real_distribution<double> dist(kBranch[attempt - 1][i] - 0.25,
 					kBranch[attempt - 1][i] + 0.25);
 				s[i] = std::clamp(dist(gen), lo[i], hi[i]);
+			}
+			else if (narrow_slots > 0 && attempt <= 4 + narrow_slots)
+			{
+				// 窄关节幅值扫描档: 基底=中心带随机, 窄关节覆盖为 ±80% 限位幅值端
+				const double band = 0.3 * (hi[i] - lo[i]) / 2.0;
+				std::uniform_real_distribution<double> dist(c - band, c + band);
+				s[i] = std::clamp(dist(gen), lo[i], hi[i]);
+				const std::size_t slot = attempt - 5;
+				if (i == narrow_j[slot / 2])
+				{
+					const double side = (slot % 2 == 0) ? 0.8 : -0.8;
+					s[i] = c + side * (hi[i] - lo[i]) / 2.0;
+				}
 			}
 			else if (center_band)
 			{

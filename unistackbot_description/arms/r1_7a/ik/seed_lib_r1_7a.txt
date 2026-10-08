@@ -1,5 +1,5 @@
 # seed library for r1_7a (Halton joints + FK forward + voxel dedup)
-# generated: 2026-09-29 16:32  urdf=/tmp/verify_r1_7a.urdf (verify_robot.sh 产物)
+# generated: 2026-09-29 17:07  urdf=/tmp/verify_r1_7a.urdf (verify_robot.sh 产物)
 # entries=8000 voxel=0.03m orient_bucket=0.5 halton_offset=1000000 samples_tried=8201
 # 查询端参数 (dls_ik): 组合度量 dp + 0.35*(1-|q·q'|), 分支封顶<=2, top-6
 # format: qw qx qy qz x y z | j1 .. j7 br   (br = L1 最近分支 0-3, 查询端封顶选种用)

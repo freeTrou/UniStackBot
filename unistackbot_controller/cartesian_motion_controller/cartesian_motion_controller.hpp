@@ -23,6 +23,7 @@
 
 #include "analytic_piper/analytic_piper.hpp"
 #include "dls_ik/dls_ik.hpp"
+#include "trac_ik_solver/trac_ik_solver.hpp"
 #include "ik_solver/ik_solver.hpp"
 #include "urdf_fk/urdf_fk.hpp"
 
@@ -31,6 +32,7 @@
 using unistackbot_algorithm::CartesianPose;
 using unistackbot_algorithm::DlsIk;
 using unistackbot_algorithm::AnalyticPiper;
+using unistackbot_algorithm::TracIk;
 using unistackbot_algorithm::IkSolver;
 using unistackbot_algorithm::DlsIkConfig;
 using unistackbot_algorithm::DlsIkStats;
@@ -92,7 +94,15 @@ private:
 	// ---- 参数 ----
 	std::string base_link_, tip_link_;
 	std::string seed_lib_package_, seed_lib_relpath_;
-	double ik_timeout_ms_{0.0};          // 回调线程单次 IK 墙钟预算 (必填; 旧 RT 预算/冷启动预算合一)
+	double ik_timeout_ms_{0.0};
+	// 预算自适应档 (2026-09-29): ik_timeout_mode=message_rate 时滑窗中位数×share
+	bool ik_adaptive_{false};
+	double ik_rate_share_{0.8};
+	static constexpr std::size_t kMsgGapSamples = 16;
+	double msg_gap_samples_[kMsgGapSamples] = {0};
+	std::size_t msg_gap_n_{0};
+	double last_msg_stamp_{0.0};
+	double last_budget_ms_{0.0};          // 回调线程单次 IK 墙钟预算 (必填; 旧 RT 预算/冷启动预算合一)
 	double max_acceleration_{0.0};       // OTG 关节加速度界 [rad/s²] (机型资产, 必填)
 	double max_jerk_{0.0};               // [rad/s³] (必填)
 	int degraded_n_{50};                 // 连续失败降级阈值 (status DEGRADED)

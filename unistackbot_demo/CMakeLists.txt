@@ -31,10 +31,12 @@ install(TARGETS demo_joint_fullrate
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# 末端位姿流 (命令域①) 与 关节慢流 (命令域②) demo —— python 点流
+# 末端位姿流 (命令域①) / 关节慢流 (命令域②) / 键盘遥操作 (命令域④交互, 笛卡尔+关节两域) —— python
 install(PROGRAMS
   scripts/demo_cartesian.py
   scripts/demo_motion.py
+  scripts/demo_teleop_key.py
+  scripts/demo_teleop_joint.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

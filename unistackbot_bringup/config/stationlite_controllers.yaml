@@ -30,7 +30,7 @@ cartesian_motion_controller:
   ros__parameters:
     base_link: left_armbase
     tip_link: left_linkgripper
-    ik_solver: dls
+    ik_solver: trac_ik   # 数值解默认 trac_ik (2026-10-08 全机型换装; DlsIk=RT 场景/离线调试 fallback)
     ik_timeout_ms: 50.0
     max_acceleration: 5.0
     max_jerk: 20.0

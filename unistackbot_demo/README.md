@@ -10,6 +10,7 @@
 | ① 末端位姿流（< 总线频率） | `demo_cartesian.py` | py | 切 CM 五 pattern: up/axes/sweep/**circle**(连续小步圆周流, IK 解连续性探针)/reject |
 | ② 关节慢流（< 总线频率） | `demo_motion.py --hz 50` | py | JS **ruckig 档** C2 填充; **测试工况库** `--pattern broad\|single\|couple\|agile`（③同款） |
 | ③ 关节满速流（= 控制频率，透传） | `demo_joint_fullrate` | **C++** | ruckig 对满速微小目标步 ≈ 直通（严格透传语义 = hold 档）；**C++ 的理由: python rclpy 发布 500Hz 全是抖动**（100Hz 稳/200Hz 勉强），满速档必须真调度 |
+| ④ 键盘遥操作（交互） | `demo_teleop_key.py` | py | 键态→笛卡尔速度→目标空间积分→CM 目标流; hold-to-move+deadman; 零外部依赖 (termios) |
 
 **大幅快慢变速测试**（2026-09-24 用户需求：>10s 长时 + 大幅 + 有快有慢）——三 demo 各一条：
 - **测试工况库 (2026-09-29, ②③ 同款; 代表性点位 = 能暴露问题的工况)**:
@@ -31,6 +32,17 @@ ros2 run unistackbot_demo demo_joint_fullrate --ros-args -p duration:=6.0 -p hz:
 #   hz=0 (默认) 读 bringup 配置文件 /**.update_rate (单一事实源; -p robot:=<机型> 多配置时必填)
 #   bus_hz:= 起链属运行期覆盖, 文件读不到 —— 矩阵测试 1000Hz 档须显式 -p hz:=1000.0
 #   结束时如实报告实际达成率 (mock 实测: 校准 500.0Hz (stamp 差分), 定时器下发 99.9% 达成)
+
+ros2 run unistackbot_demo demo_teleop_key.py                  # ④ 键盘遥操作·笛卡尔 (CM 域)
+#   键位: W/S前后 A/D左右 R/F升降 | I/K俯仰 J/L偏航 U/O翻滚 (Shift=2×瞬时)
+#         -/= 速度档(3档: 精细20/常规50/快速100 mm·s) Space=HOLD乒乓 Q=退出
+#   启动自动切 CM, 退出切回 JS + 显式发 HOLD (瞬时冻结); 需真实终端 (stdin tty)
+
+ros2 run unistackbot_demo demo_teleop_joint.py                # ④ 键盘遥操作·关节 (JS 域, 2026-10-08)
+#   键位: 一列一关节 Q/W/E/R/T/Y/U=J1..J7 往上限, A/S/D/F/G/H/J=往下限
+#         -/= 档位(0.25/0.5/1.0 rad/s) Shift=2× Space=清键急停 Ctrl-C=退出
+#   直发 JS (不过 IK: 无奇异/无姿态冻结重构/顶限位=贴住); 关节表自持解析 URDF
+#   E2E (r1_7a mujoco): q/a 键控 J1 ±0.8/0.55rad, w 贴限位钉住+HUD■, 264条/11.5s
 ```
 
 ## 契约消费方式（全部运行期发现，零机型硬编码）

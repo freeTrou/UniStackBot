@@ -47,9 +47,10 @@ cartesian_motion_controller:
   ros__parameters:
     base_link: link_base
     tip_link: link7
-    seed_library_package: unistackbot_description
-    seed_library_relpath: arms/xarm7/ik/seed_lib_xarm7.txt
-    ik_solver: dls           # 算法选择显式手动 (代码无默认; 用户 7 轴解落地后此处显式切换)
+    # 种子库是 DlsIk 专属能力 (trac_ik 不消费——内建随机重启); 切回 dls 时恢复下两行
+    #seed_library_package: unistackbot_description
+    #seed_library_relpath: arms/xarm7/ik/seed_lib_xarm7.txt
+    ik_solver: trac_ik       # 算法选择显式手动 (代码无默认); 数值解默认 trac_ik (2026-10-08 换装)
     ik_timeout_ms: 50.0      # 回调线程单次 IK 墙钟预算 (必填)
     max_acceleration: 5.0    # OTG 关节加速度界 [rad/s²] (机型资产, 必填)
     max_jerk: 20.0           # [rad/s³] (必填)

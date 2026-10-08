@@ -26,9 +26,11 @@ using unistackbot_interface::RedundancyPreference;
  * 3. **SolveMode 语义** (粘性场景化解耦, 2026-09-17 定稿):
  *      STREAMING  种子=上一解; 解距种子超跳变阈 = 跳分支, 拒绝输出 (伺服连续性)
  *      COLD_START 种子=分支代表/种子库; 解距种子远是常态不是错误
- * 4. **RT 纪律** —— solve() 跑在控制环上: 零 malloc/锁/printf; 全暂存成员预分配,
- *    实例线程私有 (KDL 有状态暂存, 跨线程并发互踩 —— 见 urdf_fk.hpp 用法契约;
- *    CM 的 update 线程与冷启动 worker 各持一套实例)。
+ * 4. **调用域纪律** (§16.6 后语境, 2026-09-29 更新) —— CM 的 IK 在订阅回调
+ *    线程 (非 RT), RT 环零运动学。两类实现: (a) RT-capable (DlsIk: 零 malloc/
+ *    锁/printf, 全暂存预分配, 可进任何线程) 与 (b) 回调线程专用 (TracIk:
+ *    内部起线程+分配, 禁入 RT 环/总线主站 —— 类注释锁死)。实现须自声明类别。
+ *    实例线程私有 (KDL/求解器有状态暂存, 跨线程并发互踩 —— 见 urdf_fk.hpp)。
  * 5. **stats 尽力填** —— ok/iterations/solve_us/timed_out 必填; min_sigma 有雅可比
  *    才填 (无则 -1, CM status 通道透传给上层观测)。
  *
@@ -106,6 +108,11 @@ public:
 	{
 		return 0;
 	}
+
+	// 运行期预算设定 (可选能力, 2026-09-29; CM 的 message_rate 自适应档消费):
+	// 显式档 (explicit) 不调用; 自适应档由 CM 按实测消息间隔调用。默认空 =
+	// 实现预算固定 (调用方的自适应档对不支持的实现自动退化为显式值)。
+	virtual void setBudgetMs(double /*timeout_ms*/) {}
 };
 
 }  // namespace unistackbot_algorithm

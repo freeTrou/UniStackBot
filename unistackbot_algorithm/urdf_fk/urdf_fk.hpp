@@ -91,6 +91,10 @@ public:
 	// 链序关节名 (基座->tip; fk() 的 q 向量按此顺序)
 	[[nodiscard]] const std::vector<std::string> & jointNames() const {return joint_names_;}
 
+	// 内部 KDL 链只读访问 (2026-09-29): 供需要 KDL::Chain 构造的求解器复用
+	// (TRAC-IK 适配层先例) —— 同一份数据源, 免二次解析; 只读不共享可变状态。
+	[[nodiscard]] const KDL::Chain & chain() const {return chain_;}
+
 	// 链序各活动关节的轴 (base 系, 零位; 长度 = jointCount)。结构指纹判定用。
 	[[nodiscard]] bool jointAxesAtZero(std::vector<JointAxis> & out) const;
 

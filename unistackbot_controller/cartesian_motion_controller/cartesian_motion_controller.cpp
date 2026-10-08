@@ -104,6 +104,10 @@ controller_interface::CallbackReturn CartesianMotionController::on_init()
 	auto_declare<std::string>("seed_library_package", "unistackbot_description");
 	auto_declare<std::string>("seed_library_relpath", "");
 	auto_declare<double>("ik_timeout_ms", 0.0);     // 回调线程单次 IK 墙钟预算 (必填)
+	// 预算档 (2026-09-29): explicit=显式 ms (默认); message_rate=自适应 0.8×实测
+	// 消息间隔 (高频轨迹流自动收紧/低频放宽, 锚是消息率不是 CM 周期 —— 两域量)
+	auto_declare<std::string>("ik_timeout_mode", "explicit");
+	auto_declare<double>("ik_rate_share", 0.8);
 	auto_declare<double>("max_acceleration", 0.0);  // OTG 关节加速度界 (机型资产, 必填)
 	auto_declare<double>("max_jerk", 0.0);          // OTG 关节加加速度界 (必填)
 	auto_declare<int>("degraded_n", degraded_n_);
@@ -134,6 +138,14 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	seed_lib_package_ = get_node()->get_parameter("seed_library_package").as_string();
 	seed_lib_relpath_ = get_node()->get_parameter("seed_library_relpath").as_string();
 	ik_timeout_ms_ = get_node()->get_parameter("ik_timeout_ms").as_double();
+	const std::string ik_mode = get_node()->get_parameter("ik_timeout_mode").as_string();
+	ik_rate_share_ = get_node()->get_parameter("ik_rate_share").as_double();
+	ik_adaptive_ = (ik_mode == "message_rate");
+	if (!ik_adaptive_ && ik_mode != "explicit")
+	{
+		ULOG_ERROR("cm: 未知 ik_timeout_mode '%s' (explicit | message_rate)", ik_mode.c_str());
+		return CallbackReturn::ERROR;
+	}
 	max_acceleration_ = get_node()->get_parameter("max_acceleration").as_double();
 	max_jerk_ = get_node()->get_parameter("max_jerk").as_double();
 	degraded_n_ = get_node()->get_parameter("degraded_n").as_int();
@@ -172,7 +184,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	ik_solver_name_ = get_node()->get_parameter("ik_solver").as_string();
 	if (ik_solver_name_.empty())
 	{
-		ULOG_ERROR("cm: 缺 ik_solver 显式配置 (算法选择必须显式手动; 当前可选: dls | analytic_piper)");
+		ULOG_ERROR("cm: 缺 ik_solver 显式配置 (算法选择必须显式手动; 当前可选: dls | analytic_piper | trac_ik)");
 		return CallbackReturn::ERROR;
 	}
 	std::unique_ptr<IkSolver> ik;
@@ -184,9 +196,16 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	{
 		ik = std::make_unique<AnalyticPiper>();
 	}
+	else if (ik_solver_name_ == "trac_ik")
+	{
+		// TRAC-IK (vendored BSD-3, 2026-09-29 换装): 回调线程专用 —— 内部起竞赛
+		// pthread + nlopt 分配, 禁入 RT 环 (IkSolver 契约 4 b 类, 见 ik_solver.hpp)。
+		// AB: R1 50ms 100.0% vs DlsIk 92.4%; 1ms 96.0% vs 82.4% (全预算领先)
+		ik = std::make_unique<TracIk>();
+	}
 	else
 	{
-		ULOG_ERROR("cm: 未知 ik_solver '%s' (可选: dls | analytic_piper)", ik_solver_name_.c_str());
+		ULOG_ERROR("cm: 未知 ik_solver '%s' (可选: dls | analytic_piper | trac_ik)", ik_solver_name_.c_str());
 		return CallbackReturn::ERROR;
 	}
 	ULOG_INFO("cm: IK 求解器 = '%s' (显式配置, 回调线程逐条解)", ik_solver_name_.c_str());
@@ -216,8 +235,10 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 		}
 		ULOG_INFO("cartesian_motion_controller: 种子库 %zu 条", ik->seedLibrarySize());
 	}
-	// 回调线程求解配置 (旧 worker 档整编: 不限时档 —— 大预算 + 高迭代上限;
-	// DlsIkConfig 是 DLS 专属, 经具体类施加)
+	// 回调线程求解配置: 显式预算经接口通用口 setBudgetMs 下发 (2026-10-08——
+	// 此前只经 dynamic_cast 施加 DlsIk, TracIk 拿不到 yaml 值只能用内建默认=静默分歧);
+	// DlsIkConfig 的迭代上限是 DLS 专属, 仍经具体类施加
+	ik->setBudgetMs(ik_timeout_ms_);
 	if (auto * dls = dynamic_cast<DlsIk *>(ik.get()))
 	{
 		DlsIkConfig ikcfg;
@@ -284,6 +305,31 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 				return;
 			}
 			p.qw /= qn; p.qx /= qn; p.qy /= qn; p.qz /= qn;
+
+			// 预算自适应 (message_rate 档): 消息到达间隔滑窗中位数 → 0.8×间隔;
+			// 锚=消息率 (点流语义下与 CM 周期无关的两域量); 未满窗/单发流退化显式值
+			if (ik_adaptive_)
+			{
+				const double now_s = m->header.stamp.sec + 1e-9 * m->header.stamp.nanosec;
+				if (last_msg_stamp_ > 0.0 && now_s > last_msg_stamp_)
+				{
+					msg_gap_samples_[msg_gap_n_ % kMsgGapSamples] = now_s - last_msg_stamp_;
+					++msg_gap_n_;
+					if (msg_gap_n_ >= kMsgGapSamples)
+					{
+						double w[kMsgGapSamples];
+						std::copy(msg_gap_samples_, msg_gap_samples_ + kMsgGapSamples, w);
+						std::sort(w, w + kMsgGapSamples);
+						const double budget_ms = 1000.0 * ik_rate_share_ * w[kMsgGapSamples / 2];
+						if (budget_ms > 0.5 && std::abs(budget_ms - last_budget_ms_) > 0.1)
+						{
+							ik_->setBudgetMs(budget_ms);
+							last_budget_ms_ = budget_ms;
+						}
+					}
+				}
+				last_msg_stamp_ = now_s;
+			}
 
 			SolvedTarget sol{};
 			sol.target = p;

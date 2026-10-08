@@ -16,6 +16,9 @@
   <depend>kdl_parser</depend>
   <depend>eigen</depend>
   <depend>unistackbot_interface</depend>
+  <!-- vendored trac_ik 上游特例 (2026-10-08 用户裁决: 上游代码不剥离, 依赖如实声明;
+       仅 trac_ik_solver/ 消费, dls_ik/urdf_fk/analytic_piper 仍零 ROS) -->
+  <depend>rclcpp</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

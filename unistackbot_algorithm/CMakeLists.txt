@@ -22,9 +22,12 @@ find_package(unistackbot_interface REQUIRED)
 
 # 纯算法库 (2026-09-17 自 unistackbot_controller 拆出): 运动学解算 + 数值 IK。
 # 目录 = 每算法一个文件夹 (与 unistackbot_common 组件三件套同构):
-#   urdf_fk/  ik_solver/  dls_ik/  (后续新算法各起一个文件夹, 互不交叉)
+#   urdf_fk/  ik_solver/  dls_ik/  analytic_piper/  trac_ik_solver/
 # include 基 = 包根, 消费方 #include "dls_ik/dls_ik.hpp"。
-# 零控制器生态依赖 —— 外部仓库/RL 训练侧只依赖本包即可复用算法。
+#
+# 方案 C (2026-10-08 用户裁决): 核心库零 ROS / 零 nlopt —— 交叉编译与 RT/非 ROS
+# 复用面 (外部仓库/RL 训练侧/ARM 主站) 只消费本目标; TRAC-IK 是主控机回调线程
+# 专用件, 住在下方可选子库 unistackbot_trac_ik, 其 rclcpp+nlopt 依赖不进核心。
 add_library(${PROJECT_NAME} SHARED
 	urdf_fk/urdf_fk.cpp
 	dls_ik/dls_ik.cpp
@@ -48,17 +51,62 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
 
-# 头文件随算法文件夹整体安装 (只装 .hpp, test/ 与 .cpp 不进 install)
-install(DIRECTORY urdf_fk ik_solver dls_ik analytic_piper
-	DESTINATION include
-	FILES_MATCHING PATTERN "*.hpp"
-)
 install(TARGETS ${PROJECT_NAME}
 	EXPORT export_${PROJECT_NAME}
 	ARCHIVE DESTINATION lib
 	LIBRARY DESTINATION lib
 	RUNTIME DESTINATION bin
 )
+# 头文件随算法文件夹整体安装 (只装 .hpp, test/ 与 .cpp 不进 install)
+install(DIRECTORY urdf_fk ik_solver dls_ik analytic_piper
+	DESTINATION include
+	FILES_MATCHING PATTERN "*.hpp"
+)
+
+# ---- TRAC-IK 可选件子库 (方案 C, 2026-10-08) ----
+# vendored traclabs/trac_ik rolling 分支 (BSD-3, 2026-09-29; + 本仓 Humble 兼容
+# patch: urdf::Model 不存在 → urdfdom parseURDF)。回调线程专用 (IkSolver 契约 4
+# b 类, 见 trac_ik_solver.hpp 豁免声明) —— rclcpp+nlopt 只挂本目标。
+# 交叉编译核心库 / 无 ROS 环境: -DUNISTACKBOT_BUILD_TRAC_IK=OFF (此时勿编
+# controller —— CM 的 trac_ik 分支与 trac_ik_solver 头不在)。
+option(UNISTACKBOT_BUILD_TRAC_IK "TRAC-IK 求解器可选件 (rclcpp+nlopt, 回调线程专用)" ON)
+if(UNISTACKBOT_BUILD_TRAC_IK)
+	find_package(rclcpp REQUIRED)
+	find_library(NLOPT_LIB nlopt REQUIRED)
+	add_library(unistackbot_trac_ik SHARED
+		trac_ik_solver/trac_ik_solver.cpp
+		trac_ik_solver/vendor/trac_ik/trac_ik.cpp
+		trac_ik_solver/vendor/trac_ik/nlopt_ik.cpp
+		trac_ik_solver/vendor/trac_ik/kdl_tl.cpp
+	)
+	# 上游固有警告单文件关 (vendored 代码不动其内容, 警告面就地屏蔽)
+	set_source_files_properties(
+		trac_ik_solver/vendor/trac_ik/trac_ik.cpp
+		trac_ik_solver/vendor/trac_ik/nlopt_ik.cpp
+		trac_ik_solver/vendor/trac_ik/kdl_tl.cpp
+		PROPERTIES COMPILE_OPTIONS "-Wno-pedantic;-Wno-unused-parameter;-Wno-sign-compare")
+	target_include_directories(unistackbot_trac_ik PUBLIC
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/trac_ik_solver/vendor>
+		$<INSTALL_INTERFACE:include>
+	)
+	ament_target_dependencies(unistackbot_trac_ik
+		rclcpp urdf urdfdom orocos_kdl kdl_parser
+	)
+	target_link_libraries(unistackbot_trac_ik
+		${NLOPT_LIB} Eigen3::Eigen ${PROJECT_NAME})
+	install(TARGETS unistackbot_trac_ik
+		EXPORT export_${PROJECT_NAME}
+		ARCHIVE DESTINATION lib
+		LIBRARY DESTINATION lib
+		RUNTIME DESTINATION bin
+	)
+	# trac_ik_solver 适配层头 + vendor 头 (trac_ik/trac_ik.hpp 是适配层的公开面)
+	install(DIRECTORY trac_ik_solver trac_ik_solver/vendor/trac_ik
+		DESTINATION include
+		FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
+	)
+endif()
 
 if(BUILD_TESTING)
 	find_package(ament_lint_auto REQUIRED)
@@ -67,5 +115,8 @@ endif()
 
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
+if(UNISTACKBOT_BUILD_TRAC_IK)
+	ament_export_libraries(unistackbot_trac_ik)
+endif()
 ament_export_dependencies(orocos_kdl kdl_parser unistackbot_interface)
 ament_package()

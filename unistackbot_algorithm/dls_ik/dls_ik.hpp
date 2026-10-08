@@ -107,6 +107,12 @@ public:
 	// 配置注入 (参数与 FK 无关, 可随时更换, 影响下一次 solve)
 	void setConfig(const DlsIkConfig & cfg) {cfg_ = cfg;}
 
+	// IkSolver 运行期预算口 (2026-09-29): DlsIk 天然每次 solve 读 cfg_, 直接改
+	void setBudgetMs(double timeout_ms) override
+	{
+		cfg_.timeout_ns = static_cast<std::uint64_t>(timeout_ms * 1e6);
+	}
+
 	/*
 	 * 种子库 (可选, 2026-09-17): COLD_START 阶梯的目标导向种子 —— 级0.5,
 	 * 介于调用方种子与四分支之间; STREAMING 不使用 (warm 种子 + 粘性已是主路径)。
