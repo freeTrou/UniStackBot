@@ -15,6 +15,7 @@
 | [guides/linux_rt_guide.md](guides/linux_rt_guide.md) | Linux RT 调优指南（PREEMPT_RT/isolcpus/cyclictest） | 第二部分=RT 代码纪律 |
 | [guides/ik_validation_playbook.md](guides/ik_validation_playbook.md) | 换臂/换 IK 求解器六阶段验证方法论 | 参数审计表+验收模板 |
 | [sim/chain_interface_dictionary.md](sim/chain_interface_dictionary.md) | 链上接口词典：话题/字段/频率/查看方式/服务/控制器状态 | 写上层算法与验收时查 |
+| [sim/sim2real_roadmap.md](sim/sim2real_roadmap.md) | sim2real 课题路线图（双轨制: 数据驱动主线+模型保真保底; P0-P3 门禁, r1_7a 首目标, 2026-10-08 立项） | 课题推进时对齐 |
 | [sim/acceptance_report_template.md](sim/acceptance_report_template.md) | 机型验收报告模板（A-G 手填版） | run_acceptance 就位前用 |
 | [sim/sim_validation_pipeline.md](sim/sim_validation_pipeline.md) | 机型接入→验收归档端到端流程（A-G 门禁; 三链互补漏斗+真机迁移已并入） | 仿真验收单一事实源 |
 | [control_course/](control_course/) | 控制理论课程笔记（传递函数→三环级联） | 背景知识，非代码文档 |
