@@ -115,6 +115,9 @@ private:
 
 	// ---- 观测 ----
 	uint64_t dropped_mode_{0};       // 非 CSP 模式拒绝计数
+	uint64_t hold_run_{0};           // ruckig 连续 Hold 拍数 (遥测: 冻结检测)
+	uint32_t diag_div_{0};           // 采纳/推进遥测分频
+	uint64_t hold_total_{0};         // Hold 累计拍数
 	uint64_t dropped_len_{0};        // 关节数不匹配拒绝计数
 	uint64_t stale_events_{0};       // 断流事件计数 (观测; 进入即 +1)
 

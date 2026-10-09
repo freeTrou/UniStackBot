@@ -172,6 +172,13 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 				snap.position[i] = m->position[static_cast<std::size_t>(it - m->joint_names.begin())];
 			}
 			rt_cmd_.publish(snap);
+			// 投递遥测 (2026-10-09 走廊冻结排查): 回调级计数 —— 停止增长=DDS 投递断
+			if (cmd_seq_pub_ % 25 == 0)
+			{
+				ULOG_INFO("%s: 回调采纳 seq=%lu j4=%.3f", kPluginName,
+					static_cast<unsigned long>(cmd_seq_pub_),
+					snap.position[3]);
+			}
 		});
 
 	ULOG_INFO("%s: %zu 关节, 插值=%s, 步长上限=%.3f rad/拍",
@@ -405,10 +412,17 @@ controller_interface::return_type JointStreamController::update(
 		if (sanitize(q))
 		{
 			target_ = q;   // hold/ruckig 同: 采纳为当前目标
+			if (cmd_seq_ % 25 == 0)
+			{
+				ULOG_INFO("%s: update 采纳 seq=%lu j4=%.3f", kPluginName,
+					static_cast<unsigned long>(cmd_seq_), target_[3]);
+			}
 		}
 		else
 		{
-			++dropped_mode_;   // NaN 命令计数 (复用观测通道)
+			++dropped_mode_;   // NaN/限位拒绝计数 (复用观测通道)
+			ULOG_WARN("%s: sanitize 拒绝 seq=%lu j4=%.3f", kPluginName,
+				static_cast<unsigned long>(snap_seq), q[3]);
 		}
 	}
 
@@ -443,6 +457,20 @@ controller_interface::return_type JointStreamController::update(
 		if (otg_.update(tgt, out) == unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::UpdateResult::Ok)
 		{
 			for (std::size_t i = 0; i < n; ++i) {cmd_[i] = out[i];}
+			hold_run_ = 0;
+		}
+		else
+		{
+			// Hold 遥测 (2026-10-09 走廊冻结排查加): 静默 Hold 曾让链上无法归因
+			++hold_run_;
+			++hold_total_;
+			if (hold_run_ == 1 || hold_run_ % 500 == 0)
+			{
+				ULOG_WARN("%s: ruckig Hold 连续 %lu 拍 (累计 %lu, lastError=%d, 目标j4=%.3f, 输出j4=%.3f)",
+					kPluginName, static_cast<unsigned long>(hold_run_),
+					static_cast<unsigned long>(hold_total_), otg_.lastError(),
+					target_[3], cmd_[3]);
+			}
 		}
 	}
 

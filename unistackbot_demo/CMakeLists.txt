@@ -37,6 +37,7 @@ install(PROGRAMS
   scripts/demo_motion.py
   scripts/demo_teleop_key.py
   scripts/demo_teleop_joint.py
+  scripts/demo_points_playback.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
