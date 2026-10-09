@@ -40,3 +40,22 @@ ee_state_broadcaster:
     base_link: base_link
     tip_link: Link7
     publish_hz: 50.0
+
+# MoveIt 执行控制器 (M1): inactive 常驻注册, 执行窗口切 JS↔JTC。
+# 任务域断流语义 = 停在最后一点 (JTC 原生, 主流做法)。
+joint_trajectory_controller:
+  ros__parameters:
+    type: joint_trajectory_controller/JointTrajectoryController
+    joints:
+      - J1
+      - J2
+      - J3
+      - J4
+      - J5
+      - J6
+      - J7
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity

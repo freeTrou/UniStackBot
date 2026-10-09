@@ -20,6 +20,7 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 
 from control_msgs.action import FollowJointTrajectory
+from sensor_msgs.msg import JointState
 from moveit_msgs.msg import Constraints, JointConstraint, MotionPlanRequest
 from moveit_msgs.srv import GetMotionPlan
 
@@ -41,9 +42,14 @@ class MovePlanClient(Node):
 
     def __init__(self):
         super().__init__('demo_moveit_plan')
+        self.q = {}
+        self.create_subscription(JointState, '/joint_states', self._on_js, 10)
         self.cli = self.create_client(GetMotionPlan, '/plan_kinematic_path')
         self.action = ActionClient(self, FollowJointTrajectory,
                                    '/joint_trajectory_controller/follow_joint_trajectory')
+
+    def _on_js(self, msg):
+        self.q.update(zip(msg.name, msg.position))
 
     def plan(self, goal, timeout):
         if not self.cli.wait_for_service(timeout_sec=10.0):
@@ -53,8 +59,15 @@ class MovePlanClient(Node):
         mpr.group_name = 'arm'
         mpr.num_planning_attempts = 5
         mpr.allowed_planning_time = 5.0
+        # 规划起点 = 实测当前状态 (审核修复: 硬编码 ARM home 在臂不在 home 时
+        # 起点失真 → 轨迹首段跳变/碰撞检查失真); 未订阅到则退 home
+        import time as _t
+        _t0 = _t.time()
+        while not all(j in self.q for j in JOINTS) and _t.time() - _t0 < 3.0:
+            rclpy.spin_once(self, timeout_sec=0.05)
+        start = [self.q.get(j, ARM[j]) for j in JOINTS]
         mpr.start_state.joint_state.name = JOINTS
-        mpr.start_state.joint_state.position = [ARM[j] for j in JOINTS]
+        mpr.start_state.joint_state.position = start
         jc = Constraints()
         jc.joint_constraints = [
             JointConstraint(joint_name=j, position=goal[j],

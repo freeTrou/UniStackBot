@@ -26,7 +26,20 @@ def load_yaml(pkg, rel):
 
 def generate_launch_description():
     robot_arg = DeclareLaunchArgument('robot', default_value='piper',
-                                      description='机型 (M1 仅 piper 有配置)')
+                                      description='机型 (M1 仅 piper 有 SRDF/MoveIt 配置)')
+
+    # M1 范围守卫: 非本机型无 SRDF/规划组配置, fail-fast 免得隐性错配
+    # (xacro 会按 <robot> 展开, 但 SRDF 是 piper 的 → 规划组对不上)
+    from launch.actions import OpaqueFunction
+
+    def _guard(context):
+        robot = LaunchConfiguration('robot').perform(context)
+        if robot != 'piper':
+            raise RuntimeError(
+                "M1 仅支持 piper (收到 '%s'); 其他机型的 MoveIt 配置属 M2+ "
+                "-- 见 unistackbot_moveit_config/README" % robot)
+        return []
+    guard = OpaqueFunction(function=_guard)
 
     # robot_description: 与链同源 xacro (use_world:=true, 同 control.launch.py 口径);
     # URDF/SRDF 字符串参数须包 ParameterValue(str) —— 直接传会被当 yaml 解析炸掉
