@@ -65,14 +65,9 @@ def generate_launch_description():
         {'publish_transforms_updates': True},
         {'publish_robot_description': True},
         {'publish_robot_description_semantic': True},
-        {'planning_scene_monitor_options': {
-            'name': 'planning_scene_monitor',
-            'robot_description': 'robot_description',
-            'joint_state_topic': '/joint_states',
-            'attached_collision_object_topic': '/moveit_cpp/planning_scene_monitor',
-            'publish_planning_scene_topic': '/moveit_cpp/publish_planning_scene',
-            'monitored_planning_scene_topic': '/moveit_cpp/monitored_planning_scene',
-            'wait_for_initial_state_timeout': 10.0}},
+        # planning_scene_monitor 话题保持默认 (/monitored_planning_scene) ——
+        # 覆盖成 /moveit_cpp/* 会与 RViz MotionPlanning 插件订阅错位 (display
+        # 永远等不到场景, 2026-10-09 实锤)
     ]
 
     move_group = Node(
