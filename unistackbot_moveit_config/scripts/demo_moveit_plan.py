@@ -45,7 +45,7 @@ class MovePlanClient(Node):
         self.action = ActionClient(self, FollowJointTrajectory,
                                    '/joint_trajectory_controller/follow_joint_trajectory')
 
-    def plan(self, j2_target, timeout):
+    def plan(self, goal, timeout):
         if not self.cli.wait_for_service(timeout_sec=10.0):
             raise RuntimeError('/plan_kinematic_path 10s 未出现 (move_group 未起?)')
         req = GetMotionPlan.Request()
@@ -55,13 +55,12 @@ class MovePlanClient(Node):
         mpr.allowed_planning_time = 5.0
         mpr.start_state.joint_state.name = JOINTS
         mpr.start_state.joint_state.position = [ARM[j] for j in JOINTS]
-        goal = Constraints()
-        goal.joint_constraints = [
-            JointConstraint(joint_name=j, position=(j2_target if j == 'joint2'
-                                                    else ARM[j]),
+        jc = Constraints()
+        jc.joint_constraints = [
+            JointConstraint(joint_name=j, position=goal[j],
                             tolerance_above=0.001, tolerance_below=0.001, weight=1.0)
             for j in JOINTS]
-        mpr.goal_constraints = [goal]
+        mpr.goal_constraints = [jc]
         req.motion_plan_request = mpr
         fut = self.cli.call_async(req)
         rclpy.spin_until_future_complete(self, fut, timeout_sec=timeout)
@@ -95,21 +94,21 @@ class MovePlanClient(Node):
 
 
 def main(args=None):
-    j2 = 0.6
+    goal = dict(ARM)   # home 基础上覆盖
     plan_timeout = 15.0
     argv = sys.argv[1:]
     while argv:
         a = argv.pop(0)
-        if a == '--j2':
-            j2 = float(argv.pop(0))
+        if a.startswith('--j') and len(a) == 4 and a[3].isdigit() and 'joint' + a[3] in JOINTS:
+            goal['joint' + a[3]] = float(argv.pop(0))
         elif a == '--plan-timeout':
             plan_timeout = float(argv.pop(0))
         else:
-            raise SystemExit("未知参数 '%s' (--j2 --plan-timeout)" % a)
+            raise SystemExit("未知参数 '%s' (--j1..--j6 --plan-timeout)" % a)
     rclpy.init(args=args)
     node = MovePlanClient()
     try:
-        traj = node.plan(j2, plan_timeout)
+        traj = node.plan(goal, plan_timeout)
         switch('--deactivate', 'joint_stream_controller',
                '--activate', 'joint_trajectory_controller')
         node.get_logger().info('执行窗口: JS→JTC')
