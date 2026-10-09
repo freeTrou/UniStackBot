@@ -97,13 +97,24 @@ def _launch_setup(context):
                        '--service-call-timeout', '30'],
             output='screen',
         ),
-        # 笛卡尔流式控制器: 以 inactive 注册 (接口独占, switch_controllers 切换)
+        # inactive 组: CM (switch 切换) + MoveIt 执行用 JTC (M1, 常驻 inactive 零开销)。
+        # 拆两进程: Humble CM 的 type 须由 spawner -t 传入 (yaml 内 type 是更新版本行为),
+        # 而 -t 对多控制器名是全局的, 会污染 CM —— 各自独立 spawner。
         Node(
             package='controller_manager',
             executable='spawner',
             arguments=['cartesian_motion_controller',
                        '--controller-manager', '/controller_manager',
                        '--service-call-timeout', '30', '--inactive'],
+            output='screen',
+        ),
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['joint_trajectory_controller',
+                       '--controller-manager', '/controller_manager',
+                       '--service-call-timeout', '30', '--inactive',
+                       '-t', 'joint_trajectory_controller/JointTrajectoryController'],
             output='screen',
         ),
     ]

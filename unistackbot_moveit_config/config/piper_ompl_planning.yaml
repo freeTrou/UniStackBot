@@ -1,0 +1,29 @@
+planning_plugin: ompl_interface/OMPLPlanner
+# 时间参数化必备: 无它 OMPL 轨迹时间戳全零, JTC 以"时间不严格递增"拒收
+# (2026-10-09 实锤)。Humble 2.5.10 插件实名 = AddTimeOptimalParameterization
+# (旧文档的 AddTimeParameterization 在此版不存在, 静默拒载)。
+request_adapters: >-
+    default_planner_request_adapters/AddTimeOptimalParameterization
+    default_planner_request_adapters/ResolveConstraintFrames
+    default_planner_request_adapters/FixWorkspaceBounds
+    default_planner_request_adapters/FixStartStateBounds
+    default_planner_request_adapters/FixStartStateCollision
+    default_planner_request_adapters/FixStartStatePathConstraints
+start_state_max_bounds_error: 0.1
+arm:
+  planner_configs:
+    - RRTConnectkConfigDefault
+  projection_evaluator: joints(joint1,joint2)
+  longest_valid_segment_fraction: 0.005
+gripper:
+  planner_configs:
+    - RRTConnectkConfigDefault
+planner_configs:
+  RRTConnectkConfigDefault:
+    type: geometric::RRTConnect
+    range: 0.0
+  RRTstarkConfigDefault:
+    type: geometric::RRTstar
+    range: 0.0
+    goal_bias: 0.05
+    delay_collision_checking: true

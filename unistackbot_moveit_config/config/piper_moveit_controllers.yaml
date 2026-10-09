@@ -1,0 +1,17 @@
+# MoveIt 执行配置 (M1 定案 B 路线): 走链上 JTC (inactive 注册, 执行窗口切换)。
+# 零自研代码 —— moveit_simple_controller_manager 原生支持 FollowJointTrajectory。
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+moveit_simple_controller_manager:
+  controller_names:
+    - joint_trajectory_controller
+  joint_trajectory_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6

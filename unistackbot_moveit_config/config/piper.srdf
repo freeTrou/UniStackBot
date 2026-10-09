@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- piper SRDF (M1 试点): 规划组 arm (base_link→link6, 与 CM 链同口径) + gripper。
+     home 状态限位内缩 2% (零位压线的臂, planning 起步态必须在限位内 —— demo 同款纪律)。
+     碰撞矩阵: 链相邻对 + 固定连接相邻对禁用; 采样检出再补 NEVER 对。 -->
+<robot name="piper">
+  <group name="arm">
+    <chain base_link="base_link" tip_link="link6"/>
+  </group>
+  <group name="gripper">
+    <joint name="gripper"/>
+  </group>
+  <group_state name="home" group="arm">
+    <joint name="joint1" value="0"/>
+    <joint name="joint2" value="0.15"/>
+    <joint name="joint3" value="-0.15"/>
+    <joint name="joint4" value="0"/>
+    <joint name="joint5" value="0"/>
+    <joint name="joint6" value="0"/>
+  </group_state>
+  <group_state name="open" group="gripper">
+    <joint name="gripper" value="0"/>
+  </group_state>
+  <group_state name="close" group="gripper">
+    <joint name="gripper" value="0.08"/>
+  </group_state>
+
+  <!-- 链相邻对 -->
+  <disable_collisions link1="base_link" link2="link1" reason="Adjacent"/>
+  <disable_collisions link1="link1" link2="link2" reason="Adjacent"/>
+  <disable_collisions link1="link2" link2="link3" reason="Adjacent"/>
+  <disable_collisions link1="link3" link2="link4" reason="Adjacent"/>
+  <disable_collisions link1="link4" link2="link5" reason="Adjacent"/>
+  <disable_collisions link1="link5" link2="link6" reason="Adjacent"/>
+  <!-- 固定连接相邻对 (腕/夹爪) -->
+  <disable_collisions link1="link6" link2="flange_link" reason="Adjacent"/>
+  <disable_collisions link1="flange_link" link2="gripper_base" reason="Adjacent"/>
+  <disable_collisions link1="gripper_base" link2="gripper_link" reason="Adjacent"/>
+  <disable_collisions link1="gripper_link" link2="gripper_link1" reason="Adjacent"/>
+  <disable_collisions link1="gripper_link" link2="gripper_link2" reason="Adjacent"/>
+  <!-- 对指手指默认互不检 (采样检出后按需改 NEVER/DEFAULT) -->
+  <disable_collisions link1="gripper_link1" link2="gripper_link2" reason="Default"/>
+</robot>
