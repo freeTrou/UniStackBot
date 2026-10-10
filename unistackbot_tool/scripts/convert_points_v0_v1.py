@@ -9,7 +9,13 @@ v1: 补 meta (robot/side/hz/joint_names/source/notes/limit_margin) + sequences
 已知瑕疵自动检出入 notes: 锚点与走廊首点的大跳 (数据源常见)。
 
 用法: convert_points_v0_v1.py <in.(json|csv)> <out.json> [--robot r] [--side left]
-        [--hz 20] [--operator name] [--notes "…"]
+        [--hz 20] [--joint-names "left_joint1,..,6"] [--roundtrip]
+        [--operator name] [--notes "…"]
+
+--joint-names: 填 meta.joint_names (逐位对应点数据的 q 序; 消费端 demo_points_playback
+    与链上侧关节逐位校验——映射是位置性的, 序错=回放错)。不给则 meta 留空并告警。
+--roundtrip: CSV 输入时追加 corridor_<side>_roundtrip = 行序 + 倒序回程 (共享首末
+    锚点) —— 61 点走廊 → 121 点往返, 可再生 (此前手工拼接不可再生)。
 """
 
 import json
@@ -32,6 +38,8 @@ def main():
 	src, dst = argv[0], argv[1]
 	robot = side = ''
 	hz = ''
+	joint_names = ''
+	roundtrip = False
 	operator = ''
 	notes_extra = ''
 	rest = argv[2:]
@@ -43,6 +51,10 @@ def main():
 			side = rest.pop(0)
 		elif a == '--hz':
 			hz = rest.pop(0)
+		elif a == '--joint-names':
+			joint_names = rest.pop(0)
+		elif a == '--roundtrip':
+			roundtrip = True
 		elif a == '--operator':
 			operator = rest.pop(0)
 		elif a == '--notes':
@@ -80,6 +92,11 @@ def main():
 		bck = sorted((n for n in names if re.match(r'.*from_.*_\d+$', n)), key=natural_key)
 		if csv_order is not None:
 			seqs['corridor_%s' % s] = list(csv_order)   # CSV: 行序即序 (上游已排)
+			if roundtrip:
+				# 往返 = 行序 + 倒序回程 (共享首末锚点): 61 → 121 点
+				seqs['corridor_%s_roundtrip' % s] = (list(csv_order)
+				                                     + list(reversed(csv_order[1:-1]))
+				                                     + [csv_order[0]])
 		elif fwd:
 			seqs['corridor_%s' % s] = (anchors[:1] + fwd
 			                           + ([anchors[1]] if len(anchors) > 1 else []) + bck)
@@ -94,12 +111,15 @@ def main():
 	if notes_extra:
 		notes.append(notes_extra)
 
+	jnames = [j.strip() for j in joint_names.split(',') if j.strip()] if joint_names else []
+	if not jnames:
+		notes.append('meta.joint_names 为空——q→关节映射无交叉校验 (补 --joint-names 可填)')
 	meta = {
 		'format': 1,
 		'robot': robot or 'unknown',
 		'side': side,
-		'joint_names': [],
-		'hz': hz,
+		'joint_names': jnames,
+		'hz': float(hz) if hz else '',
 		'created': datetime.now().isoformat(timespec='seconds'),
 		'operator': operator,
 		'source': src,

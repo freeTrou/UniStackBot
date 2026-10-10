@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""点位序列回放 (命令域② 变体): points.json {点名: [q1..q6]} → JS 关节流。
+"""点位序列回放 (命令域② 变体): 点位资产 json → JS 关节流。
 
 场景: 外部工程采集的关节点位序列 (遥操采样/示教/走廊轨迹) 在仿真链回放验证。
 设计: 与 demo_motion 同款契约消费 (URDF 自持解析关节表/限位/mimic) + 序列语义:
-  - --seq 逗号分隔, 每项为字面点名或 glob (展开后按名排序); 首项单发+settle
-    (ruckig 填充起跑跳变), 中间项按 --hz 连续点流, 以 '*' 结尾标记连流段
+  - --seq 逗号分隔: 字面点名=锚点(单发+settle), glob 项=连流段(自然排序, 按 --hz);
+    首项恒为锚点 (settle 吸收起跑跳变, ruckig 填充)
+  - --seq "@序列名" 用 v1 资产显式序列: 首项锚点, 余项全部连流——资产已显式有序,
+    分段不依赖命名约定 (2026-10-10 退役旧启发式"相邻点数字后缀判连流":
+    非数字命名的资产每点都吃 settle, 规范 v1 反例)
   - 序列外关节 (另一臂/夹爪) 持实测当前值
   - 每点限位钳位 (采集噪声贴限位常见, 计数报告)
+  - meta.joint_names 非空时与链上侧关节逐位校验 (q→关节映射是位置性的, 序错=回放错)
 
 用法: ros2 run unistackbot_demo demo_points_playback.py
-        --points-file <points.json> --side left
-        --seq "transit_l,to_cupdrop_*,cup_drop,from_cupdrop_*" [--hz 20] [--settle 1.5]
+        --points-file <v1.json> --side left
+        --seq "@corridor_left" 或 "transit_l,to_cupdrop_*,cup_drop" [--hz 20] [--settle 1.5]
 """
 
 import glob as _glob
@@ -70,7 +74,8 @@ def _natural_key(k):
 
 
 def expand_seq(spec, points):
-    """--seq 展开: 字面名或 glob (自然排序: 尾部数字按值)。"""
+    """--seq 展开: [(点名, 连流?), ...]; 字面名=锚点, glob 项=连流段
+    (glob 展开按自然排序: 尾部数字按值)。"""
     out = []
     for item in spec.split(','):
         item = item.strip()
@@ -81,11 +86,11 @@ def expand_seq(spec, points):
                           key=_natural_key)
             if not hits:
                 raise SystemExit("glob '%s' 无匹配点" % item)
-            out.extend(hits)
+            out.extend((h, True) for h in hits)
         else:
             if item not in points:
                 raise SystemExit("点 '%s' 不在文件中" % item)
-            out.append(item)
+            out.append((item, False))
     return out
 
 
@@ -142,6 +147,10 @@ def main(args=None):
         if len(side_joints) != dim:
             raise SystemExit("侧关节不匹配: 文件 %d 维 vs 链上 %s 共 %d 个"
                              % (dim, side, len(side_joints)))
+        mjn = list(meta.get('joint_names') or [])
+        if mjn and mjn != side_joints:
+            raise SystemExit('meta.joint_names %s\n与链上侧关节 %s 不一致——映射按位, 序错=回放错'
+                             % (mjn, side_joints))
         node.get_logger().info('关节表 %d 直控 (本侧: %s), mimic %d'
                                % (len(joints), side_joints, len(mimics)))
 
@@ -150,15 +159,13 @@ def main(args=None):
             if sname not in sequences:
                 print("序列 '%s' 不在文件 sequences 节" % sname)
                 return 2
-            # 展开为字面序 (显式有序, 规范 v1 硬规则)
-            seq = ','.join(sequences[sname])
-        seq = expand_seq(seq, points)
-        n_stream = sum(1 for i, n in enumerate(seq[:-1])
-                       if seq[i + 1].endswith(('_0', '_1', '_2', '_3', '_4',
-                                               '_5', '_6', '_7', '_8', '_9'))
-                       and n.endswith(tuple('_0123456789')))
-        node.get_logger().info('序列 %d 点 (去程+回程 corridor)', len(seq)) if False else \
-            node.get_logger().info('序列 %d 点' % len(seq))
+            # v1 显式序列 (显式有序, 规范 v1 硬规则): 首项锚点吸收起跑跳变, 余项连流
+            pairs = [(n, i > 0) for i, n in enumerate(sequences[sname])]
+        else:
+            pairs = expand_seq(seq, points)
+        n_anchor = sum(1 for _, st in pairs if not st)
+        node.get_logger().info('序列 %d 点 (锚点 %d + 连流 %d)'
+                               % (len(pairs), n_anchor, len(pairs) - n_anchor))
 
         qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
                          history=HistoryPolicy.KEEP_LAST, depth=1)
@@ -170,7 +177,6 @@ def main(args=None):
         if len(held) < len(joints):
             raise RuntimeError('/joint_states 未齐 (3s)')
 
-        import math
         sent = 0
         clamped = 0
 
@@ -193,33 +199,25 @@ def main(args=None):
             sent += 1
 
         period = 1.0 / hz
-        for i, name in enumerate(seq):
+        for i, (name, streams) in enumerate(pairs):
             q = points[name]
             tgt = dict(held)
             tgt.update({sj: v for sj, v in zip(side_joints, q)})
-            streaming = (i + 1 < len(seq)
-                         and seq[i + 1].rsplit('_', 1)[-1].isdigit()
-                         and name.rsplit('_', 1)[-1].isdigit()
-                         and name.rsplit('_', 1)[0] == seq[i + 1].rsplit('_', 1)[0])
-            if streaming and i > 0:
+            if streams and i > 0:
                 publish_full(tgt)
                 # spin 必须在流式循环内: RELIABLE 发布器不 spin 无法处理 ACK/重传,
                 # 写入端发到一定量后停摆, JS 停在最后收到的一条 (2026-10-09 实锤,
                 # 三个回放全部冻结于同一消息序号)
-                rclpy.spin_once(node, timeout_sec=0)
                 nxt = time.time() + period
-                delay = nxt - time.time()
-                if delay > 0:
-                    time.sleep(delay)
-                else:
-                    time.sleep(0.0)
+                rclpy.spin_once(node, timeout_sec=0)
+                time.sleep(max(0.0, nxt - time.time()))
             else:
-                # 锚点/段首: 单发 + settle
+                # 首项/锚点: 单发 + settle
                 publish_full(tgt)
                 time.sleep(settle)
         # 末点收敛等待 (断流语义 2026-10-09: 不刹停, JS 自行收敛到最后收到的点
         # 保持) —— 纯等待观测, 无需补发
-        final = points[seq[-1]]
+        final = points[pairs[-1][0]]
         t0c = time.time()
         converged = False
         while time.time() - t0c < 30.0:
