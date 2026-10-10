@@ -112,10 +112,22 @@ def main(args=None):
         print('--points-file/--side/--seq 必填')
         return 2
     data = json.load(open(pf))
-    points = data.get(side)
+    # 数据录制规范 v1 (unistackbot_tool/README §3): {meta, points, sequences};
+    # v0 (裸 {side: {...}}) 双兼容
+    sequences = data.get('sequences', {})
+    if 'points' in data:
+        points = data['points'].get(side)
+    else:
+        points = data.get(side)
     if not points:
         print("文件无 '%s' 节或为空" % side)
         return 2
+    meta = data.get('meta', {})
+    if meta:
+        print('meta: robot=%s side=%s hz=%s source=%s' % (
+            meta.get('robot'), meta.get('side'), meta.get('hz'), meta.get('source')))
+        if meta.get('notes'):
+            print('notes: %s' % meta['notes'])
 
     rclpy.init(args=args)
     node = Node('demo_points_playback')
@@ -133,6 +145,13 @@ def main(args=None):
         node.get_logger().info('关节表 %d 直控 (本侧: %s), mimic %d'
                                % (len(joints), side_joints, len(mimics)))
 
+        if seq.startswith('@'):
+            sname = seq[1:]
+            if sname not in sequences:
+                print("序列 '%s' 不在文件 sequences 节" % sname)
+                return 2
+            # 展开为字面序 (显式有序, 规范 v1 硬规则)
+            seq = ','.join(sequences[sname])
         seq = expand_seq(seq, points)
         n_stream = sum(1 for i, n in enumerate(seq[:-1])
                        if seq[i + 1].endswith(('_0', '_1', '_2', '_3', '_4',
