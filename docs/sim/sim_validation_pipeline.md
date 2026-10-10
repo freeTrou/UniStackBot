@@ -77,7 +77,7 @@ ros2 topic pub --once /joint_stream_controller/command unistackbot_interface/msg
 | F3 限位外 | 首值改 `3.0`（>joint1 限位 2.618） | 精确停在 2.618，不越界 |
 | F2 NaN | 九个值全改 `.nan` | 零位移；后续合法命令仍响应 |
 | F5 超速 | 先回全零，再发首值 `2.5` | 匀速段存在，耗时 ≈ 0.5s（精确判定靠录包） |
-| F6 断流受控减速 | 模板改 `-r 50`、首值 `2.4`，臂动后 Ctrl-C 发流终端 | **不到 2.4**——减速滑行后停住 |
+| F6 断流语义 | 模板改 `-r 50`、首值 `2.4`，臂动后 Ctrl-C 发流终端 | **收敛到 2.4 保持**——走完最后命令不 shortfall，恢复大跳受速度界 |
 | F7 mimic | 末三值 `[0.08, 0.04, -0.04]` | 手指同步 = ±0.5×gripper |
 
 辅助核验（JSB 乱序，按名看）：`ros2 topic echo /joint_states --once`。

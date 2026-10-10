@@ -5,8 +5,8 @@
 归上层, 遥操作里上层=操作员)。本节点只做**指令生成** (按键突发流 → 稳态目标流),
 平滑/安全全部由框架既有防线兜底, 本脚本零安全代码:
   - CM RT 环 OtgStream 关节 C2 (率失配填充, 慢上层 10-100Hz 正是设计档位)
-  - 断流受控刹停: 本节点只在有按键时发流, 松键 deadman 后目标停发 → CM
-    stale_timeout_ms (链上 200ms) 刹停 —— 与 deadman 150ms 两层咬合
+  - 断流语义 (2026-10-10 统一): 本节点只在有按键时发流, 松键 deadman 后目标
+    停发 → CM 收敛到最后目标保持 (不刹停不 shortfall, 无专门机制)
   - 工作空间外 = CM 诚实拒绝 (保持上一解), HUD 显示 REJECTED 不判死
   - write 层最终防线 (NaN门→限位clamp→步长饱和) 不经此路径存在感
 
@@ -62,7 +62,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from geometry_msgs.msg import PoseStamped
 from unistackbot_interface.msg import CartesianControl, CartesianMotionStatus
 
-DEADMAN_S = 0.15          # 重复续命窗口 (< CM stale_timeout 200ms, 两层咬合)
+DEADMAN_S = 0.15          # 重复续命窗口 (松键判定; 断流=收敛最后目标, 无刹停机制)
 FRESH_STREAM_S = 0.45     # 新按下保底发流窗: OS 键重复初始延迟 ~0.3-0.6s, 短于它
                           # 则每次按下都"走150ms→刹停→等重复"抽一下 (pty 测试 25Hz
                           # 持续发键测不出, 真手必现); 保底窗内无重复则视为单击
@@ -191,7 +191,7 @@ class TeleopKey(Node):
 
 	def _on_status(self, msg):
 		self.status = (msg.mode, msg.converged, msg.position_error,
-		               msg.rotation_error, msg.last_result, msg.stream_stale)
+		               msg.rotation_error, msg.last_result)
 		self.status_t = time.monotonic()
 		if msg.last_result != 0:
 			self.reject_last_t = time.monotonic()
@@ -254,16 +254,15 @@ def fmt_hud(node, level, n_lv, lin_speed, rot_speed, held, streaming):
 	if m is None:
 		parts.append('CM status 未到 (CM 未激活?)')
 	else:
-		mode_n, conv, perr, rerr, res, stale = m
+		mode_n, conv, perr, rerr, res = m
 		mode_s = {0: 'INACTIVE', 1: 'IDLE', 2: 'TRACK', 3: 'HOLD', 4: 'DEGRADED'}.get(
 			mode_n, str(mode_n))
 		if time.monotonic() - node.status_t > STATUS_SILENT_S:
 			parts.append('CM status 静默 %.0fs' % (time.monotonic() - node.status_t))
 		else:
-			parts.append('%s err=%.2fmm/%.2f°%s%s' % (
+			parts.append('%s err=%.2fmm/%.2f°%s' % (
 				mode_s, perr * 1000.0, math.degrees(rerr),
-				' ✓conv' if conv else '',
-				' ⚠断流' if stale else ''))
+				' ✓conv' if conv else ''))
 		if time.monotonic() - node.reject_last_t < REJECT_SHOW_S:
 			parts.append('★REJECTED(res=%d)' % node.reject_last_res)
 	ee = node.ee

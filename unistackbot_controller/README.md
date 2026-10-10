@@ -9,10 +9,10 @@ IK 上环宿主：`cartesian_motion_controller/` 自包含文件夹。双机型�
 **契约**：
 - `~/target` PoseStamped（值通道，reliable+KeepLast(1)，base 系）
 - `~/control` CartesianControl（事件通道：TRACKING/HOLD，transient_local）
-- `~/status` CartesianMotionStatus（误差/min_sigma/结果码/stream_stale，20Hz）
+- `~/status` CartesianMotionStatus（误差/min_sigma/结果码，20Hz）
 - 关节反馈复用 `/joint_states`，不新增
 
-**机制**：流式 IK 墙钟预算（`update_timeout_ns` 500µs，冷启动 `cold_timeout_ns` 50ms，超限走 worker 低优线程冷启动并回灌）；安全层独立于 IK（NaN 门 → 限位 clamp → 步长饱和）；断流受控减速（0c，默认关——`--once` 单发是合法用法，流式场景 yaml 开 `stale_timeout_ms`）。
+**机制**：安全层独立于 IK（NaN 门 → 限位 clamp → 步长饱和）；断流语义（2026-10-10 统一，JS/CM 同一套）：~/target 停发 = 最后一条消息的最新终点仍是目标，臂收敛到它保持，无专门机制——恢复的大跳变由通用超限防线兜底（OtgStream v/a/j 界 + 步长钳位）。
 
 **边界**：折叠零位直发远目标需预摆位或等 worker 冷启动；加速度界挂真机前。
 
@@ -24,7 +24,7 @@ IK 上环宿主：`cartesian_motion_controller/` 自包含文件夹。双机型�
 
 **插值** `interpolation`：`hold`（默认，每周期步长饱和逼近）| `ruckig`（OtgStream 整形；路径插值永不在控制器——形状轴归上层/MoveIt）。
 
-**断流受控减速**（0c）：链上默认开（200/200ms）——hold 档线性刹停 / ruckig 档 OTG 刹停，恢复自动续接。
+**断流语义**（2026-10-10 统一，与 CM 同一套，无参数无机制）：`~/command` 停发 = 最后一帧即当前目标，臂收敛到它保持；恢复的大跳变由通用超限防线兜底（ruckig v/a/j 界 + hold 档步长饱和 + 限位 clamp）。
 
 ## EeStateBroadcaster（EE, 2026-09-21）
 
@@ -34,7 +34,7 @@ EE 位姿独立反馈流：`~/ee_state` PoseStamped（base 系，FK(关节状态
 
 OTG 门（2026-09-23 落地）在 §16.6 语义统一裁决后架构并入 CM：**其通路（订阅回调线程
 一次 IK → RT 环 OtgStream 输出级）就是 CM 的新实现**，独立控制器不再存在。终点命令
-直接发 `/cartesian_motion_controller/target`（CM 默认可打断，OtgStream 自目标刹停/保持）。
+直接发 `/cartesian_motion_controller/target`（CM 默认可打断；停发 = 收敛到最后目标保持，2026-10-10 统一语义）。
 决策记录见 `docs/architecture/hardware_framework_design.md` §16.4/§16.6。
 
 ## 工具节点

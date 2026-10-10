@@ -27,10 +27,9 @@ IDLE ──首条消息──> LIVE ──阈值拍无变化──> STALE
 
 ## 消费者
 
-- `unistackbot_controller` JointStreamController (`~/command` 流, hold 档线性减速 /
-  ruckig 档 OTG 刹停)
-- `unistackbot_controller` CartesianMotionController (`~/target` 流, 关节空间线性减速 +
-  `status.stream_stale` 置位; 默认关——`--once` 单发目标是合法用法)
+- 历史消费者：`unistackbot_controller` JS/CM 断流受控减速（0c）——**2026-10-10 断流
+  语义统一后该机制删除，链上已无消费者**；组件保留为通用原语
+  （rt 链基准 bench 在用；自然归属=真机总线侧反馈帧看门狗）
 
 ## 测试
 

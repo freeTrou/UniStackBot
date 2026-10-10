@@ -28,9 +28,6 @@ controller_interface::CallbackReturn JointStreamController::on_init()
 	auto_declare<double>("max_acceleration", max_acceleration_);
 	auto_declare<double>("max_jerk", max_jerk_);
 	auto_declare<std::string>("robot_description", "");
-	// 断流受控减速 (0c): 0=关闭; ms→周期数在首拍校准 (Humble: configure 期取不到 update_rate)
-	auto_declare<double>("stale_timeout_ms", 0.0);
-	auto_declare<double>("stale_decel_ms", 200.0);
 	// 应用命令观测面 (~/applied_command): 默认关 —— 透传原则, 观测不默认占资源
 	auto_declare<bool>("observe_applied_command", false);
 	return controller_interface::CallbackReturn::SUCCESS;
@@ -91,12 +88,6 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 	cmd_.assign(joint_names_.size(), 0.0);
 	target_.assign(joint_names_.size(), 0.0);
 
-	// StaleWatch: 存 ms 配置, 周期数首拍校准
-	stale_ms_cfg_ = get_node()->get_parameter("stale_timeout_ms").as_double();
-	stale_decel_ms_cfg_ = get_node()->get_parameter("stale_decel_ms").as_double();
-	stale_cycles_ = 0u;
-	stale_decel_cycles_ = 1u;
-
 	// 观测面 (可选): 全率发布插值后的应用命令 (与 CM status 同款 RealtimePublisher)
 	observe_applied_ = get_node()->get_parameter("observe_applied_command").as_bool();
 	if (observe_applied_)
@@ -116,12 +107,8 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 		ULOG_INFO("%s: 应用命令观测 ~/applied_command @全率 (tryPublish, 丢拍可接受)",
 			kPluginName);
 	}
-	watch_ = unistackbot_common::StaleWatch(0u);
 	rate_calibrated_ = false;
 	period_n_ = 0;
-	prev_cmd_.assign(joint_names_.size(), 0.0);
-	vel_.assign(joint_names_.size(), 0.0);
-	decel_rate_.assign(joint_names_.size(), 0.0);
 
 	// ruckig 档: OtgStream 装配 (编译期 16 上限, 运行期用前 n 轴)
 	if (interpolation_ == Interpolation::RUCKIG)
@@ -234,11 +221,6 @@ controller_interface::CallbackReturn JointStreamController::on_activate(
 		for (std::size_t i = 0; i < n; ++i) {q[i] = cmd_[i];}
 		otg_.reset(q);   // 从当前位重规划 (清旧轨迹)
 	}
-	watch_.reset();   // 重激活不继承断流态 (IDLE 起步, 首条新命令重新 LIVE)
-	was_stale_ = false;
-	prev_cmd_ = cmd_;
-	std::fill(vel_.begin(), vel_.end(), 0.0);
-	std::fill(decel_rate_.begin(), decel_rate_.end(), 0.0);
 	ULOG_INFO("%s: 激活 (%zu 关节, 命令保持)", kPluginName, n);
 	return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -295,11 +277,6 @@ controller_interface::return_type JointStreamController::update(
 			{
 				step_limits_[i] = vmax_[i] / hz;
 			}
-			stale_cycles_ = (stale_ms_cfg_ > 0.0)
-				? static_cast<uint32_t>(stale_ms_cfg_ * hz / 1000.0) : 0u;
-			stale_decel_cycles_ = (stale_decel_ms_cfg_ > 0.0)
-				? static_cast<uint32_t>(std::max(stale_decel_ms_cfg_ * hz / 1000.0, 1.0)) : 1u;
-			watch_ = unistackbot_common::StaleWatch(stale_cycles_);
 			if (interpolation_ == Interpolation::RUCKIG)
 			{
 				// otg dt 校准 (Ruckig 定长数组, init 无堆分配)
@@ -312,9 +289,9 @@ controller_interface::return_type JointStreamController::update(
 				lim.max_jerk.fill(max_jerk_);
 				otg_ready_ = otg_.init(1.0 / hz, lim, 0.3);
 				// init 会清 initialized_ (OtgStream 契约: init 后必须 reset 才有安全基准)
-				// —— 不重锚 = 校准后 update 恒 Hold = ruckig 永久冻结 (2026-09-23 A/B 实测
-				// 实锤, 激活首 32ms 后死; F6 的 ruckig 刹停从冻结态出发属空洞通过)。
-				// 以当前命令位重锚, v/a 归零 —— 32ms 窗口内速度微小, 连续性无损。
+				// —— 不重锚 = 校准后 update 恒 Hold = ruckig 永久冻结 (2026-09-23 A/B
+				// 实测实锤, 激活首 32ms 后死)。以当前命令位重锚, v/a 归零 —— 32ms
+				// 窗口内速度微小, 连续性无损。
 				std::array<double, unistackbot_interface::kMaxJoints> q{};
 				for (std::size_t i = 0; i < n; ++i)
 				{
@@ -324,83 +301,21 @@ controller_interface::return_type JointStreamController::update(
 			}
 			if (hz_auth > 0)
 			{
-				ULOG_INFO("%s: update_rate %.0f Hz (权威参数; 步长 %.4f rad/拍, 断流判定 %u 拍)",
-					kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0], stale_cycles_);
+				ULOG_INFO("%s: update_rate %.0f Hz (权威参数; 步长 %.4f rad/拍)",
+					kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
 			}
 			else
 			{
 				// 兜底路径必须显眼 (中位数可被激活期 µs period 污染 = 35 倍减速 bug 根)
 				ULOG_WARN("%s: update_rate %.0f Hz (实测中位数兜底 —— yaml 缺 /**.update_rate;"
-					" 步长 %.4f rad/拍, 断流判定 %u 拍)",
-					kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0], stale_cycles_);
+					" 步长 %.4f rad/拍)",
+					kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
 			}
 		}
-	}
-
-	// ⓪ 断流看门狗 (值通道 seq 零拷贝轮询; stale_cycles_=0 → 恒 LIVE 零成本)。
-	//    过期 → 受控减速到停 (设计 §6.1: 与命令断流同路径, 不新增安全机制)。
-	//    速度估计 = 上一完整周期的实际命令步长 (快照口径: 各分支零维护, 冻结拍自然归零)
-	for (std::size_t i = 0; i < n; ++i) {vel_[i] = cmd_[i] - prev_cmd_[i];}
-	prev_cmd_ = cmd_;
-	const auto wst = watch_.tick(rt_cmd_.seq());
-	const bool stale = (wst == unistackbot_common::StaleWatch::State::STALE);
-	if (stale && !was_stale_)
-	{
-		++stale_events_;
-		ULOG_WARN("%s: 命令断流 (静默 %u 拍), 受控减速刹停 (%u 拍线性窗)",
-			kPluginName, watch_.cyclesSinceUpdate(), stale_decel_cycles_);
-		for (std::size_t i = 0; i < n; ++i)
-		{
-			decel_rate_[i] = vel_[i] / static_cast<double>(stale_decel_cycles_);
-		}
-	}
-	else if (!stale && was_stale_)
-	{
-		ULOG_INFO("%s: 命令流恢复", kPluginName);
-	}
-	was_stale_ = stale;
-
-	if (stale)
-	{
-		// ② 受控减速 (提前出口: ①③ 不执行; 速度估计同尾拍口径)
-		if (interpolation_ == Interpolation::RUCKIG && otg_ready_)
-		{
-			// OTG 刹停: 目标 = 当前输出, OtgStream 以内部 v/a/j 状态规划停机轨迹
-			std::array<double, unistackbot_interface::kMaxJoints> tgt{};
-			std::array<double, unistackbot_interface::kMaxJoints> out{};
-			for (std::size_t i = 0; i < n; ++i) {tgt[i] = cmd_[i];}
-			if (otg_.update(tgt, out) ==
-				unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::UpdateResult::Ok)
-			{
-				for (std::size_t i = 0; i < n; ++i) {cmd_[i] = out[i];}
-			}
-		}
-		else
-		{
-			// hold 档: 关节速度线性衰减外推 (限位 clamp 保持)
-			for (std::size_t i = 0; i < n; ++i)
-			{
-				if (std::abs(vel_[i]) <= std::abs(decel_rate_[i]))
-				{
-					vel_[i] = 0.0;
-				}
-				else
-				{
-					vel_[i] -= decel_rate_[i];
-				}
-				cmd_[i] = std::clamp(cmd_[i] + vel_[i], q_min_[i], q_max_[i]);
-			}
-		}
-		for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
-		{
-			command_interfaces_[i].set_value(cmd_[i]);
-		}
-		publishApplied();
-		return controller_interface::return_type::OK;
 	}
 
 	// ① 取最新命令 (值通道; 撕裂/无发布 → 沿用旧值 = sp_latest 契约)。
-	//    新消息只**采纳目标** —— 步进在 ③ 每周期执行 (消息率与控制率解耦:
+	//    新消息只**采纳目标** —— 步进在 ② 每周期执行 (消息率与控制率解耦:
 	//    2026-09-21 实测教训, 步进挂在收消息上时 100Hz 流的臂速被钳到
 	//    step×消息率 = vmax/5, 历史上被 hz=1 的巨步长+write 层钳位掩盖)
 	CmdSnapshot snap;
@@ -426,7 +341,7 @@ controller_interface::return_type JointStreamController::update(
 		}
 	}
 
-	// ③ 每周期推进:
+	// ② 每周期推进:
 	//    hold 档 = 周期步长饱和 (速度界 vmax/update_rate, 与消息率无关);
 	//    ruckig 档 = OtgStream 每拍向目标生成参考 (率失配填充 + v/a/j 整形;
 	//    Ok → cmd_ 前进, Hold → 内部已自愈, cmd_ 保持上一拍输出)
@@ -474,7 +389,7 @@ controller_interface::return_type JointStreamController::update(
 		}
 	}
 
-	// ④ 写命令
+	// ③ 写命令
 	for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
 	{
 		command_interfaces_[i].set_value(cmd_[i]);

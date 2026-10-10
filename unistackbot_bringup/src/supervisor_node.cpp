@@ -7,7 +7,7 @@
  * 陈旧检测捕获 (编排层不活跃于控制路径, 它死了不影响链)。
  *
  * 监控面 (最小版):
- *   cm            /cartesian_motion_controller/status: mode/stream_stale/last_result/
+ *   cm            /cartesian_motion_controller/status: mode/last_result/
  *                 timed_out + 话题静默检测 (active 后 >2s 无帧 = WARN)
  *   joint_states  /joint_states: >1s 无帧 = ERROR (链路核心反馈断流)
  *   ee_state      /ee_state_broadcaster/ee_state: >1s 无帧 = WARN (反馈流降级,
@@ -144,11 +144,6 @@ int main(int argc, char ** argv)
 				st.level = kLevelWarn;
 				st.message = "status 静默 >2s (active 后断流; 上次 mode 见键值)";
 			}
-			else if (cm_last.stream_stale)
-			{
-				st.level = kLevelWarn;
-				st.message = "目标流断流受控减速中 (stream_stale=true)";
-			}
 			else if (cm_last.mode == CartesianMotionStatus::DEGRADED)
 			{
 				st.level = kLevelWarn;
@@ -162,7 +157,6 @@ int main(int argc, char ** argv)
 			st.values.push_back(kv("mode", cmModeName(cm_last.mode)));
 			st.values.push_back(kv("last_result", std::to_string(cm_last.last_result)));
 			st.values.push_back(kv("timed_out", cm_last.timed_out ? "1" : "0"));
-			st.values.push_back(kv("stream_stale", cm_last.stream_stale ? "1" : "0"));
 			st.values.push_back(kv("position_error_m", std::to_string(cm_last.position_error)));
 			msg.status.push_back(st);
 		}

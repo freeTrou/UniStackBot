@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""故障注入测试床 F2/F3/F5 (毒命令流 → write 防线应拦) + F1 (断流保持) + F6 (断流受控减速) + F7 (mimic 耦合)。
+"""故障注入测试床 F2/F3/F5 (毒命令流 → write 防线应拦) + F1 (断流保持) + F6 (断流语义: 收敛最后帧+恢复受界) + F7 (mimic 耦合)。
 
 链参数化 (2026-09-21, 批次3): 关节表/阈值经环境变量注入 (由 fault_injection.sh 按
 --chain 设置), 默认值 = mock xarm7 (向后兼容):
@@ -8,7 +8,6 @@
   BED_VMAX      F5 速度界基数 rad/s (默认 3.14 = xarm7)
   BED_F6_TARGET F6 流目标 (首关节; 默认 5.0)
   BED_F6_STREAM F6 流时长 s (默认 1.0)
-  BED_F6_HI/LO  F6 终值区间 (默认 4.5/2.0)
   BED_MIMIC     mimic 断言 "master:follower:coef,..." (默认空 = 跳过 F7)
 
 前置: 链已起且 joint_stream_controller active。"""
@@ -21,8 +20,6 @@ JOINTS = (os.environ.get('BED_JOINTS') or ','.join(f'joint{i}' for i in range(1,
 VMAX = float(os.environ.get('BED_VMAX', '3.14'))
 F6_TARGET = float(os.environ.get('BED_F6_TARGET', '5.0'))
 F6_STREAM = float(os.environ.get('BED_F6_STREAM', '1.0'))
-F6_HI = float(os.environ.get('BED_F6_HI', '4.5'))
-F6_LO = float(os.environ.get('BED_F6_LO', '2.0'))
 MIMIC = [s for s in os.environ.get('BED_MIMIC', '').split(',') if s]
 N = len(JOINTS)
 
@@ -122,22 +119,44 @@ post = dict(latest)
 drift = max(abs(post.get(k, 0) - pre.get(k, 0)) for k in JOINTS)
 results.append(('F1 断流2s漂移', f'漂移 {drift:.5f} rad', drift < 0.005))
 
-# ---- F6 断流受控减速 (0c): 流中途死 → 刹停, 不冲向最后目标 ----
-# 账: 流 F6_STREAM 秒 @vmax → 位姿 p0; 断流 200ms 判定 + 200ms 线性减速
-#     → 终值 ≤ p0 + vmax*(0.2+0.1) + 容差; F6_HI 即证明没冲到目标, F6_LO 证明动过
+# ---- F6 断流语义 (2026-10-10 统一): 流中途停 → 收敛到最后帧保持; 恢复大跳受速度界 ----
+# 账: 流 F6_STREAM 秒 (末帧=目标) → 停发; 臂应收敛到目标 (不 shortfall) 并静止;
+#     随后单发远目标 —— 恢复路径与任何大跳变同源, 受 vmax 界 (超限保护兜底, 无跳变)
 send([F6_TARGET] + [0.0] * (N - 1), dur=F6_STREAM, hz=100)
-time.sleep(2.5)
+time.sleep(6.0)   # ruckig 收敛余量 (xarm7 全程 ~2.2s, 动力学链更慢)
 rclpy.spin_once(node, timeout_sec=0.1)
 p1 = dict(latest)
 time.sleep(0.8)
 rclpy.spin_once(node, timeout_sec=0.1)
 p2 = dict(latest)
 still = max(abs(p2.get(k, 0) - p1.get(k, 0)) for k in JOINTS)
-final1 = p2.get(JOINTS[0], 0.0)
-results.append(('F6 断流刹停-静止', f'0.8s 再漂移 {still:.5f} rad', still < 0.005))
-results.append((f'F6 断流刹停-未冲目标',
-                f'{JOINTS[0]} 终值 {final1:.3f} rad (<{F6_HI}, 目标{F6_TARGET}; >{F6_LO} 动过)',
-                final1 < F6_HI and final1 > F6_LO))
+final1 = p1.get(JOINTS[0], 0.0)
+conv = abs(final1 - F6_TARGET)
+results.append((f'F6 断流收敛-到位',
+                f'{JOINTS[0]} 终值 {final1:.3f} rad (目标 {F6_TARGET}, 差 {conv:.4f})',
+                conv < 0.02))
+results.append(('F6 断流收敛-静止', f'0.8s 再漂移 {still:.5f} rad', still < 0.005))
+
+# 恢复受界: 单发远目标 (回零), 1s 窗最大关节速度 ≤ vmax×1.3+0.1 (超限保护兜底)
+send([0.0] * N, dur=0.01, hz=100)   # 单帧即目标 (点流语义: 一帧=最新终点)
+rclpy.spin_once(node, timeout_sec=0.1)
+prev = dict(latest)
+t_prev = time.time()
+vmax_obs = 0.0
+t0 = time.time()
+while time.time() - t0 < 1.0:
+    time.sleep(0.02)
+    rclpy.spin_once(node, timeout_sec=0.01)
+    cur = dict(latest)
+    dt = time.time() - t_prev
+    if dt > 1e-4:
+        for k in JOINTS:
+            if k in prev and k in cur:
+                vmax_obs = max(vmax_obs, abs(cur[k] - prev[k]) / dt)
+    prev = cur
+    t_prev = time.time()
+bound = VMAX * 1.3 + 0.1
+results.append(('F6 恢复速度受界', f'max {vmax_obs:.2f} rad/s (界 {bound:.2f})', vmax_obs < bound))
 
 # ---- F7 mimic 耦合 (可选, 仿真侧原生跟随: mujoco equality): 从动=系数×主 ----
 if MIMIC:

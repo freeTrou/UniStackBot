@@ -22,7 +22,7 @@ ros2 launch unistackbot_bringup control.launch.py robot:=<机型>
 
 # 回归测试（仓库根，自包含）
 bash test/smoke_sim_control.sh     # /sim_control 服务语义深测（piper 关节表，断言含 mimic/限位拒绝/reset）
-bash test/fault_injection.sh       # 故障注入测试床：F1 断流 / F2 NaN / F3 限位 / F5 超速 / F6 断流受控减速 / F7 mimic
+bash test/fault_injection.sh       # 故障注入测试床：F1 断流 / F2 NaN / F3 限位 / F5 超速 / F6 断流收敛+恢复受界 / F7 mimic
                                    # （--chain mock|mujoco 可选；write 防线的验收床）
 ```
 

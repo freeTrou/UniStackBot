@@ -56,4 +56,4 @@ ros2 run unistackbot_demo demo_teleop_joint.py                # ④ 键盘遥操
 ## 前置
 
 三链任一已启动（`control` / `ign` / `mujoco` launch）且 `joint_stream_controller` active。
-关节 demo 收尾自动走 JS 断流受控减速（链上 yaml `stale_timeout_ms`）。
+关节 demo 收尾停发命令，臂按断流语义（2026-10-10 统一）收敛到最后目标保持。

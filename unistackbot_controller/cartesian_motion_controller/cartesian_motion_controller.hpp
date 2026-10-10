@@ -16,7 +16,6 @@
 #include "rt_tune/rt_tune.hpp"
 #include "ruckig/otg_stream.hpp"
 #include "sp_latest/sp_latest.hpp"
-#include "stale_watch/stale_watch.hpp"
 #include "unistackbot_interface/joint_capacity.hpp"
 #include "unistackbot_interface/msg/cartesian_control.hpp"
 #include "unistackbot_interface/msg/cartesian_motion_status.hpp"
@@ -164,13 +163,11 @@ private:
 	unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints> otg_;
 	bool otg_ready_{false};
 
-	// ---- StaleWatch 断流受控减速 (0c; 断流 = OtgStream 自目标刹停 C2) ----
-	double stale_ms_cfg_{0.0};
-	double stale_decel_ms_cfg_{200.0};
-	uint32_t stale_cycles_{0};
-	unistackbot_common::StaleWatch watch_;
-	bool stream_stale_{false};
-	bool was_stale_{false};
+	// ---- 断流语义 (2026-10-10 统一, 用户裁决) ----
+	// 无专门机制: ~/target 停发 = 最后一条消息的最新终点仍是目标, 每拍重规划
+	// 收敛到它保持; 长静默后恢复的大跳变与任何大跳变同源, 由通用超限防线
+	// 兜底 (OtgStream v/a/j 界 + max_target_jump + 步长钳位)。总线真死由
+	// 驱动器看门狗兜底 —— 控制器不感知"流"的存在。
 	bool rate_calibrated_{false};         // update_rate 定源 (权威参数优先, 见 cpp)
 	static constexpr uint32_t kPeriodSamples = 16u;
 	double period_samples_[kPeriodSamples] = {0};

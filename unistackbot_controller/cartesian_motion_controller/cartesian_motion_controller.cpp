@@ -113,9 +113,6 @@ controller_interface::CallbackReturn CartesianMotionController::on_init()
 	auto_declare<int>("degraded_n", degraded_n_);
 	auto_declare<double>("converge_pos_tol", converge_pos_tol_);
 	auto_declare<double>("converge_rot_tol", converge_rot_tol_);
-	// 断流受控减速 (0c): 0=关闭 (默认, --once 单发目标语义); 流式跟踪场景 yaml 开启
-	auto_declare<double>("stale_timeout_ms", 0.0);
-	auto_declare<double>("stale_decel_ms", 200.0);
 	// Humble: controller_manager 把自身 robot_description 以参数覆盖注入控制器节点
 	auto_declare<std::string>("robot_description", "");
 	return CallbackReturn::SUCCESS;
@@ -257,11 +254,6 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 		return CallbackReturn::ERROR;
 	}
 	step_limits_ = vmax_;   // 占位; 首拍定源后为 vmax/hz
-	// StaleWatch: 存 ms 配置, 周期数首拍定源
-	stale_ms_cfg_ = get_node()->get_parameter("stale_timeout_ms").as_double();
-	stale_decel_ms_cfg_ = get_node()->get_parameter("stale_decel_ms").as_double();
-	stale_cycles_ = 0u;
-	watch_ = unistackbot_common::StaleWatch(0u);
 	rate_calibrated_ = false;
 	period_n_ = 0;
 	otg_ready_ = false;
@@ -465,9 +457,6 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	{
 		cmd_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
 	}
-	watch_.reset();   // 重激活不继承断流态
-	stream_stale_ = false;
-	was_stale_ = false;
 	// 重激活防重放 (SpLatest 残值先例): SpLatest 留着上一次激活期的解算结果,
 	// 预读残值记 seq 水位并弃用 —— 重激活不追陈旧目标 (臂可能已被别处动过)
 	SolvedTarget residual;
@@ -540,9 +529,6 @@ controller_interface::return_type CartesianMotionController::update(
 			{
 				step_limits_[i] = vmax_[i] / hz;
 			}
-			stale_cycles_ = (stale_ms_cfg_ > 0.0)
-				? static_cast<uint32_t>(stale_ms_cfg_ * hz / 1000.0) : 0u;
-			watch_ = unistackbot_common::StaleWatch(stale_cycles_);
 			// OTG 输出级装配 (§16.6): vmax=URDF 单一事实源; a/j=机型资产;
 			// max_target_jump 0.3 = 关节目标跳变容忍 (每条消息一解, 分支翻转界)
 			unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::Limits lim;
@@ -579,23 +565,7 @@ controller_interface::return_type CartesianMotionController::update(
 	CartesianPose meas;
 	const bool meas_ok = fk_->fk(q_meas_, meas, fk_scratch_);
 
-	// ② 断流看门狗 (解算通道 seq 零拷贝轮询; stale_cycles_=0 → 恒 LIVE)。
-	//     断流处置 = OtgStream 自目标刹停 (C2; JS ruckig 档同款) —— 旧线性减速窗机制
-	//     随速度估计族 (vel_/decel_rate_) 一并退役
-	const auto wst = watch_.tick(solved_ch_.seq());
-	stream_stale_ = (wst == unistackbot_common::StaleWatch::State::STALE);
-	if (stream_stale_ && !was_stale_)
-	{
-		ULOG_WARN("cm: ~/target 断流 (静默 %u 拍), OtgStream 自目标刹停 (C2)",
-			watch_.cyclesSinceUpdate());
-	}
-	else if (!stream_stale_ && was_stale_)
-	{
-		ULOG_INFO("cm: ~/target 流恢复");
-	}
-	was_stale_ = stream_stale_;
-
-	// ③ 取最新解算 (值通道; 撕裂/无发布 → read false 沿用旧值)。HOLD 期间新目标被
+	// ② 取最新解算 (值通道; 撕裂/无发布 → read false 沿用旧值)。HOLD 期间新目标被
 	//     忽略 (事件通道语义: 冻结就是冻结); 失败载荷保持上一关节终点 (连续性根)
 	const bool hold = control_mode_.load(std::memory_order_acquire) ==
 		unistackbot_interface::msg::CartesianControl::HOLD;
@@ -632,7 +602,7 @@ controller_interface::return_type CartesianMotionController::update(
 				? unistackbot_interface::msg::CartesianMotionStatus::DEGRADED
 				: unistackbot_interface::msg::CartesianMotionStatus::TRACKING));
 
-	// ④ 输出级: OTG 塑形 → 安全钳位 → 写接口。定源前 (32ms 窗) 保持命令。
+	// ③ 输出级: OTG 塑形 → 安全钳位 → 写接口。定源前 (32ms 窗) 保持命令。
 	if (!otg_ready_)
 	{
 		for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
@@ -644,10 +614,11 @@ controller_interface::return_type CartesianMotionController::update(
 		return controller_interface::return_type::OK;
 	}
 	{
-		// 目标选择: HOLD/断流/无解算目标/FK 异常 → 自目标 (= 保持/刹停, C2 停在原地);
-		// 正常 → 最新关节终点 goal_ (每拍重规划 = 可打断原生语义, §16.6)
+		// 目标选择: HOLD/无解算目标/FK 异常 → 自目标 (= 保持, C2 停在原地);
+		// 正常 → 最新关节终点 goal_ (每拍重规划 = 可打断原生语义, §16.6)。
+		// ~/target 停发不是状态: goal_ 保持, 臂收敛到最后命令的位姿 (断流语义统一 2026-10-10)
 		std::array<double, unistackbot_interface::kMaxJoints> tgt{};
-		const bool servo = !hold && !stream_stale_ && have_goal_ && meas_ok;
+		const bool servo = !hold && have_goal_ && meas_ok;
 		if (servo)
 		{
 			tgt = goal_;
@@ -749,7 +720,6 @@ void CartesianMotionController::publishStatusRt(
 	}
 	m.min_sigma = last_min_sigma_;
 	m.timed_out = last_timed_out_;
-	m.stream_stale = stream_stale_;
 	m.last_result = last_result_;
 	if (meas_ok)
 	{

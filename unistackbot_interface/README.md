@@ -16,7 +16,7 @@
 
 - `JointCommand.msg`：关节点流命令（CSP/CSV/CST/MIT 四模式 + `joint_names` 对名；消费者 reliable+KeepLast(1)）
 - `CartesianControl.msg`：CM 事件通道（TRACKING/HOLD）
-- `CartesianMotionStatus.msg`：CM 状态遥测（误差/min_sigma/结果码/stream_stale，20Hz）
+- `CartesianMotionStatus.msg`：CM 状态遥测（误差/min_sigma/结果码，20Hz）
 - 挂账：`EeState.msg` 待旋转表示决策后加入（加并行字段不破坏消费者）
 
 测试（g++ 直编，不进 colcon）：`g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Iinclude test_contract.cpp -o /tmp/test_interface && /tmp/test_interface`

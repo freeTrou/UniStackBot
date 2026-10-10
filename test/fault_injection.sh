@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 故障注入测试床 (阶段0b, 2026-09-20; 0c 增 F6; 批次3 增 --chain + F7 mimic;
 # 2026-09-22 机型参数化: --robot 开放, 阈值账按机型/关节集按 机型×链 组合)。
-# 场景: F1 断流保持 / F2 NaN命令 / F3 限位外 / F5 超速 / F6 断流受控减速 / F7 mimic(mujoco piper)
+# 场景: F1 断流保持 / F2 NaN命令 / F3 限位外 / F5 超速 / F6 断流收敛+恢复受界 / F7 mimic(mujoco piper)
 #       (F4 状态跳变由 /sim_control set_joint_state 服务测试覆盖, 见 smoke_sim_control.sh)。
 # 前置: colcon build + 本机 DDS 配置 (~/cyclonedds.xml)。
 # 用法: bash test/fault_injection.sh --robot <piper|xarm7> [--chain mock|mujoco]
@@ -28,12 +28,11 @@ done
 
 # ---- 阈值账 (按机型) ----
 case "$ROBOT" in
-	piper)  # vmax 5.0; joint1 限位 ±2.618 → F6 目标 2.4 流 0.1s(≈0.5rad)
-	        # + 刹停 ≤0.5+5.0×0.3=2.0 → 区间 (0.8, 2.2)
-		export BED_VMAX=5.0 BED_F6_TARGET=2.4 BED_F6_STREAM=0.1 BED_F6_HI=2.2 BED_F6_LO=0.8
+	piper)  # vmax 5.0; joint1 限位 ±2.618 → F6 目标 2.4 流 0.1s → 断流后收敛到 2.4 保持
+		export BED_VMAX=5.0 BED_F6_TARGET=2.4 BED_F6_STREAM=0.1
 		;;
-	xarm7)  # vmax 3.14; F6 目标 5.0 流 1.0s(≈3.1rad) + 刹停 ≤3.1+0.9 → <4.5
-		export BED_VMAX=3.14 BED_F6_TARGET=5.0 BED_F6_STREAM=1.0 BED_F6_HI=4.5 BED_F6_LO=2.0
+	xarm7)  # vmax 3.14; F6 目标 5.0 流 1.0s → 断流后收敛到 5.0 保持
+		export BED_VMAX=3.14 BED_F6_TARGET=5.0 BED_F6_STREAM=1.0
 		;;
 	*) echo "未知机型 '$ROBOT' (piper|xarm7)"; exit 2 ;;
 esac

@@ -43,7 +43,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import JointState
 from unistackbot_interface.msg import JointCommand
 
-DEADMAN_S = 0.15          # 重复续命窗口 (< JS stale_timeout 200ms)
+DEADMAN_S = 0.15          # 重复续命窗口 (松键判定; 停流=收敛最后目标保持)
 FRESH_STREAM_S = 0.45     # 新按下保底发流窗 (覆盖 OS 键重复初始延迟 ~0.3-0.6s)
 JS_SILENT_S = 1.0         # /joint_states 静默超时
 LIMIT_INSET = 0.98        # 目标钳位保留 2% 内缩 (gz 链限位冻结规避, demo_motion 同款)

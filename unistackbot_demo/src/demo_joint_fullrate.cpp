@@ -15,7 +15,7 @@
 // 运动内容 (2026-09-24 用户需求: >10s + 大幅 + 有快有慢): 实测位 → 85% → 15% →
 //   85% → 回实测位 (限位区间百分比), 四段快慢交替 (2.0/6.0/2.5/4.0s ≈14.5s);
 //   duration=总时长, 各段按设计占比缩放 (快慢对比保持); 段内正弦过渡。
-// 收尾: 停流即走 JS 断流受控减速 (yaml stale_timeout)。
+// 收尾: 停流即按断流语义收敛到最后目标保持 (2026-10-10 统一, 无专门机制)。
 
 #include <algorithm>
 #include <chrono>
@@ -502,7 +502,7 @@ int main(int argc, char ** argv)
 				const double elapsed =
 					std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 				std::printf("结束: %lu 条 / %.2fs = 实际 %.1f Hz (名义 %.1f Hz, 达成率 %.1f%%)。\n"
-					"JS 断流受控减速收尾 (链上 yaml stale_timeout 生效)\n",
+					"收尾: 停流, JS 收敛到最后目标保持 (断流语义统一 2026-10-10)\n",
 					static_cast<unsigned long>(count), elapsed, count / std::max(elapsed, 1e-9),
 					hz, 100.0 * count / std::max(hz * elapsed, 1e-9));
 				rclcpp::shutdown();

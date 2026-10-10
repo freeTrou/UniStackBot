@@ -70,7 +70,6 @@ ros2 control list_hardware_components
 | converged | 误差进容差 |
 | position_error / rotation_error | 位置 [m] / 姿态 [rad] 误差 |
 | min_sigma | 雅可比最小奇异值（接近 0 = 接近奇异） |
-| stream_stale | ~/target 断流标志（受控减速中/已停） |
 | timed_out / last_result | 求解预算耗尽 / IkResult 结果码 |
 | current_pose / target_pose | FK 当前位姿 / 当前采纳目标 |
 

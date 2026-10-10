@@ -22,10 +22,9 @@ joint_stream_controller:
     interpolation: ruckig
     max_acceleration: 5.0
     max_jerk: 20.0
-    # 断流语义 (2026-10-09 用户裁决): 不主动刹停, 收敛到最后收到的点保持
-    # —— 0c 受控减速退役; 下方两行留档
-    # stale_timeout_ms: 200.0
-    # stale_decel_ms: 200.0
+    # 断流语义 (2026-10-10 统一, 无参数无机制): ~/command 停发 = 最后一帧即当前
+    # 目标, 总线节拍照常下发, 臂收敛到它保持; 恢复的大跳变由通用超限防线兜底
+    # (ruckig v/a/j 界 + hold 档步长饱和 + 限位), 总线真死由驱动器看门狗兜底
     observe_applied_command: true   # 观测面: ~/applied_command 500Hz 插值后命令 (录包三层对账)
 
 cartesian_motion_controller:
