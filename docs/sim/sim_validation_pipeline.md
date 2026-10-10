@@ -161,10 +161,9 @@ ros2 run unistackbot_bringup chain_clean.sh || exit 1   # exit 0=干净 (杀三�
 #    spawner joint_state_broadcaster joint_stream_controller ee_state_broadcaster
 ros2 launch unistackbot_bringup control.launch.py robot:=piper use_rviz:=true
 
-# ② 起录包 (四路命令流+状态全进包; 先于一切演示, 时间基准)
-ros2 bag record -s mcap /joint_states /joint_stream_controller/command \
-    /cartesian_motion_controller/status /cartesian_motion_controller/target /tf \
-    -o /tmp/piper_first_mock
+# ② 起录包 (规范 v1: record_verify.sh —— mcap+标准话题集+sidecar; CM 域任务加录 status/target)
+ros2 run unistackbot_tool record_verify.sh piper_first_mock --robot piper --chain mock \
+    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/target --extra /tf
 
 # ③ 演示 1a 关节慢流 (50Hz 点流, ~16s) —— 等脚本退出 (断流减速收尾) 再下一条;
 #    结束行自报名义/实际达成率 (rclpy 低频域校准旁证)
@@ -192,10 +191,9 @@ ros2 run unistackbot_demo demo_cartesian.py --pattern reject
 # ① 起链 (headless=录制链不渲染防污染; 若复用默认 GUI 先显式关) —— 等 3 行 "Configured and activated"
 ros2 launch unistackbot_mujoco mujoco.launch.py robot:=piper headless:=true
 
-# ② 起录包 (mujoco 必带 /clock —— 跨链按仿真时间对齐)
-ros2 bag record -s mcap /joint_states /joint_stream_controller/command \
-    /cartesian_motion_controller/status /cartesian_motion_controller/target /tf /clock \
-    -o /tmp/piper_first_mujoco
+# ② 起录包 (规范 v1: /clock 已在 record_verify.sh 标准集内, mujoco 跨链按仿真时间对齐)
+ros2 run unistackbot_tool record_verify.sh piper_first_mujoco --robot piper --chain mujoco \
+    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/target --extra /tf
 
 # ③ 演示 1a 关节慢流 —— 等脚本退出再下一条
 ros2 run unistackbot_demo demo_motion.py
@@ -225,10 +223,9 @@ ros2 run unistackbot_gazebo gz_clean.sh
 # ① 起链 (gui 关防渲染污染) —— 等 3 行 "Configured and activated"
 ros2 launch unistackbot_gazebo ign.launch.py robot:=piper gui:=false
 
-# ② 起录包 (带 /clock)
-ros2 bag record -s mcap /joint_states /joint_stream_controller/command \
-    /cartesian_motion_controller/status /cartesian_motion_controller/target /tf /clock \
-    -o /tmp/piper_first_gz
+# ② 起录包 (规范 v1, /clock 在标准集内)
+ros2 run unistackbot_tool record_verify.sh piper_first_gz --robot piper --chain gz \
+    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/target --extra /tf
 
 # ③ 演示 1a 关节慢流 —— 等脚本退出再下一条
 ros2 run unistackbot_demo demo_motion.py

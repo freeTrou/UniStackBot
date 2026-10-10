@@ -72,7 +72,7 @@ All control chains spawn `joint_state_broadcaster` + `joint_stream_controller` (
 
 - 关节空间: `/joint_stream_controller/command`（`unistackbot_interface/JointCommand`, reliable+KeepLast(1), 点流语义——每条消息是"最新目标"）。仿真链（position 命令接口）只消费 CSP 模式。关节按 `joint_names` 字段对名映射，必须列全（**mujoco 链只列 7 个主关节**——手指 passive, 见 `unistackbot_mujoco/README.md` 差异表）。
 - 笛卡尔空间: `ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped ...`（base 系）。
-- 曲线分析录包: `ros2 bag record -s mcap /joint_states /joint_stream_controller/command /cartesian_motion_controller/{status,target} /tf`。
+- 曲线分析录包: 一律走 `ros2 run unistackbot_tool record_verify.sh <task> --robot <机型> --chain <链>`（规范 v1: mcap 唯一格式 + 标准话题集含 applied_command + sidecar; 手拼 `ros2 bag record` 缺执行侧与元数据, 已废弃）。
 
 双控制器切换 (三条链同款): CM 以 inactive 注册, `ros2 control switch_controllers --deactivate joint_stream_controller --activate cartesian_motion_controller` 接管 (切回反向同理)。Intended workflow (README has the switch table): iterate algorithms on the mock chain, regress each version on Gazebo/MuJoCo, both green = pass.
 
