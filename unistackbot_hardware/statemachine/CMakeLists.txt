@@ -8,12 +8,13 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(unistackbot_protocol REQUIRED)
 
-# 状态机翻译轴 (2026-09-24 拆包): StateTranslator 父类 + UnitreeImTranslator 子类 + 工厂。
-# 零 ROS 依赖, g++ 直编离线测 (见 test/)。加新翻译器 = state_translator_factory.cpp 加一行。
+# 状态机轴 (2026-10-10 重构归位, 同 protocol/bus 组织): NodeSafety 父类 (中立骨架,
+# header-only) + UnitreeImSafety 子类 (MIT 语义) + 工厂。零 ROS 依赖, g++ 直编离线测
+# (见 test/)。加新协议安全机 = node_safety_factory.cpp 注册表加一行。
 add_library(${PROJECT_NAME}
-  src/unitree_im_translator.cpp
-  src/state_translator_factory.cpp
-  src/node_safety.cpp
+  src/unitree_im_safety.cpp
+  src/cia402_safety.cpp
+  src/node_safety_factory.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_include_directories(${PROJECT_NAME} PUBLIC

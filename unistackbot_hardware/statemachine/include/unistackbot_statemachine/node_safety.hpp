@@ -4,94 +4,119 @@
 #include "unistackbot_protocol/protocol_core.hpp"
 #include "unistackbot_statemachine/neutral_state.hpp"
 
-// NodeSafety —— 单节点安全状态机 (2026-09-28, 四态保护模型)。
+// NodeSafety —— 单节点安全状态机父类 (2026-10-10 重构归位, 同 protocol/bus 组织:
+// 父类中立骨架 · 协议子类实现 · 工厂按名创建 · 总线内部调用)。
 //
-// 职责: 跟踪节点状态 + 执行安全流转守卫 + 生成安全命令。
-// 它是**有状态的**（与 StateTranslator 的纯观察不同）——泵每拍喂反馈，
-// NodeSafety 维护状态并回答"能不能使能""怎么安全使能"。
+// **总线内部组件** (用户硬约束): 由总线主站经工厂自建自持, 住泵 RT 循环——每时隙
+// 喂一帧反馈 (update), 内联消费其命令生成 (resolveSlotCmd)。非上层/ROS 侧驱动。
+// RT 纪律: update/命令生成零分配零锁零 syscall; 实例在 start 期创建, 循环期不换。
 //
-// 四态模型:
-//   OFFLINE      无反馈（总线断/电机断电）
-//   DE-ENERGIZED 电机自由（mode=0，人可碰）
-//   ENERGIZED    电机施力（mode=1，按命令走）
-//   FAULT        故障停机（error≠0，需人工清）
+// 父类持有 (协议无关骨架):
+//   - 状态词汇 (NeutralState) 与最近反馈缓存
+//   - 粘性原则: FAULT 不自动离开, 走 request → 协议清帧 → confirm 握手
+//   - 意图请求机制: enable/disable 请求标志 (泵下一拍消费)
+//   - 守卫结构: can_enable / can_clear_fault (按粗态)
+// 子类持有 (协议语义, 随协议同变——三面同变纪律):
+//   - 反馈字段 → 粗态的映射规则 (update)
+//   - 使能/断使能命令生成 (MIT 锚定 kp 等)
 //
-// 安全规则:
-//   ①使能必须锚定实测位（防跳变）
-//   ②故障不可自动清除（防复撞）
-//   ③看不着就不使能（OFFLINE 禁止→ENERGIZED）
-//   ④断使能期间位置追踪不断流（泵持续发停机帧，反馈持续回来）
+// 历史注: 2026-09-24 首版为 StateTranslator (无状态 map_state) 轴; 2026-09-28
+// 并入有状态 NodeSafety 具体类; 2026-10-10 审核定形为父类+子类+工厂 (map_state
+// 双机并存退役——每协议一个映射一份测试)。
+
+#include <cstdint>
 
 namespace unistackbot_statemachine
 {
 
-// 流转结果（显式错误流）
-enum class TransitionResult : std::uint8_t
-{
-	kOk = 0,
-	kRejected,       // 守卫不满足（状态不对/反馈陈旧/有故障）
-	kNoChange,       // 已在目标态
-};
-
 class NodeSafety
 {
 public:
-	// 单节点更新（串口/CAN: 逐节点轮询, 总线循环每时隙喂一帧）
-	void update(const unistackbot_protocol::NodeFeedback &fb);
+	virtual ~NodeSafety() = default;
 
-	// 批量更新（EC: 一次拿到全部从站反馈, 一拍全推进）
-	// nodes 和 fbs 均为定长数组, count = 节点数
-	static void update_batch(NodeSafety *nodes,
-		const unistackbot_protocol::NodeFeedback *fbs, std::size_t count);
+	// ── 协议语义 (子类实现) ──
 
-	// 当前状态
+	// 喂一帧反馈, 推进状态机 (映射规则 = 协议知识)。
+	virtual void update(const unistackbot_protocol::NodeFeedback & fb) = 0;
+
+	// 使能命令: 协议各自的安全使能形态 (MIT=锚定实测位 + 先验 kp/kd)。
+	// 返回值可直接交给 ProtocolCore::encode。
+	[[nodiscard]] virtual unistackbot_protocol::NodeCommand enable_command() const = 0;
+
+	// 断使能命令: 协议各自的安全停机形态 (unitree = mode 0 + 看门狗位)。
+	[[nodiscard]] virtual unistackbot_protocol::NodeCommand disable_command() const = 0;
+
+	// ── 中立骨架 (协议无关) ──
+
+	// 当前粗态 (快照层可在其上按 last_seen 超陈覆盖为 kUnknown——信念撤销, 不改本机)。
 	[[nodiscard]] NeutralState state() const { return state_; }
 
-	// 最近反馈（使能命令用它锚定位置）
-	[[nodiscard]] const unistackbot_protocol::NodeFeedback &last_feedback() const
+	// 最近反馈 (命令生成/锚定的数据源)。
+	[[nodiscard]] const unistackbot_protocol::NodeFeedback & last_feedback() const
 	{
 		return last_fb_;
 	}
 
-	// ── 安全守卫 ──
+	// 能否使能: 守卫 = 在 READY 态 (有新鲜反馈 + 无故障由状态机映射保证)。
+	[[nodiscard]] bool can_enable() const { return state_ == NeutralState::kReady; }
 
-	// 能否安全使能？守卫: 有新鲜反馈 + 无故障
-	[[nodiscard]] bool can_enable() const;
+	// 能否清故障: 只有 FAULT 态需要清。
+	[[nodiscard]] bool can_clear_fault() const { return state_ == NeutralState::kFault; }
 
-	// 能否清除故障？守卫: 当前在 FAULT 态（只有 FAULT 态才需要清）
-	[[nodiscard]] bool can_clear_fault() const;
+	// ── 意图请求 (泵下一拍消费) ──
 
-	// ── 安全命令生成 ──
+	// 请求使能 (仅在 READY 守卫下接受)。
+	void request_enable()
+	{
+		if (can_enable())
+		{
+			enable_req_ = true;
+			disable_req_ = false;
+		}
+	}
 
-	// 使能命令: 锚定实测位（防跳变的核心）
-	// 返回的 NodeCommand 可直接交给 ProtocolCore::encode
-	[[nodiscard]] unistackbot_protocol::NodeCommand enable_command(
-		double lock_kp, double lock_kd) const;
+	// 请求断使能 (OFFLINE 无意义不设)。
+	void request_disable()
+	{
+		if (state_ != NeutralState::kUnknown)
+		{
+			disable_req_ = true;
+			enable_req_ = false;
+		}
+	}
 
-	// 断使能命令: mode=0 + 看门狗位（安全怠速）
-	[[nodiscard]] unistackbot_protocol::NodeCommand disable_command() const;
+	// 请求清故障 (仅 FAULT 态; 过热/过流类不可自动恢复由上层判断后再请求)。
+	void request_fault_clear()
+	{
+		if (can_clear_fault())
+		{
+			fault_clear_req_ = true;
+		}
+	}
 
-	// 故障清除请求标志（泵线程看到后发清故障帧——协议特有操作由协议层处理）
+	[[nodiscard]] bool enable_requested() const { return enable_req_; }
+	[[nodiscard]] bool disable_requested() const { return disable_req_; }
 	[[nodiscard]] bool fault_clear_requested() const { return fault_clear_req_; }
 	void acknowledge_fault_clear() { fault_clear_req_ = false; }
 
-	// ── 状态推进（总线线程或外部触发） ──
+	void clear_requests()
+	{
+		enable_req_ = false;
+		disable_req_ = false;
+	}
 
-	// 请求使能（设置意图标志; 下一拍总线循环消费请求并生成安全命令）
-	void request_enable();
-	// 请求断使能
-	void request_disable();
-	// 请求清故障（只在 FAULT 态有效; 过热/过流类不可自动恢复由上层判断）
-	void request_fault_clear();
-	// 确认故障已清（外部发清故障帧且 error 持续为 0 后调用 → FAULT → READY）
-	void confirm_fault_cleared();
+	// 确认故障已清 (外部发清故障帧且 error 持续为 0 后调用 → FAULT → READY)。
+	// 守卫内建: 非 FAULT 或 error 仍非零时调用无效。
+	void confirm_fault_cleared()
+	{
+		if (state_ == NeutralState::kFault && last_fb_.error_raw == 0u)
+		{
+			state_ = NeutralState::kReady;
+			fault_clear_req_ = false;
+		}
+	}
 
-	// ── 内部 ──
-	[[nodiscard]] bool enable_requested() const { return enable_req_; }
-	[[nodiscard]] bool disable_requested() const { return disable_req_; }
-	void clear_requests();
-
-private:
+protected:
 	NeutralState state_ = NeutralState::kUnknown;
 	unistackbot_protocol::NodeFeedback last_fb_ = {};
 	bool enable_req_ = false;
@@ -100,5 +125,4 @@ private:
 };
 
 }  // namespace unistackbot_statemachine
-
-#endif
+#endif  // UNISTACKBOT_STATEMACHINE__NODE_SAFETY_HPP_

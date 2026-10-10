@@ -109,8 +109,9 @@ unistackbot_interface        通信契约 (msgs/RobotCommand/RobotFeedback/kMaxJ
 unistackbot_hardware/        ★真机域容器 (仿 sim_control 先例: 目录归家, 内含两个 colcon 子包)
   ├─ protocol/    (包 unistackbot_protocol)   codec 轴: ProtocolCore 父类(framespec/encode/decode)
   │               + UnitreeImCore 子类 + 工厂 createProtocolCore —— 已落地, 甲骨文 256 cases 绿
-  ├─ statemachine/(包 unistackbot_statemachine) 状态翻译轴 (2026-09-24 拆轴独立): StateTranslator
-  │               父类(map_state) + UnitreeImTranslator 子类 + NeutralState 四态 + 工厂 —— 9 cases 绿
+  ├─ statemachine/(包 unistackbot_statemachine) 节点安全状态机轴 (2026-09-24 拆轴独立,
+  │               2026-10-10 归位父类+子类+工厂): NodeSafety 父类(中立骨架+粘性+握手)
+  │               + UnitreeImSafety 子类(MIT 映射/锚定使能) + NeutralState 四态 + 工厂 —— 37 cases 绿
   ├─ bus/          (包 unistackbot_bus)   总线交换轴 (2026-09-24 立轴, 同款组织):
   │               MasterBase 父类 (五要素最小集代码化, 纯交换零线程可见) + BusCommand/BusState
   │               自持 (零 ROS 链) + 工厂 (注册表空占位, serial 随泵骨架落地) —— 7 cases 绿

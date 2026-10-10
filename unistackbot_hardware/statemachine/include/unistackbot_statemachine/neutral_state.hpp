@@ -1,5 +1,5 @@
-#ifndef UNISTACKBOT_PROTOCOL__NEUTRAL_STATE_HPP_
-#define UNISTACKBOT_PROTOCOL__NEUTRAL_STATE_HPP_
+#ifndef UNISTACKBOT_STATEMACHINE__NEUTRAL_STATE_HPP_
+#define UNISTACKBOT_STATEMACHINE__NEUTRAL_STATE_HPP_
 
 #include <cstdint>
 
@@ -11,7 +11,7 @@ namespace unistackbot_statemachine
 // 加法只加不改 (接口只加不改纪律)。
 enum class NeutralState : std::uint8_t
 {
-	kUnknown = 0,   // 尚无反馈 (骨架 health 的"无数据"态, 不由 map_state 产生)
+	kUnknown = 0,   // 尚无反馈 (骨架 health 的"无数据"态, 不由映射产生)
 	kReady,         // 停机/可使能
 	kEnabled,       // 执行中
 	kQuickStop,     // 超时保护/急停触发
@@ -33,4 +33,4 @@ enum class NeutralState : std::uint8_t
 
 }  // namespace unistackbot_statemachine
 
-#endif
+#endif  // UNISTACKBOT_STATEMACHINE__NEUTRAL_STATE_HPP_

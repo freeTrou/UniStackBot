@@ -8,7 +8,6 @@
 
 #include "unistackbot_protocol/protocol_core.hpp"
 #include "unistackbot_statemachine/neutral_state.hpp"
-#include "unistackbot_statemachine/state_translator.hpp"
 
 // MasterBase —— 总线主站父类 (2026-09-24 立轴, 同 protocol/statemachine 组织:
 // 父类定接口 · 子类实现 · 工厂按名创建 · 型号↔总线由机器配置显式声明)。
@@ -35,13 +34,15 @@ namespace unistackbot_bus
 constexpr std::size_t kMaxNodes = 16;
 
 // 总线段装配配置 (组合根从机器配置读入)
-// 拓扑类字段无默认 (rate_hz/protocol/translator/endpoint/node_*/ratio——非法即 start 拒绝);
+// 拓扑类字段无默认 (rate_hz/statemachine/endpoint/node_*/ratio——非法即 start 拒绝);
 // 调优类字段有合理默认 (线程/陈旧/波特——部署侧按机型覆盖)。
 struct MasterConfig
 {
 	// ── 拓扑 (必填, 无默认纪律) ──
 	std::string endpoint;    // 总线端点 (串口=设备路径; CAN=接口名; EC=网卡——中立载体)
 	double rate_hz = 0.0;    // 总线拍频 (>0 必填)
+	std::string statemachine;  // 安全状态机名 (工厂 key, 同协议名如 "unitree_im";
+	                           // 主站 start 期经工厂自建 per-node 实例——总线内部组件)
 	std::size_t node_count = 0;                       // 节点表长度
 	std::uint8_t node_id[kMaxNodes] = {};             // 节点总线 ID 表 (定槽)
 	double ratio[kMaxNodes] = {};                     // 每节点减速比 (>0)
@@ -82,13 +83,13 @@ public:
 	virtual ~MasterBase() = default;
 
 	// ── 装配注入 (组合根在 start() 之前调用; 组件不自己创建依赖) ──
-	// 协议内芯与状态翻译器由组合根从工厂创建后注入——总线骨架只消费,
-	// 不知道也不关心底下是哪个协议 (依赖倒置)。
+	// 协议内芯由组合根从工厂创建后注入——总线骨架只消费, 不知道也不关心底下
+	// 是哪个协议 (依赖倒置)。安全状态机不同: 它是**总线内部组件** (住泵 RT 循环,
+	// 每时隙喂反馈/消费命令), 主站 start 期按 cfg.statemachine 名经工厂自建自持。
 	virtual void set_protocol(std::unique_ptr<unistackbot_protocol::ProtocolCore> proto) = 0;
-	virtual void set_translator(
-		std::unique_ptr<unistackbot_statemachine::StateTranslator> translator) = 0;
 
-	// 生命周期: 装配配置并启动 (须先注入 protocol/translator; 任一缺失或非法 → false)
+	// 生命周期: 装配配置并启动 (须注入 protocol + cfg.statemachine 合法;
+	// 任一缺失或非法 → false)
 	[[nodiscard]] virtual bool start(const MasterConfig &cfg) = 0;
 	// 停止并释放 (阻塞到泵线程退出; 安全语义: 帧停 → 驱动器看门狗兜底)
 	virtual void stop() = 0;
@@ -100,6 +101,10 @@ public:
 
 	// 安全面: 急停原子旗 (下一拍生效, 各段按协议广播停)
 	virtual void quick_stop() = 0;
+	// 安全面: 清故障请求旗 (2026-10-10 解除 special() 延后; 下一拍生效)——
+	// 对全部节点置清故障请求, 泵经协议清帧 (unitree: mode 6 + tor 魔数) 发出,
+	// error 持续为 0 后由泵确认握手 (FAULT → READY)。FAULT 粘性不自动恢复。
+	virtual void fault_clear() = 0;
 	// 段级粗态 (worst-of 聚合: 任一节点 FAULT 即 FAULT, 余类推; 无反馈=kUnknown)
 	[[nodiscard]] virtual unistackbot_statemachine::NeutralState state() const = 0;
 
