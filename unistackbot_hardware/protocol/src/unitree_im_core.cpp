@@ -117,17 +117,25 @@ std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap,
 	}
 
 	const double r2 = ratio * ratio;
+	const std::uint8_t mode_bits = cmd.mode == NodeMode::kRun ? 1u
+		: (cmd.mode == NodeMode::kClear ? 6u : 0u);
 	const std::uint8_t mode_byte = static_cast<std::uint8_t>(
 		(node_id & 0x0Fu) |
-		((cmd.mode == NodeMode::kRun ? 1u : 0u) << 4) |
+		(mode_bits << 4) |
 		(cmd.watchdog_enable ? 0x80u : 0x00u));
 
-	// 输出端 → 转子定点 (协议系数)
-	const std::int16_t tau_raw = quantizeI16(cmd.tau / ratio * 2560.0);
+	// 输出端 → 转子定点 (协议系数)。kClear: tor_raw 强制 -256 魔数 (协议清故障
+	// 约定, 调用方 tau 字段不参与)。kp/kd 下限 0 = 协议无负刚度语义 (负值非物理);
+	// 上界不在此设 —— 定点 int 界由 quantizeI16/I32 按实际 ratio 正确推导
+	// (r=32 时 kp 可表达至 ~2621 Nm/rad, 厂商 demo 的 410.7 常量钳位是 38/3
+	// 基准比产物, 不抄: 按实际比值计算值域更大且编解码往返自洽)。
+	const std::int16_t tau_raw = cmd.mode == NodeMode::kClear
+		? static_cast<std::int16_t>(-256)
+		: quantizeI16(cmd.tau / ratio * 2560.0);
 	const std::int16_t spd_raw = quantizeI16(cmd.speed * ratio * 64.0 / (2.0 * kPi));
 	const std::int32_t pos_raw = quantizeI32(cmd.position * ratio * 32768.0 / (2.0 * kPi));
-	const std::int16_t kp_raw = quantizeI16(cmd.kp / r2 * 12800.0);
-	const std::int16_t kd_raw = quantizeI16(cmd.kd / r2 * 51200.0);
+	const std::int16_t kp_raw = quantizeI16((cmd.kp < 0.0 ? 0.0 : cmd.kp) / r2 * 12800.0);
+	const std::int16_t kd_raw = quantizeI16((cmd.kd < 0.0 ? 0.0 : cmd.kd) / r2 * 51200.0);
 
 	buf[0] = kCmdHeader0;
 	buf[1] = kCmdHeader1;
@@ -171,6 +179,7 @@ bool decodeFrame(const std::uint8_t *frame, std::size_t len, NodeFeedback &fb, d
 	fb.speed = static_cast<double>(spd_raw) * 2.0 * kPi / (64.0 * ratio);
 	fb.position = static_cast<double>(pos_raw) * 2.0 * kPi / (32768.0 * ratio);
 	fb.error_raw = getU32(frame + 14);
+	fb.state_raw = 0;   // unitree 无状态字概念 (0=无此约定; 复用缓冲防陈值)
 	const std::uint16_t res_exflag = getU16(frame + 18);
 	fb.warning_raw = static_cast<std::uint8_t>((res_exflag >> 13) & 0x07u);
 	return true;

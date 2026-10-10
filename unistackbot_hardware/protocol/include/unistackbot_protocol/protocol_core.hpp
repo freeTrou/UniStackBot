@@ -8,10 +8,14 @@ namespace unistackbot_protocol
 {
 
 // 中立节点命令模式 (协议原值由内芯翻译: kRun → unitree FOC=1 等)。
+// kClear = 清故障 (2026-10-10 解除 special() 延后): unitree 语义 = mode 6 +
+// tor_raw=-256 魔数 (内芯强制, 调用方只给模式)。厂商 encode 只支持 0/1,
+// 此扩展为加性 (oracle 对拍不受影响)。
 enum class NodeMode : std::uint8_t
 {
 	kStop = 0,
 	kRun = 1,
+	kClear = 6,
 };
 
 // 节点命令 —— MIT 五元组 (输出端物理单位)。
@@ -25,6 +29,9 @@ struct NodeCommand
 	double position = 0.0;         // 目标位置 [rad] (多圈)
 	double kp = 0.0;               // 位置刚度 [Nm/rad]
 	double kd = 0.0;               // 速度刚度 [Nm·s/rad]
+	std::uint32_t cmd_raw = 0;     // 协议原生命令载荷 (细分格命令层, 2026-10-10 加):
+	                               // CiA402=controlword 0x6040 原样 (多步使能链的每步);
+	                               // unitree=忽略 (粗态三模式已够)。内芯各自定义解释。
 };
 
 // 节点反馈 —— 通用物理量 (输出端) + 遥测 + 原始错误码。
@@ -42,6 +49,9 @@ struct NodeFeedback
 	double position = 0.0;           // [rad] 多圈
 	std::uint32_t error_raw = 0;     // 协议位码原样
 	std::uint8_t warning_raw = 0;
+	std::uint32_t state_raw = 0;     // 协议原生态载荷 (细分格层, 2026-10-10 加):
+	                                 // CiA402=statusword 0x6041 原样 (官方七态全信息);
+	                                 // unitree=0 (无此概念, 粗态已够)。0=无此概念约定。
 };
 
 // RX 帧规格 —— Framer 所需的全部协议知识 (定长帧族;
@@ -74,7 +84,7 @@ public:
 
 };
 
-// 注 (2026-09-24 拆包): 状态翻译移居 unistackbot_statemachine 包 (StateTranslator 轴,
+// 注 (2026-09-24 拆包): 状态翻译移居 unistackbot_statemachine 包 (NodeSafety 安全机轴,
 // 同款父类+子类+工厂组织) —— 本包瘦身为纯 codec 轴 (字节 ↔ 物理量)。
 
 }  // namespace unistackbot_protocol

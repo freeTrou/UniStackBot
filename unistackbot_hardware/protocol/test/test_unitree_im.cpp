@@ -9,6 +9,9 @@
  *   ③CRC 表: 生成表前 40 项与厂商发布表逐项比对
  *   ④非 38/3 减速比的换算复式记账 (6010=32 / 5010=16, 厂商 demo 硬编码 38/3 不适用)
  *   ⑤状态映射四态 / 拒收路径 (坏头/坏CRC/坏长度/非法ratio/非有限输入)
+ *   ⑥增益语义与先验: kp/kd 无负刚度钳 0 + 上界=定点 int 界按实际比值推导
+ *     (不抄厂商 38/3 常量钳位) + kp60/kd0.5 例程先验常数 —— 期望字节数学直算
+ *   ⑦清故障帧: mode 6 + tor_raw=-256 魔数 (special() 解除, 2026-10-10)
  *
  * 编译运行 (零 ROS, g++ 直编——"脱开 ROS 现成可用"的可执行证明):
  *   cd unistackbot_protocol/test
@@ -312,6 +315,85 @@ void testStateAndRejects()
 }
 
 // ⑥工厂 + 多态消费: 经基类指针全程使用 (骨架将来就这么消费——接口不是摆设)
+// ⑥增益语义与先验 (2026-10-10): kp/kd 无负刚度 (负值钳 0); 上界=定点 int 界按实际
+// 比值推导, 不设常量钳位 (厂商 demo 的 410.7 钳位是 38/3 基准比产物, r=32 时 kp
+// 本可表达至 ~2621)。期望字节按协议数学直算, 用真机另两档减速比 r=32/16 自证换算。
+void testGainClampAndPrior()
+{
+	UnitreeImCore core;
+	std::uint8_t f[20] = {};
+
+	// kp=60/kd=0.5 (厂商例程先验) @r=32 (6010): raw = 60·12800/1024=750, 0.5·51200/1024=25
+	{
+		NodeCommand cmd;
+		cmd.mode = NodeMode::kRun;
+		cmd.kp = 60.0;
+		cmd.kd = 0.5;
+		check(encodeFrame(f, sizeof(f), cmd, 1, 32.0) == 20, "prior gains encode r=32");
+		check(f[12] == 0xEE && f[13] == 0x02, "kp 60@r=32 -> raw 750 (LE)");
+		check(f[14] == 0x19 && f[15] == 0x00, "kd 0.5@r=32 -> raw 25 (LE)");
+	}
+	// 同先验 @r=16 (5010): raw = 60·12800/256=3000, 0.5·51200/256=100 —— 比值换算自证
+	{
+		NodeCommand cmd;
+		cmd.mode = NodeMode::kRun;
+		cmd.kp = 60.0;
+		cmd.kd = 0.5;
+		check(encodeFrame(f, sizeof(f), cmd, 1, 16.0) == 20, "prior gains encode r=16");
+		check(f[12] == 0xB8 && f[13] == 0x0B, "kp 60@r=16 -> raw 3000 (LE)");
+		check(f[14] == 0x64 && f[15] == 0x00, "kd 0.5@r=16 -> raw 100 (LE)");
+	}
+	// 负刚度钳 0 (协议语义修正)
+	{
+		NodeCommand cmd;
+		cmd.mode = NodeMode::kRun;
+		cmd.kp = -3.0;
+		cmd.kd = -0.1;
+		check(encodeFrame(f, sizeof(f), cmd, 1, 32.0) == 20, "negative gains encode");
+		check(f[12] == 0x00 && f[13] == 0x00 && f[14] == 0x00 && f[15] == 0x00,
+			"negative kp/kd clamp to 0");
+	}
+	// 增益上界=定点 int 界: tau 超界 @r=32 顶格 32767 (raw 界, 非厂商常量值)
+	{
+		NodeCommand cmd;
+		cmd.mode = NodeMode::kRun;
+		cmd.tau = 1.0e6;
+		check(encodeFrame(f, sizeof(f), cmd, 1, 32.0) == 20, "tau overflow encode r=32");
+		check(f[4] == 0xFF && f[5] == 0x7F, "tau clamp to int16 max @r=32");
+	}
+	// 先验常量本身 (消费=机型资产 yaml 装配引用, 内芯不自动填充)
+	check(unistackbot_protocol::unitree_im::kPriorKp == 60.0 &&
+		unistackbot_protocol::unitree_im::kPriorKd == 0.5, "prior constants 60/0.5");
+}
+
+// ⑦清故障帧 (2026-10-10 解除 special() 延后): mode 6 + tor_raw=-256 魔数,
+// 内芯强制 (调用方 tau 不参与); 厂商 encode 只支持 0/1 —— 加性扩展, 无 oracle 对拍。
+// 清帧是命令帧 (FE 头), CRC 自洽 = 重算覆盖区比对 (不能喂 decodeFrame——那是 FC 头反馈)。
+void testClearFrame()
+{
+	UnitreeImCore core;
+	std::uint8_t f[20] = {};
+
+	NodeCommand cmd;
+	cmd.mode = NodeMode::kClear;
+	cmd.watchdog_enable = false;
+	cmd.tau = 123.0;   // 须被忽略 (魔数强制)
+	cmd.position = 0.5;
+	cmd.kp = 10.0;
+	check(encodeFrame(f, sizeof(f), cmd, 3, 32.0) == 20, "clear frame encode");
+	check(f[2] == 0x63, "clear mode bits=6 (高半字节) + id=3");
+	check(f[4] == 0x00 && f[5] == 0xFF, "tor_raw forced -256 (LE)");
+	const std::uint32_t crc = unistackbot_protocol::unitree_im::crc32(f, 16);
+	check(f[16] == static_cast<std::uint8_t>(crc & 0xFF) &&
+		f[17] == static_cast<std::uint8_t>((crc >> 8) & 0xFF) &&
+		f[18] == static_cast<std::uint8_t>((crc >> 16) & 0xFF) &&
+		f[19] == static_cast<std::uint8_t>((crc >> 24) & 0xFF), "clear frame CRC field");
+	// 看门狗位组合: 默认 true → 0xB6
+	cmd.watchdog_enable = true;
+	check(encodeFrame(f, sizeof(f), cmd, 3, 32.0) == 20, "clear frame encode wd");
+	check(f[2] == 0xE3, "clear mode + watchdog bit");
+}
+
 void testFactoryAndInterface()
 {
 	using unistackbot_protocol::ProtocolCore;
@@ -352,7 +434,7 @@ void testFactoryAndInterface()
 		-3.25f, 1.75f, 15.0f, 2.0f);
 	check(ref.size() == 20 && std::memcmp(mine, ref.data(), 20) == 0, "poly encode == oracle");
 
-	// decode + map_state 经接口 (复用②的手造帧)
+	// decode 经接口 (复用②的手造帧)
 	std::uint8_t f[26] = {};
 	f[0] = 0xFC;
 	f[1] = 0xEE;
@@ -378,6 +460,8 @@ int main()
 	testDecodeOracle();
 	testRatios();
 	testStateAndRejects();
+	testGainClampAndPrior();
+	testClearFrame();
 	testFactoryAndInterface();
 	std::printf("%s: %d cases, %d failed\n", g_fail == 0 ? "PASS" : "FAIL", g_case, g_fail);
 	return g_fail == 0 ? 0 : 1;

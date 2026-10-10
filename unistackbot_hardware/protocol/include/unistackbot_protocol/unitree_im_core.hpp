@@ -37,6 +37,12 @@ constexpr std::size_t kCmdFrameLen = 20;
 constexpr std::size_t kFbFrameLen = 26;
 constexpr std::uint8_t kBroadcastId = 15;   // 广播 (无返回) —— special() 延后项, 先记常量
 
+// ---- 增益先验 (2026-10-10, 厂商 r1-7a_sdk 例程值: --home/--goto kp=60, kd 默认 0.5) ----
+// 输出端物理单位, 真机机型资产 yaml 的起手账 —— 装配层显式引用, 内芯不自动填充
+// (无默认纪律: 缺配置 fail-fast 而非静默用先验)。终值经 T1/T2 重力补偿对拍后按关节分档。
+constexpr double kPriorKp = 60.0;   // 位置刚度 [Nm/rad]
+constexpr double kPriorKd = 0.5;    // 速度刚度 [Nm·s/rad]
+
 // CRC32 (宇树字序变体)。len 须为 4 的倍数 (本协议覆盖区 16/20B 均满足)。
 [[nodiscard]] std::uint32_t crc32(const std::uint8_t *data, std::size_t len);
 
