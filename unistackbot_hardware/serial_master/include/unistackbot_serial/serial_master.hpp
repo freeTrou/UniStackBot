@@ -9,7 +9,6 @@
 #include "unistackbot_bus/master_base.hpp"
 #include "unistackbot_protocol/protocol_core.hpp"
 #include "unistackbot_statemachine/node_safety.hpp"
-#include "unistackbot_statemachine/state_translator.hpp"
 #include "unistackbot_serial/framer.hpp"
 #include "unistackbot_serial/io_transport.hpp"
 
@@ -52,17 +51,17 @@ public:
 	SerialMaster();
 	~SerialMaster() override;
 
-	// 装配期注入 (组合根在 start() 之前调用)
+	// 装配期注入 (组合根在 start() 之前调用)。安全状态机不经注入——总线内部组件,
+	// start 期按 cfg.statemachine 名经工厂自建 per-node 实例。
 	void attach_transport(std::unique_ptr<IoTransport> io);
 	void set_protocol(std::unique_ptr<unistackbot_protocol::ProtocolCore> proto) override;
-	void set_translator(
-		std::unique_ptr<unistackbot_statemachine::StateTranslator> translator) override;
 
 	[[nodiscard]] bool start(const unistackbot_bus::MasterConfig &cfg) override;
 	void stop() override;
 	void publish_cmd(const unistackbot_bus::BusCommand &cmd) override;
 	[[nodiscard]] bool take_state(unistackbot_bus::BusState &out) override;
 	void quick_stop() override;
+	void fault_clear() override;   // 清故障闩锁 (全节点; 全清后自熄, 见 cpp)
 	[[nodiscard]] unistackbot_statemachine::NeutralState state() const override;
 	[[nodiscard]] unistackbot_bus::ParamStatus read_param(std::uint8_t, std::uint32_t,
 		std::uint64_t &, int) override

@@ -14,9 +14,10 @@ unistackbot_hardware/              (容器; 内含四个 colcon 包)
   ethercat_master/   # IgH ecrt EtherCAT (1kHz + DC) — 设计已成文
   canfd_master/      # SocketCAN CAN FD (Piper 真机预期落位) — 设计已成文
   protocol/          # ★包 unistackbot_protocol: codec 轴 (ProtocolCore 父类 + UnitreeImCore
-                     #  子类 + 工厂; 厂商甲骨文 256 cases 绿)
-  statemachine/      # ★包 unistackbot_statemachine: 状态翻译轴 (StateTranslator 父类
-                     #  + UnitreeImTranslator 子类 + 工厂; 9 cases 绿; 依赖 protocol 包)
+                     #  子类 + 工厂; 厂商甲骨文 273 cases 绿)
+  statemachine/      # ★包 unistackbot_statemachine: 节点安全状态机轴 (NodeSafety 父类
+                     #  中立骨架 + UnitreeImSafety 子类 + 工厂; 总线内部组件, 37 cases 绿;
+                     #  依赖 protocol 包)
   bus/               # ★包 unistackbot_bus: 总线主站轴 (MasterBase 父类=五要素最小集代码化,
                      #  纯交换零线程可见 + 工厂; 运行期注册制——serial 已注册,
                      #  ethercat/canfd 同款各一行; BusCommand/BusState 自持零 ROS;

@@ -11,7 +11,7 @@
 | `FakeTransport` | `fake_transport.hpp` | 假总线：写入字节交 responder（假电机）→ 应答入 RX 队列；故障注入旋钮（丢应答/坏字节/分片） |
 | `TermiosTransport` | `termios_transport.*` | Linux 真串口：8N1 raw·BOTHER 任意波特·TIOCEXCL 独占·FIONREAD；kernel ABI 手工复刻（glibc/asm 头撞名的经典解法） |
 | `Framer` | `framer.*` | 字节流→帧提取：帧头同步+定长切帧+跨调用拼接+坏帧重同步；CRC 归 decode；命令回显免疫（FE vs FC） |
-| `SerialMaster` | `serial_master.*` | **MasterBase 实现**：总线线程 FIFO 85/核2、逐节点时隙调度、追帧跳过纪律、quick_stop 闩锁（锚定实测位）、SpLatest 交换、安全怠速（start 后未发命令=停机帧+看门狗位）、tx/rx 全遥测（含写失败/表外 id 分流）、可重启（stop 释放 transport、start 复位闩锁与泵态）、慢通道 kUnsupported |
+| `SerialMaster` | `serial_master.*` | **MasterBase 实现**：总线线程 FIFO 85/核2、逐节点时隙调度、追帧跳过纪律、quick_stop 闩锁（锚定实测位）、**fault_clear 清故障闩锁**（2026-10-10：全节点请求→时隙发 kClear 帧→error_raw==0 确认握手→FAULT 粘性解除；无 FAULT 自熄）、**安全机自建**（start 期按 `MasterConfig.statemachine` 经工厂 createNodeSafety per-node 实例——状态机是总线内部组件，请求生命周期机器自持，泵不代清）、SpLatest 交换、安全怠速（start 后未发命令=停机帧+看门狗位）、tx/rx 全遥测（含写失败/表外 id 分流）、可重启（stop 释放 transport、start 复位闩锁与泵态）、慢通道 kUnsupported |
 
 ## 组合根职责
 
@@ -27,7 +27,7 @@ m->start(cfg);                                   // endpoint="fake" 或设备路
 | 测试 | cases | 覆盖 |
 |---|---|---|
 | `test_framer` | 9 | 噪声找帧/跨调用拼接/一批多帧/回显免疫/残尾恢复 |
-| `test_serial_master` | 38 | 工厂注册/安全怠速/命令往返(位置 1e-3 精度)/状态翻译(ENABLED·FAULT)/断流陈旧(kStaleCycles→Unknown→恢复)/坏帧拒收/分片拼接/quick_stop(线上停机帧)/tx 失败遥测(FlakyWriteTransport)/重启(闩锁复位) |
+| `test_serial_master` | 40 | 工厂注册/安全怠速/命令往返(位置 1e-3 精度)/安全机映射(unitree_im: READY·ENABLED·FAULT)/使能握手(锚定实测位+先验增益)/清故障握手(kClear 帧→error=0→kEnabled, ③b)/坏帧拒收/分片拼接/quick_stop(线上停机帧)/tx 失败遥测(FlakyWriteTransport)/重启(闩锁复位)/断流语义(停流=收敛到最后目标保持, 2026-10-10 统一) |
 
 ```bash
 cd unistackbot_hardware/serial_master/test
@@ -39,8 +39,9 @@ g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_framer.cpp ../src/framer.cpp \
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_serial_master.cpp \
     ../src/serial_master.cpp ../src/framer.cpp ../src/termios_transport.cpp \
     ../../protocol/src/unitree_im_core.cpp ../../protocol/src/protocol_factory.cpp \
-    ../../statemachine/src/unitree_im_translator.cpp \
-    ../../statemachine/src/state_translator_factory.cpp \
+    ../../statemachine/src/unitree_im_safety.cpp \
+    ../../statemachine/src/cia402_safety.cpp \
+    ../../statemachine/src/node_safety_factory.cpp \
     ../../bus/src/master_factory.cpp \
     -I../include -I../../protocol/include -I../../statemachine/include \
     -I../../bus/include -I../../../unistackbot_common -pthread \

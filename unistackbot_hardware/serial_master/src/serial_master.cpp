@@ -1,5 +1,7 @@
 #include "unistackbot_serial/serial_master.hpp"
 
+#include "unistackbot_statemachine/node_safety_factory.hpp"
+
 #include <atomic>
 #include <cstdio>
 #include <system_error>
@@ -28,8 +30,6 @@ using unistackbot_statemachine::NeutralState;
 
 constexpr std::int64_t kNsPerSec = 1'000'000'000LL;
 constexpr std::size_t kRxBurst = 8;   // 单次排干帧数界 (实现常量, 非部署调优)
-constexpr double kEnableGripKp = 20.0;   // 使能锁定刚度 (安全默认, 参数化延后)
-constexpr double kEnableGripKd = 1.5;    // 使能锁定阻尼
 
 std::int64_t clockNowNs()
 {
@@ -54,7 +54,6 @@ struct SerialMaster::Impl
 	MasterConfig cfg;
 	std::unique_ptr<IoTransport> io;
 	std::unique_ptr<unistackbot_protocol::ProtocolCore> proto;
-	std::unique_ptr<unistackbot_statemachine::StateTranslator> translator;
 
 	// ── 交换通道 (POD 定长; publish/取最新, 零锁) ──
 	unistackbot_common::SpLatest<BusCommand> cmd_ch;
@@ -64,6 +63,7 @@ struct SerialMaster::Impl
 	std::thread cycle_thread;
 	std::atomic<bool> stop_flag{false};
 	std::atomic<bool> quick_stop_flag{false};
+	std::atomic<bool> fault_clear_flag{false};   // 清故障请求闩锁 (全节点; 全清后自熄)
 	std::atomic<bool> started{false};
 
 	// ── 循环态 (总线线程唯一写者; start() 复位) ──
@@ -71,7 +71,8 @@ struct SerialMaster::Impl
 	{
 		Framer framer{unistackbot_protocol::FrameSpec{}};
 		NodeFeedback fb[kMaxNodes] = {};
-		NodeSafety safety[kMaxNodes] = {};   // ← 状态机住总线线程 (零锁)
+		std::unique_ptr<NodeSafety> safety[kMaxNodes];   // ← 状态机住总线线程 (零锁;
+		                                                 // start 期经工厂自建, 循环期不换)
 		std::uint64_t last_seen_cycle[kMaxNodes] = {};
 		std::uint64_t cycle = 0;
 	} cycle_;
@@ -123,18 +124,9 @@ void SerialMaster::set_protocol(std::unique_ptr<unistackbot_protocol::ProtocolCo
 	}
 }
 
-void SerialMaster::set_translator(
-	std::unique_ptr<unistackbot_statemachine::StateTranslator> translator)
-{
-	if (!impl_->started.load())
-	{
-		impl_->translator = std::move(translator);
-	}
-}
-
 const NodeSafety &SerialMaster::node_safety(std::size_t index) const
 {
-	return impl_->cycle_.safety[index];
+	return *impl_->cycle_.safety[index];
 }
 
 bool SerialMaster::start(const MasterConfig &cfg)
@@ -159,9 +151,22 @@ bool SerialMaster::start(const MasterConfig &cfg)
 	{
 		return false;
 	}
-	if (impl_->proto == nullptr || impl_->translator == nullptr)
+	if (impl_->proto == nullptr)
 	{
-		std::fprintf(stderr, "SerialMaster: start 前须注入 protocol/translator (组合根职责)\n");
+		std::fprintf(stderr, "SerialMaster: start 前须注入 protocol (组合根职责)\n");
+		return false;
+	}
+	// 安全状态机: 总线内部组件 (用户硬约束) —— start 期按 cfg.statemachine
+	// 经工厂自建 per-node 实例, 住泵 RT 循环。未知名字 fail-fast 列可选项。
+	if (cfg.statemachine.empty())
+	{
+		std::fprintf(stderr, "SerialMaster: cfg.statemachine 未填 (无默认纪律,"
+			" 可选: ");
+		for (const auto &n : unistackbot_statemachine::availableNodeSafetyMachines())
+		{
+			std::fprintf(stderr, "%s ", n.c_str());
+		}
+		std::fprintf(stderr, ")\n");
 		return false;
 	}
 	if (impl_->io == nullptr)
@@ -177,9 +182,27 @@ bool SerialMaster::start(const MasterConfig &cfg)
 	}
 	impl_->cfg = cfg;
 	resetCycleState();
+	for (std::size_t i = 0; i < cfg.node_count; ++i)
+	{
+		impl_->cycle_.safety[i] =
+			unistackbot_statemachine::createNodeSafety(cfg.statemachine);
+		if (impl_->cycle_.safety[i] == nullptr)
+		{
+			std::fprintf(stderr, "SerialMaster: 未知安全状态机 '%s' (可选: ",
+				cfg.statemachine.c_str());
+			for (const auto &n :
+				unistackbot_statemachine::availableNodeSafetyMachines())
+			{
+				std::fprintf(stderr, "%s ", n.c_str());
+			}
+			std::fprintf(stderr, ")\n");
+			return false;
+		}
+	}
 	impl_->cycle_.framer = Framer{impl_->proto->framespec()};
 	impl_->stop_flag.store(false);
 	impl_->quick_stop_flag.store(false);
+	impl_->fault_clear_flag.store(false);
 	try
 	{
 		impl_->cycle_thread = std::thread([this] { busLoopMain(); });
@@ -208,6 +231,25 @@ void SerialMaster::busLoopMain()
 
 	while (!impl_->stop_flag.load())
 	{
+		// 清故障闩锁: 对 FAULT 态节点置请求; 全部清完 (无人 FAULT) 自动熄灭
+		// —— 新故障须再次 fault_clear() 显式请求, 不自动清 (防复撞)
+		if (impl_->fault_clear_flag.load())
+		{
+			bool any_fault = false;
+			for (std::size_t k = 0; k < n; ++k)
+			{
+				if (impl_->cycle_.safety[k]->state() == NeutralState::kFault)
+				{
+					impl_->cycle_.safety[k]->request_fault_clear();
+					any_fault = true;
+				}
+			}
+			if (!any_fault)
+			{
+				impl_->fault_clear_flag.store(false);
+			}
+		}
+
 		for (std::size_t k = 0; k < n && !impl_->stop_flag.load(); ++k)
 		{
 			std::int64_t target = base +
@@ -254,24 +296,39 @@ void SerialMaster::runSlot(std::size_t k)
 	drainAndDecode();
 
 	// 状态机更新: 用刚收到的反馈推进 NodeSafety (零延迟——同线程零交接)
-	impl_->cycle_.safety[k].update(impl_->cycle_.fb[k]);
+	NodeSafety &ns = *impl_->cycle_.safety[k];
+	ns.update(impl_->cycle_.fb[k]);
+	// 清故障握手确认: 请求在挂 + 反馈已干净 → confirm (FAULT → READY, 守卫内建)
+	if (ns.fault_clear_requested() && ns.last_feedback().error_raw == 0u)
+	{
+		ns.confirm_fault_cleared();
+	}
 }
 
 void SerialMaster::resolveSlotCmd(std::size_t k)
 {
-	NodeSafety &ns = impl_->cycle_.safety[k];
+	NodeSafety &ns = *impl_->cycle_.safety[k];
 
-	// ① 安全状态机优先: 使能/断使能请求 → 生成安全命令
+	// ⓪ 清故障请求挂起 → 发协议清帧 (unitree: mode 6 + tor 魔数, codec 强制)
+	if (ns.fault_clear_requested())
+	{
+		impl_->work_.slot_cmd = unistackbot_protocol::NodeCommand{};
+		impl_->work_.slot_cmd.mode = NodeMode::kClear;
+		impl_->work_.slot_cmd.watchdog_enable = true;
+		return;
+	}
+
+	// ① 安全状态机优先: 使能/断使能请求 → 生成安全命令。请求生命周期机器自持
+	//    (确认即清) —— CiA402 的使能是多步链, 请求须活到链走完, 泵不代清
+	//    (单帧协议如 unitree 的机器也在 update 确认时自清, 行为不变)。
 	if (ns.enable_requested())
 	{
-		impl_->work_.slot_cmd = ns.enable_command(kEnableGripKp, kEnableGripKd);
-		ns.clear_requests();
+		impl_->work_.slot_cmd = ns.enable_command();
 		return;
 	}
 	if (ns.disable_requested())
 	{
 		impl_->work_.slot_cmd = ns.disable_command();
-		ns.clear_requests();
 		return;
 	}
 
@@ -364,7 +421,7 @@ void SerialMaster::publishSnapshot()
 		impl_->work_.snap.node_state[i] =
 			(impl_->cycle_.cycle - impl_->cycle_.last_seen_cycle[i] > impl_->cfg.stale_cycles)
 			? NeutralState::kUnknown
-			: impl_->cycle_.safety[i].state();
+			: impl_->cycle_.safety[i]->state();
 	}
 	impl_->work_.snap.seq = impl_->cycle_.cycle;
 	impl_->state_ch.publish(impl_->work_.snap);
@@ -409,6 +466,11 @@ bool SerialMaster::take_state(BusState &out)
 void SerialMaster::quick_stop()
 {
 	impl_->quick_stop_flag.store(true);
+}
+
+void SerialMaster::fault_clear()
+{
+	impl_->fault_clear_flag.store(true);
 }
 
 NeutralState SerialMaster::state() const

@@ -19,8 +19,8 @@
  *   g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_serial_master.cpp \
  *       ../src/serial_master.cpp ../src/framer.cpp ../src/termios_transport.cpp \
  *       ../../protocol/src/unitree_im_core.cpp ../../protocol/src/protocol_factory.cpp \
- *       ../../statemachine/src/unitree_im_translator.cpp \
- *       ../../statemachine/src/state_translator_factory.cpp \
+ *       ../../statemachine/src/unitree_im_safety.cpp \
+ *       ../../statemachine/src/node_safety_factory.cpp \
  *       ../../bus/src/master_factory.cpp \
  *       -I../include -I../../protocol/include -I../../statemachine/include \
  *       -I../../bus/include -I../../../unistackbot_common -pthread \
@@ -33,7 +33,7 @@
 
 #include "unistackbot_bus/master_factory.hpp"
 #include "unistackbot_protocol/protocol_factory.hpp"
-#include "unistackbot_statemachine/state_translator_factory.hpp"
+#include "unistackbot_statemachine/node_safety_factory.hpp"
 #include "unistackbot_protocol/unitree_im_core.hpp"
 #include "unistackbot_serial/fake_transport.hpp"
 #include "unistackbot_serial/serial_master.hpp"
@@ -151,6 +151,7 @@ MasterConfig makeCfg()
 {
 	MasterConfig cfg;
 	cfg.endpoint = "fake";
+	cfg.statemachine = "unitree_im";   // 主站 start 期经工厂自建 (总线内部组件)
 	cfg.rate_hz = 250.0;   // 测试提速 (2 节点 slot 2ms)
 	cfg.baudrate = 6000000;
 	cfg.thread_priority = 0;   // 测试环境不抢 FIFO (0=rt_tune 降级 SCHED_OTHER)
@@ -230,7 +231,6 @@ int main()
 
 	// 组合根注入 (协议+翻译器从工厂创建后注入, 总线不自己创建依赖)
 	m->set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
-	m->set_translator(unistackbot_statemachine::createStateTranslator("unitree_im"));
 
 	check(m->start(makeCfg()), "start with injected deps");
 	check(m->running(), "running");
@@ -275,11 +275,17 @@ int main()
 	}
 	check(m->state() == NeutralState::kEnabled, "segment worst-of = ENABLED");
 
-	// ③b 假电机报错 → FAULT
+	// ③b 假电机报错 → FAULT (粘性) → 清故障握手 → READY
 	motor->error_bits = 0x00000100u;
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
 	check(m->state() == NeutralState::kFault, "error bits -> FAULT");
-	motor->error_bits = 0;
+	motor->error_bits = 0;                      // 灭源头 (FAULT 仍粘住)
+	std::this_thread::sleep_for(std::chrono::milliseconds(40));
+	check(m->state() == NeutralState::kFault, "FAULT sticky after source cleared");
+	m->fault_clear();                           // 总线出口: 全节点清故障请求
+	std::this_thread::sleep_for(std::chrono::milliseconds(80));
+	// 握手成立 = 不再粘 FAULT: 清帧后经 READY (瞬态), 上一命令流仍 kRun → 回 ENABLED
+	check(m->state() == NeutralState::kEnabled, "fault_clear handshake recovers");
 
 	// ④ 断流陈旧: 丢全部应答 → Unknown (stale_cycles=30 拍 @250Hz ≈ 120ms)
 	fake_raw->set_drop_responses(1000000);
@@ -287,7 +293,7 @@ int main()
 	check(m->state() == NeutralState::kUnknown, "all-drop -> stale Unknown");
 	fake_raw->set_drop_responses(0);
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
-	check(m->state() != NeutralState::kUnknown, "recovered from stale");
+	check(m->state() == NeutralState::kEnabled, "recovered from stale (强断言)");
 
 	// ④b 坏帧拒收: corrupt 旋钮 (载荷字节翻转 → CRC 拒)
 	const auto rej0 = m->telemetry().rx_rejected;
@@ -326,7 +332,6 @@ int main()
 	FlakyWriteTransport *flaky_raw = flaky.get();
 	SerialMaster m2;
 	m2.set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
-	m2.set_translator(unistackbot_statemachine::createStateTranslator("unitree_im"));
 	m2.attach_transport(std::move(flaky));
 	check(m2.start(makeCfg()), "start with flaky transport");
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
@@ -346,7 +351,6 @@ int main()
 	FakeTransport *fake3_raw = fake3.get();
 	m->attach_transport(std::move(fake3));
 	m->set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
-	m->set_translator(unistackbot_statemachine::createStateTranslator("unitree_im"));
 	check(m->start(makeCfg()), "restart after stop");
 	check(m->running(), "restart running");
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
