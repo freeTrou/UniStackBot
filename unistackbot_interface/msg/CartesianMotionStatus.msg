@@ -18,14 +18,38 @@ uint8 HOLD	= 3	# 冻结 (来自 ~/pause; 门控语义 2026-10-12 裁决: 停推�
 uint8 DEGRADED	= 4	# 连续求解失败, 保持上一命令 (可观测降级)
 
 uint8 mode
-bool converged		# 容差 = 控制器参数 converge_pos_tol/rot_tol (默认
-                    #   1mm / 0.01rad, per-robot yaml 可调); 物理链 (mujoco)
-                    #   稳态贴容差线时可能闪烁抖动
+
+# ---- 到位判定 (2026-10-13 加法; Franka TargetStatus 同构单枚举) ----
+# arrival 是到位判定的正字段: 消费者 switch 一个字段不会选错。
+# 双条件依据: JTC 官方 StateTolerances{position, velocity} + Franka
+# TARGET_REACHED 均为 "误差进容差且速度低于阈值" —— 单误差条件会被
+# "抖动穿越容差带"假触发 (converged 的已知边界, 见其注释)。
+uint8 ARRIVAL_NONE = 0     # 未到位
+uint8 ARRIVAL_POSITION = 1 # 误差进容差 (position+rotation; = converged 现语义)
+uint8 ARRIVAL_SETTLED = 2  # 误差进容差且 |v|max < converge_vel_tol —— "停住了"
+                           #   逐条下发目标/防误碰场景用这档; converge_vel_tol=0
+                           #   时退化为单误差条件 (JTC 官方 "0=不检查" 语义)
+uint8 arrival
+
+# ---- deprecated (保留兼容; 新代码用 arrival) ----
+bool converged		# = (arrival >= ARRIVAL_POSITION)。容差 = 控制器参数
+                    #   converge_pos_tol/rot_tol (默认 1mm/0.01rad, per-robot
+                    #   yaml 可调); 物理链 (mujoco) 稳态贴容差线时可能闪烁抖动
+
 float64 position_error	# [m] 当前 FK 位姿与目标的位置误差
 float64 rotation_error	# [rad] 姿态误差 (符号无关标量, 内部已 abs)
 float64 min_sigma	# 雅可比最小奇异值; **-1 = 求解器不提供** (trac_ik 路径
                     #   恒 -1, 仅 dls_ik 遥测有效 —— 数值解机型默认 trac_ik,
                     #   勿当恒有效仪表: 按其值分支的告警逻辑会失效)
+
+# ---- 求解器健康档 (2026-10-13 加法; 全机型可用的离散投影) ----
+# min_sigma 的离散化替身: 三档在任何求解器机型上都语义正确 (trac_ik 恒 1)。
+# 告警逻辑建在这上面 (min_sigma 的连续遥测仅 dls_ik 机型有意义)。
+uint8 SOLVER_HEALTH_NONE = 0     # 求解器不提供健康信息
+uint8 SOLVER_HEALTH_OK = 1       # 正常
+uint8 SOLVER_HEALTH_NEAR_SINGULAR = 2  # 接近奇异 (dls_ik: min_sigma 低于阈值)
+uint8 solver_health
+
 bool timed_out		# 最近一次求解是否预算耗尽 (Distance 档烧满预算的伴随
                     #   标志; 与 last_result 联合分流拒绝原因)
 uint8 last_result	# IkResult 枚举值 (unistackbot_interface/ik_result.hpp)

@@ -113,6 +113,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_init()
 	auto_declare<int>("degraded_n", degraded_n_);
 	auto_declare<double>("converge_pos_tol", converge_pos_tol_);
 	auto_declare<double>("converge_rot_tol", converge_rot_tol_);
+	auto_declare<double>("converge_vel_tol", converge_vel_tol_);   // 2026-10-13: SETTLED 双条件 (0=不检查)
+	auto_declare<double>("near_sigma_tol", near_sigma_tol_);
 	// Humble: controller_manager 把自身 robot_description 以参数覆盖注入控制器节点
 	auto_declare<std::string>("robot_description", "");
 	return CallbackReturn::SUCCESS;
@@ -148,6 +150,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	degraded_n_ = get_node()->get_parameter("degraded_n").as_int();
 	converge_pos_tol_ = get_node()->get_parameter("converge_pos_tol").as_double();
 	converge_rot_tol_ = get_node()->get_parameter("converge_rot_tol").as_double();
+	converge_vel_tol_ = get_node()->get_parameter("converge_vel_tol").as_double();
+	near_sigma_tol_ = get_node()->get_parameter("near_sigma_tol").as_double();
 	if (base_link_.empty() || tip_link_.empty())
 	{
 		ULOG_ERROR("cartesian_motion_controller: base_link/tip_link 必填");
@@ -411,9 +415,15 @@ controller_interface::InterfaceConfiguration CartesianMotionController::state_in
 	conf.type = controller_interface::interface_configuration_type::INDIVIDUAL;
 	if (fk_)
 	{
+		// position 全列 + velocity 全列 (2026-10-13: ARRIVAL_SETTLED 双条件需要
+		// |v|max; 认领序 = update 侧解包序依据, 勿乱序)
 		for (const auto & name : fk_->jointNames())
 		{
 			conf.names.push_back(name + "/position");
+		}
+		for (const auto & name : fk_->jointNames())
+		{
+			conf.names.push_back(name + "/velocity");
 		}
 	}
 	return conf;
@@ -422,18 +432,22 @@ controller_interface::InterfaceConfiguration CartesianMotionController::state_in
 controller_interface::CallbackReturn CartesianMotionController::on_activate(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	const std::size_t n = fk_->jointCount();
-	if (state_interfaces_.size() != n || command_interfaces_.size() != n)
+	// state 认领 = position×n + velocity×n (2026-10-13 SETTLED 双条件);
+	// cmd = position×n。老链 (仅 position state) 也能激活: ≥n 即可, velocity 段
+	// 缺失时 qd 保持 0 = vel_ok 恒真, SETTLED 退化 POSITION —— 不硬拒。
+	if (state_interfaces_.size() < n || command_interfaces_.size() != n)
 	{
-		ULOG_ERROR("cartesian_motion_controller: 接口数不匹配 (state=%zu cmd=%zu 链=%zu)",
-			state_interfaces_.size(), command_interfaces_.size(), n);
+		ULOG_ERROR("cartesian_motion_controller: 接口数不匹配 (state=%zu 需≥%zu cmd=%zu 链=%zu)",
+			state_interfaces_.size(), n, command_interfaces_.size(), n);
 		return CallbackReturn::ERROR;
 	}
+	const std::size_t pos_count = std::min(state_interfaces_.size(), n);   // 前 n 个 = position
 	// 按名映射: <ros2_control> 接口声明序 != URDF 链序 —— 真雷, 读写必须经此映射
 	const auto & chain_names = fk_->jointNames();
 	iface_joint_names_.clear();
 	chain_from_iface_.clear();
 	bool identity = true;
-	for (std::size_t i = 0; i < state_interfaces_.size(); ++i)
+	for (std::size_t i = 0; i < pos_count; ++i)   // 名映射只做 position 段 (velocity 段按偏移复用同一映射)
 	{
 		const std::string jn = state_interfaces_[i].get_prefix_name();
 		const auto it = std::find(chain_names.begin(), chain_names.end(), jn);
@@ -454,7 +468,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	// 命令初始化 = 当前状态 (激活瞬间零跳变); RT 缓冲一次定容 (周期零分配)
 	cmd_.assign(n, 0.0);
 	q_meas_.assign(n, 0.0);
-	for (std::size_t i = 0; i < state_interfaces_.size(); ++i)
+	qd_meas_.assign(n, 0.0);
+	for (std::size_t i = 0; i < pos_count; ++i)
 	{
 		cmd_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
 	}
@@ -483,10 +498,20 @@ controller_interface::return_type CartesianMotionController::update(
 	const auto wcet_t0 = std::chrono::steady_clock::now();
 	const std::size_t n = cmd_.size();
 
-	// ⓪ 实测关节态 (接口序 → 链序) —— 先读: 定源后 OTG 基准/回调种子/status 误差三用
+	// ⓪ 实测关节态 (接口序 → 链序) —— 先读: 定源后 OTG 基准/回调种子/status 误差三用。
+	// position 在前 (每关节 1 个), velocity 紧随 (每关节 1 个, 2026-10-13 认领扩展:
+	// ARRIVAL_SETTLED 双条件需要 |v|max; 接口序 = 认领序 position 全列 + velocity 全列)
 	for (std::size_t i = 0; i < state_interfaces_.size(); ++i)
 	{
-		q_meas_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
+		const std::size_t joint_n = chain_from_iface_.size();
+		if (i < joint_n)
+		{
+			q_meas_[chain_from_iface_[i]] = state_interfaces_[i].get_value();
+		}
+		else if (i < 2 * joint_n)
+		{
+			qd_meas_[chain_from_iface_[i - joint_n]] = state_interfaces_[i].get_value();
+		}
 	}
 	// 回调 IK 种子通道 (每拍覆盖写, wait-free; 撕裂时回调沿用旧值 = sp_latest 契约)
 	{
@@ -713,14 +738,36 @@ void CartesianMotionController::publishStatusRt(
 		const double dz = meas.z - target_pose_.z;
 		m.position_error = std::sqrt(dx * dx + dy * dy + dz * dz);
 		m.rotation_error = rotationError(meas, target_pose_);
-		m.converged = m.position_error < converge_pos_tol_ && m.rotation_error < converge_rot_tol_;
+		// 到位判定 (2026-10-13 arrival 三值, Franka TargetStatus 同构):
+		//   POSITION = 误差进容差 (converged 现语义);
+		//   SETTLED  = 误差进容差且 |v|max < converge_vel_tol (JTC 官方双条件;
+		//              converge_vel_tol=0 时不检查速度, 退化为 POSITION)
+		const bool err_ok = m.position_error < converge_pos_tol_ &&
+			m.rotation_error < converge_rot_tol_;
+		double vmax = 0.0;
+		for (const double v : qd_meas_)
+		{
+			vmax = std::max(vmax, std::fabs(v));
+		}
+		const bool vel_ok = converge_vel_tol_ <= 0.0 || vmax < converge_vel_tol_;
+		m.arrival = !err_ok
+			? unistackbot_interface::msg::CartesianMotionStatus::ARRIVAL_NONE
+			: (vel_ok
+				? unistackbot_interface::msg::CartesianMotionStatus::ARRIVAL_SETTLED
+				: unistackbot_interface::msg::CartesianMotionStatus::ARRIVAL_POSITION);
+		m.converged = err_ok;   // deprecated 兼容字段 = (arrival >= ARRIVAL_POSITION)
 	}
 	else
 	{
 		m.position_error = 0.0;
 		m.rotation_error = 0.0;
 		m.converged = false;
+		m.arrival = unistackbot_interface::msg::CartesianMotionStatus::ARRIVAL_NONE;
 	}
+	// 求解器健康档 (min_sigma 离散投影, 全机型语义正确; trac_ik 恒 OK —— <0 = 不提供按 OK)
+	m.solver_health = (last_min_sigma_ >= 0.0 && last_min_sigma_ < near_sigma_tol_)
+		? unistackbot_interface::msg::CartesianMotionStatus::SOLVER_HEALTH_NEAR_SINGULAR
+		: unistackbot_interface::msg::CartesianMotionStatus::SOLVER_HEALTH_OK;
 	m.min_sigma = last_min_sigma_;
 	m.timed_out = last_timed_out_;
 	m.last_result = last_result_;

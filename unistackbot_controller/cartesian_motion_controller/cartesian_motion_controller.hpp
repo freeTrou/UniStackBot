@@ -105,8 +105,11 @@ private:
 	double max_acceleration_{0.0};       // OTG 关节加速度界 [rad/s²] (机型资产, 必填)
 	double max_jerk_{0.0};               // [rad/s³] (必填)
 	int degraded_n_{50};                 // 连续失败降级阈值 (status DEGRADED)
-	double converge_pos_tol_{0.001};     // converged 判定: 位置容差 [m]
-	double converge_rot_tol_{0.01};      // converged 判定: 姿态容差 [rad]
+	double converge_pos_tol_{0.001};     // converged/arrival 判定: 位置容差 [m]
+	double converge_rot_tol_{0.01};      // converged/arrival 判定: 姿态容差 [rad]
+	double converge_vel_tol_{0.05};      // ARRIVAL_SETTLED 判定: 速度阈值 [rad/s]
+	                                     // (0 = 不检查, JTC 官方语义; SETTLED 退化为单误差条件)
+	double near_sigma_tol_{0.02};        // solver_health NEAR_SINGULAR 档阈值 (min_sigma 低于此值)
 
 	// ---- 运动学 (fk_=RT 侧 status 误差; ik_=回调线程侧求解; 实例不跨线程) ----
 	std::unique_ptr<UrdfFk> fk_;
@@ -121,6 +124,7 @@ private:
 	// ---- RT 路径状态 (update 线程私有, 零周期分配) ----
 	std::vector<double> cmd_;            // 上一拍命令 (链序)
 	std::vector<double> q_meas_;         // 实测关节 (链序, 误差基准 + 回调种子源)
+	std::vector<double> qd_meas_;        // 实测关节速度 (链序, ARRIVAL_SETTLED 双条件)
 	bool has_target_{false};
 	std::array<double, unistackbot_interface::kMaxJoints> goal_{};   // 最新成功解的关节终点 (OTG 追踪目标)
 	bool have_goal_{false};
