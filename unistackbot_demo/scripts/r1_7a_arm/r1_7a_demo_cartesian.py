@@ -4,7 +4,7 @@
 **定位 = 控制开发人员的接入参考实现** (链路契约的完整正确消费样板)。
 完整工况: 切 CM → 部署 → 两圈 36 点连续圆周流 (快/慢) → 收回 → 切回 JS → 回关节零位。
 教科书点: CM 契约 QoS / 目标对账锚点 / 三结局判据 / IK 错误语义 (last_result
-=IkResult + min_sigma, RESULT_NAME 人话映射) / 生命周期纪律 (收尾回零位)。
+=IkResult + solver_health/arrival 新正字段, RESULT_NAME 人话映射) / 生命周期纪律 (收尾回零位)。
 最小入门请看 scripts/minimal_cartesian.py (外置通用教学件)。
 
 前置: 任一链已启动, joint_stream_controller active。
@@ -148,8 +148,9 @@ class R17aDemoCartesian(Node):
 		if kind == 'plateau':
 			self.get_logger().warn('%s: 稳态 err=%.3fmm (物理链正常), 继续' % (tag, v * 1000.0))
 			return 'plateau'
-		self.get_logger().warn('%s: 诚实拒绝 (result=%s %s, min_sigma=%.3f), 保持原位' % (
-			tag, v, RESULT_NAME.get(v, '?'), self.status.get('sig', -1.0)))
+		sh = self.status.get('sh', 1)
+		self.get_logger().warn('%s: 诚实拒绝 (result=%s %s, solver_health=%s), 保持原位' % (
+			tag, v, RESULT_NAME.get(v, '?'), {0: 'NONE', 1: 'OK', 2: 'NEAR_SINGULAR'}.get(sh, sh)))
 		return 'reject'
 
 	def stream_path(self, pub, snapshot, path_fn, n=36, step_s=0.05, tag='流'):
@@ -256,8 +257,8 @@ class R17aDemoCartesian(Node):
 					% str(e).strip()[-120:])
 
 	def _on_status(self, msg):
-		self.status.update(err=msg.position_error, conv=msg.converged,
-		                   res=msg.last_result, sig=msg.min_sigma,
+		self.status.update(err=msg.position_error, arrival=msg.arrival,
+		                   res=msg.last_result, sh=msg.solver_health,
 		                   tgt=(msg.target_pose.position.x,
 		                        msg.target_pose.position.y,
 		                        msg.target_pose.position.z))

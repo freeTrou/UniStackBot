@@ -10,7 +10,7 @@
       base 系目标位姿点流 (每条消息 = 最新目标), QoS reliable+KeepLast(1)。
       CM 内部做 IK(种子=实测) + OTG 整形, 发过去臂就平滑走过去。
   收  /cartesian_motion_controller/status  CartesianMotionStatus (20Hz, active 才有)
-      converged / position_error / last_result(IkResult 错误码) / min_sigma。
+      arrival(到位三值: 到了/到了且停住) / position_error / last_result(IkResult 错误码) / solver_health。
   切  两控制器命令接口互斥 —— CM 接管必须显式 switch, 用完切回 JS:
       ros2 control switch_controllers --deactivate joint_stream_controller
                                         --activate cartesian_motion_controller
@@ -122,14 +122,15 @@ class MinimalCartesianDemo(Node):
         t0 = time.time()
         while time.time() - t0 < 15.0:
             rclpy.spin_once(self, timeout_sec=0.05)
-            if self.status.get('conv') and self.status.get('tz') is not None and \
+            # arrival=SETTLED (新正字段): 到了且停住 —— converged 已 deprecated
+            if self.status.get('arrival') == 2 and self.status.get('tz') is not None and \
                 abs(self.status['tz'] - self.sent) < 1e-9:
                 self.get_logger().info('%s: 收敛 err=%.3fmm' % (tag, self.status['err'] * 1000.0))
                 return
             if time.time() - t0 > 1.5 and self.status.get('res', 0) != 0:
-                self.get_logger().warn('%s: 拒绝 (last_result=%s, min_sigma=%.3f)'
+                self.get_logger().warn('%s: 拒绝 (last_result=%s, solver_health=%d)'
                     ' —— 错误码表见 unistackbot_interface/ik_result.hpp' % (
-                    tag, self.status['res'], self.status.get('sig', -1.0)))
+                    tag, self.status['res'], self.status.get('sh', 1)))
                 return
         self.get_logger().warn('%s: 15s 未收敛' % tag)
 
@@ -172,8 +173,8 @@ class MinimalCartesianDemo(Node):
             self.get_logger().info('已切回 joint_stream')
 
     def _on_status(self, msg):
-        self.status.update(err=msg.position_error, conv=msg.converged,
-                           res=msg.last_result, sig=msg.min_sigma,
+        self.status.update(err=msg.position_error, arrival=msg.arrival,
+                           res=msg.last_result, sh=msg.solver_health,
                            tz=msg.target_pose.position.z)
 
 

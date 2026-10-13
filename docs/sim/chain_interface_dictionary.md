@@ -10,8 +10,8 @@
 |---|---|---|
 | 看臂的末端在哪 | `/ee_state` 50Hz | **位姿事实源**；yaml `publish_hz` 可调 |
 | **高频位姿回路（>50Hz）** | **`/joint_states` 500Hz + urdf_fk 自算 FK** | JTC 官方消费者同款姿势；或拉高 publish_hz——两条路都正 |
-| 看离目标多远 / 收敛判定 | `~/status` 20Hz | **仅 CM active 时存在**（inactive 一帧后静默，不是故障） |
-| 看为什么被拒 | `~/status.last_result` | IkResult 码表 `ik_result.hpp`；**min_sigma 恒 -1 勿建逻辑** |
+| 看离目标多远 / 到位判定 | `~/status` 20Hz | **仅 CM active 时存在**（inactive 一帧后静默，不是故障）；**到位用 `arrival`**：POSITION=到了 / SETTLED=到了且停住（逐条下发场景用 SETTLED；converged 已 deprecated） |
+| 看为什么被拒 | `~/status.last_result` | IkResult 码表 `ik_result.hpp`；求解器健康用 **`solver_health`** 三档（全机型正确；min_sigma 恒 -1 勿建逻辑） |
 | 发笛卡尔目标 | `~/command`（CM）reliable+KeepLast(1) | 每条消息 = 最新终点；四元数入口归一化 |
 | 发暂停/恢复 | `~/pause` ——**发布方也必须 transient_local** | 否则**静默失联无任何报错**（QoS 不匹配互相看不见，排查 30 分钟起步） |
 | 发关节目标 | `/joint_stream_controller/command` | joint_names **必须列全**命令关节，缺 = 整条拒（无警告） |
