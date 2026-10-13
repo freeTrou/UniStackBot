@@ -135,15 +135,24 @@ ros2 control list_hardware_components
 | 字段 | 含义 |
 |---|---|
 | mode | 0=INACTIVE 1=IDLE 2=TRACKING 3=HOLD 4=DEGRADED（连续求解失败，保持上一命令） |
-| converged | 误差进容差 |
-| position_error / rotation_error | 位置 [m] / 姿态 [rad] 误差 |
-| min_sigma | 雅可比最小奇异值（接近 0 = 接近奇异） |
+| converged | 误差进容差（容差=控制器参数 converge_pos_tol/rot_tol，默认 1mm/0.01rad，per-robot 可调） |
+| position_error / rotation_error | 位置 [m] / 姿态 [rad] 误差（rotation_error 符号无关） |
+| min_sigma | 雅可比最小奇异值；**-1 = 求解器不提供**（trac_ik 路径恒 -1，仅 dls_ik 有效——数值解机型默认 trac_ik） |
 | timed_out / last_result | 求解预算耗尽 / IkResult 结果码 |
-| current_pose / target_pose | FK 当前位姿 / 当前采纳目标 |
+| current_pose / target_pose | CM 视角 FK 当前位姿 / 当前采纳目标 |
 
-### /ee_state（PoseStamped，base 系）
+**双 FK 位姿源的权威声明（2026-10-12 裁决）**：本消息 current_pose 与 `/ee_state`
+是同一道确定性 FK（同 /joint_states、同 URDF），数值一致；但**位姿事实源以
+`/ee_state` 为准**（常驻、与控制器无关），current_pose 是 CM 的误差计算基准
+（500Hz 粒度更细、仅 CM active 时存在）——**不作为位姿事实源消费**。CM 与
+EEB 不互抄数据（确定性同源，无抄数必要；控制器间订阅是 ros2_control 反模式）。
+四元数符号未规范化警示随 msg 定义（自算姿态差先 abs(dot)）。
 
-同 ~/command 结构，但方向相反：FK(当前关节) 的末端位姿只读反馈流，与哪个控制器 active 无关。**姿态载体定案 = 单位四元数，永久**（2026-10-12 裁决）：与 ROS 机面生态主流一致（geometry_msgs 无欧拉类型，RViz/tf/MoveIt 零适配）；其他表示（欧拉/轴角等人读形态）如需要走**并行加法**（新话题或新字段），永不动四元数载体。消费者跨生态注意字段序差异（geometry_msgs 按字段名访问无序陷阱；Isaac/MuJoCo 为 wxyz）。
+### /ee_state（PoseStamped，base 系）——**位姿事实源**
+
+同 ~/command 结构，但方向相反：FK(当前关节) 的末端位姿只读反馈流，与哪个控制器 active 无关。
+**反馈选型指引**：看臂在哪 → 本话题（50Hz 常驻）；看离目标多远/求解器健康 → ~/status（20Hz，仅 CM active）；看关节物理真值 → /joint_states（500Hz）。
+**姿态载体定案 = 单位四元数，永久**（2026-10-12 裁决）：与 ROS 机面生态主流一致（geometry_msgs 无欧拉类型，RViz/tf/MoveIt 零适配）；其他表示（欧拉/轴角等人读形态）如需要走**并行加法**（新话题或新字段），永不动四元数载体。消费者跨生态注意字段序差异（geometry_msgs 按字段名访问无序陷阱；Isaac/MuJoCo 为 wxyz）。
 
 ### /supervisor/alerts（SystemAlert——统一错误状态板，50Hz）
 
