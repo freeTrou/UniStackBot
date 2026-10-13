@@ -25,7 +25,7 @@ bringup 的 `<robot>_controllers.yaml` (update_rate 500Hz + RT 线程官方参�
 ros2 topic pub -r 50 /joint_stream_controller/command unistackbot_interface/msg/JointCommand \
   "{joint_names: [joint1, joint2, joint3, joint4, joint5, joint6, gripper], mode: 1, position: [0.5, 1.0, -1.0, 0, 0, 0, 0.05]}"
 # 笛卡尔空间 (base 系):
-ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped ...
+ros2 topic pub --once /cartesian_motion_controller/command geometry_msgs/msg/PoseStamped ...
 ```
 
 已有 MJCF 资产的机型: `piper` (2026-09-20), `xarm7` (2026-09-21, 管线同; xarm7 侧差异
