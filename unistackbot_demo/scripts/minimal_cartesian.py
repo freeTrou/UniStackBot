@@ -75,8 +75,12 @@ class MinimalCartesianDemo(Node):
         activate 已 active 的控制器会被 CM 硬拒 (not inactive) —— 幂等由状态查询实现。"""
         import subprocess
         for attempt in range(retries):
-            r = subprocess.run(['ros2', 'control', 'list_controllers'],
-                               capture_output=True, text=True, timeout=15)
+            try:
+                r = subprocess.run(['ros2', 'control', 'list_controllers'],
+                                   capture_output=True, text=True, timeout=15)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError('list_controllers 超时 —— 链未启动或 CLI 缺失?'
+                    ' 先起链 (ros2 launch ...); CLI 缺失装 ros-humble-ros2controlcli')
             states = {}
             for line in r.stdout.splitlines():
                 clean = re.sub(r'\x1b\[[0-9;]*m', '', line.strip())

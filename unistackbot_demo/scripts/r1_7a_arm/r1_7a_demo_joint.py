@@ -112,8 +112,12 @@ class R17aDemoJoint(Node):
 		# activate 已 active 的 JS 会被 CM 硬拒, 这正是上一版在新机常态路径炸的根)
 		import re
 		for attempt in range(7):
-			r = subprocess.run(['ros2', 'control', 'list_controllers'],
-				capture_output=True, text=True, timeout=15)
+			try:
+				r = subprocess.run(['ros2', 'control', 'list_controllers'],
+					capture_output=True, text=True, timeout=15)
+			except subprocess.TimeoutExpired:
+				raise RuntimeError('list_controllers 超时 —— 链未启动或 CLI 缺失?'
+					' 先起链 (ros2 launch ...); CLI 缺失装 ros-humble-ros2controlcli')
 			states = {}
 			for line in r.stdout.splitlines():
 				clean = re.sub(r'\x1b\[[0-9;]*m', '', line.strip())
