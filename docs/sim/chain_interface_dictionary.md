@@ -4,6 +4,20 @@
 > 定义先行：本词典是接口的规范描述，实现与词典冲突 = 实现 bug。
 > 字段定义以 msg 文件为权威（`unistackbot_interface/msg/`）。
 
+## 速查：我要 X，用哪条（2026-10-13 外部评审落地；新人第一屏）
+
+| 我想… | 用这个 | 注意 |
+|---|---|---|
+| 看臂的末端在哪 | `/ee_state` 50Hz | **位姿事实源**；yaml `publish_hz` 可调 |
+| **高频位姿回路（>50Hz）** | **`/joint_states` 500Hz + urdf_fk 自算 FK** | JTC 官方消费者同款姿势；或拉高 publish_hz——两条路都正 |
+| 看离目标多远 / 收敛判定 | `~/status` 20Hz | **仅 CM active 时存在**（inactive 一帧后静默，不是故障） |
+| 看为什么被拒 | `~/status.last_result` | IkResult 码表 `ik_result.hpp`；**min_sigma 恒 -1 勿建逻辑** |
+| 发笛卡尔目标 | `~/command`（CM）reliable+KeepLast(1) | 每条消息 = 最新终点；四元数入口归一化 |
+| 发暂停/恢复 | `~/pause` ——**发布方也必须 transient_local** | 否则**静默失联无任何报错**（QoS 不匹配互相看不见，排查 30 分钟起步） |
+| 发关节目标 | `/joint_stream_controller/command` | joint_names **必须列全**命令关节，缺 = 整条拒（无警告） |
+| 监控链健康 | `/supervisor/alerts` 50Hz | SystemAlert 板，`state` 四值可直接 switch（OK/DEGRADED/FAULT/UNKNOWN） |
+| 记录数据 | `record_verify.sh <task>` | 必录 8 话题 + sidecar 自动；裸 ros2 bag 是废数据 |
+
 ## 0. 查看方式速查
 
 ```bash
@@ -117,6 +131,12 @@ ros2 control list_hardware_components
 | 字段 | 含义 |
 |---|---|
 | mode | TRACKING=恢复跟踪 / HOLD=冻结推进 |
+
+**QoS 匹配警告（发布方责任，2026-10-13 升格）**：本通道 transient_local——
+**上层发布器必须同为 transient_local**（`rclcpp::QoS(1).transient_local()` /
+`QoSProfile(durability=TRANSIENT_LOCAL)`），否则**静默失联无任何报错**
+（QoS 不匹配时双方互相看不见对方，发出去像进了黑洞，排查 30 分钟起步）。
+链上消费者（teleop/demo）已对齐；新接入方第一件事是核对这个 QoS。
 
 **HOLD 语义（2026-10-12 裁决定案：运动推进门控，非目标过滤器）**：
 进入 HOLD 后，CM **停止向外部目标推进**——OTG 每拍以当前命令位置为终点重规划，
