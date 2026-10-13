@@ -21,7 +21,7 @@ namespace unistackbot_controller
  *
  * 动机: CM ~/status 里的 current_pose 只在 CM active 时存在 (20Hz), 切到
  * JointStream 就没有 EE 位姿反馈话题; /tf 虽永远有但消费要 tf2 查询。
- * 本控制器与控制器选择无关地持续发布 ~/ee_state (PoseStamped, base 系)。
+ * 本控制器与控制器选择无关地持续发布 /ee_state (PoseStamped, base 系)。
  *
  * 只读: 仅认领 state 接口 (与 JS/CM/JSB 共存, 无命令接口竞争)。
  *
@@ -30,7 +30,7 @@ namespace unistackbot_controller
  * PoseStamped 消费者不受影响 (接口词典 docs/sim/chain_interface_dictionary.md)。
  *
  * 契约:
- *   ~/ee_state  geometry_msgs/PoseStamped (base 系, FK(关节状态), 默认 50Hz)
+ *   /ee_state  geometry_msgs/PoseStamped (base 系, FK(关节状态), 默认 50Hz)
  * 参数: base_link / tip_link / publish_hz / robot_description (CM 注入)
  */
 class EeStateBroadcaster : public controller_interface::ControllerInterface

@@ -159,7 +159,7 @@ class TeleopKey(Node):
 		self.status = None        # 最近一帧 CartesianMotionStatus 关键字段
 		self.status_t = 0.0
 		# ee_state: 只读反馈流 (ee_state_broadcaster 常激活, CM 未接管时也在发)
-		self.create_subscription(PoseStamped, '/ee_state_broadcaster/ee_state',
+		self.create_subscription(PoseStamped, '/ee_state',
 		                         self._on_ee, 10)
 		self.create_subscription(CartesianMotionStatus,
 		                         '/cartesian_motion_controller/status', self._on_status, 10)
@@ -167,11 +167,11 @@ class TeleopKey(Node):
 		# 审查实锤 2026-09-23); control=事件通道, CM 侧 sub 是 transient_local,
 		# pub 必须 ≥ (volatile pub 配 transient_local sub 不兼容)
 		self.pub_target = self.create_publisher(PoseStamped,
-			'/cartesian_motion_controller/target',
+			'/cartesian_motion_controller/command',
 			QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
 			           history=HistoryPolicy.KEEP_LAST, depth=1))
 		self.pub_control = self.create_publisher(CartesianControl,
-			'/cartesian_motion_controller/control',
+			'/cartesian_motion_controller/pause',
 			QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
 			           history=HistoryPolicy.KEEP_LAST, depth=1,
 			           durability=DurabilityPolicy.TRANSIENT_LOCAL))

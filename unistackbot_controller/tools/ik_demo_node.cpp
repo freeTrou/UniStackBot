@@ -2,7 +2,7 @@
  * ik_demo_node —— RViz 交互式笛卡尔拖动演示。
  *
  * RViz 中出现一个 6-DOF 可拖动标记 (末端目标)。拖动它:
- *   标记位姿 -> /cartesian_motion_controller/target (值通道)
+ *   标记位姿 -> /cartesian_motion_controller/command (值通道)
  *   -> CM 在控制环上做流式 IK 伺服 (种子=上一解, 零空间目标; 停发=收敛最后目标保持)
  *   -> 臂平滑跟随你的手。
  *
@@ -61,7 +61,7 @@ public:
 
 		// 目标值通道: 与 CM 契约同款 QoS (reliable + KeepLast1)
 		target_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
-			"/cartesian_motion_controller/target", 10);
+			"/cartesian_motion_controller/command", 10);
 
 		// 标准 InteractiveMarkerServer: 自带 RESET/KEEP_ALIVE 协议 (RViz 显示项
 		// 吃的是 InteractiveMarkerUpdate, 裸 publisher 类型不匹配连不上)

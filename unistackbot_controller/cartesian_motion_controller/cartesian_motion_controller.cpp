@@ -264,8 +264,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	const std::uint32_t chain_n = fk_->jointCount();
 	cb_seed_.assign(chain_n, 0.0);
 	cb_q_.assign(chain_n, 0.0);
-	target_sub_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
-		"~/target", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
+	command_sub_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
+		"~/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
 		[this, chain_n](const geometry_msgs::msg::PoseStamped::SharedPtr m)
 		{
 			// v1 只收 base 系; 跨系变换是上层职责 (RViz/规划器)。非本帧丢弃,
@@ -371,8 +371,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 				}
 			}
 		});
-	control_sub_ = get_node()->create_subscription<unistackbot_interface::msg::CartesianControl>(
-		"~/control", rclcpp::QoS(1).transient_local(),
+	pause_sub_ = get_node()->create_subscription<unistackbot_interface::msg::CartesianControl>(
+		"~/pause", rclcpp::QoS(1).transient_local(),
 		[this](const unistackbot_interface::msg::CartesianControl::SharedPtr m)
 		{
 			control_mode_.store(m->mode, std::memory_order_release);
@@ -382,10 +382,11 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	rt_status_ = std::make_shared<realtime_tools::RealtimePublisher<
 		unistackbot_interface::msg::CartesianMotionStatus>>(status_pub_);
 
-	ULOG_INFO("cartesian_motion_controller: 链 %s -> %s (%u 关节, 回调 IK 预算 %.0fms, "
+	ULOG_INFO("cartesian_motion_controller: 链 %s -> %s (%u 关节, 回调 IK 预算 %.0fms [%s], "
 		"OTG a=%.1f j=%.1f)",
 		base_link_.c_str(), tip_link_.c_str(), fk_->jointCount(),
-		ik_timeout_ms_, max_acceleration_, max_jerk_);
+		ik_timeout_ms_, ik_adaptive_ ? "message_rate" : "explicit",
+		max_acceleration_, max_jerk_);
 	return CallbackReturn::SUCCESS;
 }
 
@@ -565,8 +566,10 @@ controller_interface::return_type CartesianMotionController::update(
 	CartesianPose meas;
 	const bool meas_ok = fk_->fk(q_meas_, meas, fk_scratch_);
 
-	// ② 取最新解算 (值通道; 撕裂/无发布 → read false 沿用旧值)。HOLD 期间新目标被
-	//     忽略 (事件通道语义: 冻结就是冻结); 失败载荷保持上一关节终点 (连续性根)
+	// ② 取最新解算 (值通道; 撕裂/无发布 → read false 沿用旧值)。HOLD = 运动推进
+	//     门控 (2026-10-12 裁决, 词典 ~/pause 条目): 期间新目标照常求解采纳
+	//     (goal_ 更新), 仅停止推进 (OTG 自目标 C2 停); 解除后追最新 goal_。
+	//     失败载荷保持上一关节终点 (连续性根)
 	const bool hold = control_mode_.load(std::memory_order_acquire) ==
 		unistackbot_interface::msg::CartesianControl::HOLD;
 	{
@@ -616,7 +619,7 @@ controller_interface::return_type CartesianMotionController::update(
 	{
 		// 目标选择: HOLD/无解算目标/FK 异常 → 自目标 (= 保持, C2 停在原地);
 		// 正常 → 最新关节终点 goal_ (每拍重规划 = 可打断原生语义, §16.6)。
-		// ~/target 停发不是状态: goal_ 保持, 臂收敛到最后命令的位姿 (断流语义统一 2026-10-10)
+		// ~/command 停发不是状态: goal_ 保持, 臂收敛到最后命令的位姿 (断流语义统一 2026-10-10)
 		std::array<double, unistackbot_interface::kMaxJoints> tgt{};
 		const bool servo = !hold && have_goal_ && meas_ok;
 		if (servo)
@@ -666,8 +669,8 @@ controller_interface::CallbackReturn CartesianMotionController::on_cleanup(const
 {
 	rt_status_.reset();
 	status_pub_.reset();
-	control_sub_.reset();
-	target_sub_.reset();
+	pause_sub_.reset();
+	command_sub_.reset();
 	ik_.reset();
 	fk_.reset();
 	return CallbackReturn::SUCCESS;

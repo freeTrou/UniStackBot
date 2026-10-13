@@ -19,6 +19,9 @@ uint8 mode
 string[] joint_names              # 关节名序 (控制器按名映射到命令接口)
 float64[] position                # [rad]
 float64[] velocity                # [rad/s]
-float64[] effort                  # [N·m] (tff)
-float64[] kp                      # MIT 比例增益 [N·m/rad] (0=不启用)
-float64[] kd                      # MIT 阻尼增益 [N·m·s/rad]
+float64[] effort                  # [N·m] 力矩通道, 角色随 mode: CST=主载荷 / CSP·MIT=前馈 τ_ff。
+                                  # 与 JointState.effort (测量值) 同词不同义: 此处=要发的。
+                                  # 前馈消费随真机 MIT 批次启用 (仿真链 position 接口表达不了力矩)。
+float64[] kp                      # MIT 比例增益 [N·m/rad] (0=不启用); 关节侧 (输出端) 单位,
+                                  # 转子侧换算 (×ratio²) 归协议层
+float64[] kd                      # MIT 阻尼增益 [N·m·s/rad]; 单位口径同 kp

@@ -136,7 +136,7 @@ e2e_one_tier() {  # $1=负载进程数 $2=档名
   if [ "$1" -gt 0 ]; then python3 "$SCRIPT_DIR/cpu_load.py" start "$1"; sleep 3; fi
   # 目标跟踪: 机型无关的近目标 —— 当前 EE 位姿 (ee_state, base 系) + 3cm x 偏移,
   # 姿态取当前值 (verify_motion 同款策略, 不写死任何机型的可达位姿)
-  TARGET=$(timeout 5 ros2 topic echo /ee_state_broadcaster/ee_state --once 2>/dev/null | python3 -c "
+  TARGET=$(timeout 5 ros2 topic echo /ee_state --once 2>/dev/null | python3 -c "
 import sys, yaml
 d = next(yaml.safe_load_all(sys.stdin), None)
 if d is None: sys.exit(1)
@@ -145,7 +145,7 @@ p['x'] = round(p['x'] + 0.03, 4)
 print('{header: {frame_id: %s}, pose: {position: {x: %s, y: %s, z: %s}, orientation: {x: %s, y: %s, z: %s, w: %s}}}' % (
     repr(d['header']['frame_id']), p['x'], p['y'], p['z'], o['x'], o['y'], o['z'], o['w']))
 ")
-  timeout 8 ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped \
+  timeout 8 ros2 topic pub --once /cartesian_motion_controller/command geometry_msgs/msg/PoseStamped \
     "${TARGET:?'ee_state 无数据 (链未起齐?)'}" >/dev/null 2>&1
   T0=$(date +%s.%N)
   CONV=""

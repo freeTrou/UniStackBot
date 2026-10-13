@@ -7,12 +7,12 @@
 IK 上环宿主：`cartesian_motion_controller/` 自包含文件夹。双机型三链验收。
 
 **契约**：
-- `~/target` PoseStamped（值通道，reliable+KeepLast(1)，base 系）
-- `~/control` CartesianControl（事件通道：TRACKING/HOLD，transient_local）
+- `~/command` PoseStamped（值通道，reliable+KeepLast(1)，base 系）
+- `~/pause` CartesianControl（事件通道：TRACKING/HOLD，transient_local）
 - `~/status` CartesianMotionStatus（误差/min_sigma/结果码，20Hz）
 - 关节反馈复用 `/joint_states`，不新增
 
-**机制**：安全层独立于 IK（NaN 门 → 限位 clamp → 步长饱和）；断流语义（2026-10-10 统一，JS/CM 同一套）：~/target 停发 = 最后一条消息的最新终点仍是目标，臂收敛到它保持，无专门机制——恢复的大跳变由通用超限防线兜底（OtgStream v/a/j 界 + 步长钳位）。
+**机制**：安全层独立于 IK（NaN 门 → 限位 clamp → 步长饱和）；断流语义（2026-10-10 统一，JS/CM 同一套）：~/command 停发 = 最后一条消息的最新终点仍是目标，臂收敛到它保持，无专门机制——恢复的大跳变由通用超限防线兜底（OtgStream v/a/j 界 + 步长钳位）。
 
 **边界**：折叠零位直发远目标需预摆位或等 worker 冷启动；加速度界挂真机前。
 
@@ -28,19 +28,19 @@ IK 上环宿主：`cartesian_motion_controller/` 自包含文件夹。双机型�
 
 ## EeStateBroadcaster（EE, 2026-09-21）
 
-EE 位姿独立反馈流：`~/ee_state` PoseStamped（base 系，FK(关节状态)，50Hz）。**只读**（零命令接口，CM 切走后反馈不断流），三链第四 spawner。旋转表示决策挂起，先四元数载体。
+EE 位姿独立反馈流：`/ee_state` PoseStamped（base 系，FK(关节状态)，50Hz）。**只读**（零命令接口，CM 切走后反馈不断流），三链第四 spawner。旋转表示决策挂起，先四元数载体。
 
 ## OtgGateController —— 已退役（2026-09-24 删代码）
 
 OTG 门（2026-09-23 落地）在 §16.6 语义统一裁决后架构并入 CM：**其通路（订阅回调线程
 一次 IK → RT 环 OtgStream 输出级）就是 CM 的新实现**，独立控制器不再存在。终点命令
-直接发 `/cartesian_motion_controller/target`（CM 默认可打断；停发 = 收敛到最后目标保持，2026-10-10 统一语义）。
+直接发 `/cartesian_motion_controller/command`（CM 默认可打断；停发 = 收敛到最后目标保持，2026-10-10 统一语义）。
 决策记录见 `docs/architecture/hardware_framework_design.md` §16.4/§16.6。
 
 ## 工具节点
 
 - `fk_tool` / `ik_tool`：算法调试 CLI（fk_tool 的 `--base/--tip` **必填无默认**，piper 用 `base_link`/`link6`，xarm7 用 `link_base`/`link7`）
-- `ik_demo_node`：RViz 拖动 → 发 CM `~/target`
+- `ik_demo_node`：RViz 拖动 → 发 CM `~/command`
 
 ## 范围
 

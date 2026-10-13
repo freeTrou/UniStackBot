@@ -57,7 +57,7 @@ def main():
 		elif topic == '/joint_stream_controller/command':
 			# JointCommand 无 header —— 用 bag 接收时间戳 (ns) 差分求率
 			cmd_t.append(t * 1e-9)
-		elif topic == '/cartesian_motion_controller/target':
+		elif topic == '/cartesian_motion_controller/command':
 			cm_t.append(t * 1e-9)   # cartesian 域命令侧旁证 (JS command 此时静默)
 	del reader
 	# cartesian 域: JS command 被 CM 切走后静默, 命令侧频率用 CM 目标流

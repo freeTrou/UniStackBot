@@ -94,7 +94,7 @@ grep -E "update_rate .*Hz|权威参数|实测中位数" "$LAUNCH_LOG" | tail -4 
 # 才能对账命令侧频率/跟踪
 CM_TOPICS=""
 if [ "$DOMAIN" = "cartesian" ]; then
-	CM_TOPICS="/cartesian_motion_controller/status /cartesian_motion_controller/target"
+	CM_TOPICS="/cartesian_motion_controller/status /cartesian_motion_controller/command"
 fi
 rm -rf "$BAG"
 ros2 bag record -s mcap /joint_states /joint_stream_controller/command $CM_TOPICS -o "$BAG" >/dev/null 2>&1 &

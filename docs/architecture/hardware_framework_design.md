@@ -550,7 +550,7 @@ CM IK 伺服 + JS = 控制环 = 总线     同一频率    ← 仿真 500Hz; 真
 
 **选型规则**: 点到点→A; 路径跟随→B; 双严→上层对齐频率→透传。
 JS `interpolation: ruckig` 即关节空间门 v0（已上线）; OTG 门控制器曾于 2026-09-23 落地
-（~/target 终点→回调线程一次 IK→RT 环 OtgStream→总线频率 JointCommand 流→JS 透传;
+（~/command 终点→回调线程一次 IK→RT 环 OtgStream→总线频率 JointCommand 流→JS 透传;
 mock E2E 到位 0.088mm/命令流 500.03Hz/不可达诚实拒绝）。
 **2026-09-23 深夜语义统一裁决（§16.6）后路线 A 并入 CM, OTG 门退役——2026-09-24
 代码/CMake/两 yaml 段删除实做完成**（其通路即 CM 新实现, 沿革见 §16.6）。
@@ -572,7 +572,7 @@ mock E2E 到位 0.088mm/命令流 500.03Hz/不可达诚实拒绝）。
    "不可打断"（走完当前段才吃下一个）**不进控制器**——上层自律（等 status 收敛
    再发下一条, demo 逐点模式即此）, 控制器加排队/拒绝逻辑反而违背点流语义。
 2. **统一形态 = CM 输出级 OtgStream 化**:
-   `~/target (点流) → 每条一次 IK（回调线程, 种子=实测, 墙钟预算 50ms 档）
+   `~/command (点流) → 每条一次 IK（回调线程, 种子=实测, 墙钟预算 50ms 档）
    → SpLatest 关节终点 → RT 环 OtgStream 追最新（C2）→ 接口输出`。
    - 每条消息重解（种子=实测）保闭环补偿——mujoco 重力下垂按消息率追回;
    - RT 环退出 IK（500µs 预算难题与 worker 冷启动机制整体消失）, 只剩
@@ -760,7 +760,7 @@ ENABLED 才许动"是 supervisor/上层组语义，不进泵。看门狗链每�
   反馈面统一 + 实现层分臂（模式②），中间非 RT 外观层**：
   - 命令: `/joint_stream_controller/command`（14 关节一条消息, 桥节点**按关节名**拆发
     js_left/js_right——现有 demo 按 URDF 自持解析发全关节表, 零适配）;
-    `/cartesian_motion_controller/target` 统一, **按 header.frame_id 路由**到 cm_left/right
+    `/cartesian_motion_controller/command` 统一, **按 header.frame_id 路由**到 cm_left/right
     （frame 本来就携带"给哪条臂"的语义, 不发明新字段）。
   - 反馈: `/joint_states` 本来就是一个（JSB 认领全部接口）; `/ee_state` 两广播器
     **remap 合流**（frame_id 区分, 零代码）; `/status` remap 合流 + **CartesianMotionStatus

@@ -104,7 +104,7 @@ def mode_cm(args):
 	node = Node('verify_cm')
 	tfbuf = Buffer()
 	TransformListener(tfbuf, node)
-	pub = node.create_publisher(PoseStamped, '/cartesian_motion_controller/target', 1)
+	pub = node.create_publisher(PoseStamped, '/cartesian_motion_controller/command', 1)
 	status = {}
 
 	def on_status(msg):

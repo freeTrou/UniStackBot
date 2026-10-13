@@ -138,7 +138,7 @@ bash test/rt_chain_bench.sh piper_first_0922 --robot piper --chain mujoco
   （拒绝不污染链路状态; 上层不完美是常态, 拒绝路径也是验收面）。判读：诚实拒 N/N、
   恢复收敛 err ≈ 账地板、单发终点到位 err ≈ 账地板、命令流频率 ≈ update_rate
 
-先起录包再跑演示（关节命令流都进包——`/joint_stream_controller/command` 是关节慢流+满速共用入口，`/cartesian_motion_controller/target` 是末端/终点流）；**仿真链必须带
+先起录包再跑演示（关节命令流都进包——`/joint_stream_controller/command` 是关节慢流+满速共用入口，`/cartesian_motion_controller/command` 是末端/终点流）；**仿真链必须带
 /clock**（跨链按仿真时间对齐的前提）。
 
 **链 1/3 mock（本阶段必录）**——按序执行，每步等上一步收尾：
@@ -163,7 +163,7 @@ ros2 launch unistackbot_bringup control.launch.py robot:=piper use_rviz:=true
 
 # ② 起录包 (规范 v1: record_verify.sh —— mcap+标准话题集+sidecar; CM 域任务加录 status/target)
 ros2 run unistackbot_tool record_verify.sh piper_first_mock --robot piper --chain mock \
-    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/target --extra /tf
+    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/command --extra /tf
 
 # ③ 演示 1a 关节慢流 (50Hz 点流, ~16s) —— 等脚本退出 (断流减速收尾) 再下一条;
 #    结束行自报名义/实际达成率 (rclpy 低频域校准旁证)
@@ -177,7 +177,7 @@ ros2 run unistackbot_demo demo_cartesian.py --pattern sweep
 
 # ⑥ 演示 3 终点+负路径 (§16.6 改版 2026-09-24: OTG 门退役, 终点语义=CM 原生能力——
 #    每条消息=最新终点, --once 单发即完整合法用法; 脚本自动切 CM, 结束切回 JS)
-#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped \
+#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/command geometry_msgs/msg/PoseStamped \
 #      "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
 ros2 run unistackbot_demo demo_cartesian.py --pattern reject
 
@@ -193,7 +193,7 @@ ros2 launch unistackbot_mujoco mujoco.launch.py robot:=piper headless:=true
 
 # ② 起录包 (规范 v1: /clock 已在 record_verify.sh 标准集内, mujoco 跨链按仿真时间对齐)
 ros2 run unistackbot_tool record_verify.sh piper_first_mujoco --robot piper --chain mujoco \
-    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/target --extra /tf
+    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/command --extra /tf
 
 # ③ 演示 1a 关节慢流 —— 等脚本退出再下一条
 ros2 run unistackbot_demo demo_motion.py
@@ -207,7 +207,7 @@ ros2 run unistackbot_demo demo_cartesian.py --pattern sweep
 
 # ⑥ 演示 3 终点+负路径 (§16.6 改版 2026-09-24: OTG 门退役, 终点语义=CM 原生能力——
 #    每条消息=最新终点, --once 单发即完整合法用法; 脚本自动切 CM, 结束切回 JS)
-#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped \
+#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/command geometry_msgs/msg/PoseStamped \
 #      "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
 ros2 run unistackbot_demo demo_cartesian.py --pattern reject
 
@@ -225,7 +225,7 @@ ros2 launch unistackbot_gazebo ign.launch.py robot:=piper gui:=false
 
 # ② 起录包 (规范 v1, /clock 在标准集内)
 ros2 run unistackbot_tool record_verify.sh piper_first_gz --robot piper --chain gz \
-    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/target --extra /tf
+    --extra /cartesian_motion_controller/status --extra /cartesian_motion_controller/command --extra /tf
 
 # ③ 演示 1a 关节慢流 —— 等脚本退出再下一条
 ros2 run unistackbot_demo demo_motion.py
@@ -239,7 +239,7 @@ ros2 run unistackbot_demo demo_cartesian.py --pattern sweep
 
 # ⑥ 演示 3 终点+负路径 (§16.6 改版 2026-09-24: OTG 门退役, 终点语义=CM 原生能力——
 #    每条消息=最新终点, --once 单发即完整合法用法; 脚本自动切 CM, 结束切回 JS)
-#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/target geometry_msgs/msg/PoseStamped \
+#    终点冒烟可选: ros2 topic pub --once /cartesian_motion_controller/command geometry_msgs/msg/PoseStamped \
 #      "{header: {frame_id: base_link}, pose: {position: {x: 0.056, y: 0.0, z: 0.413}, orientation: {w: 0.7373, x: 0.0, y: 0.6756, z: 0.0}}}"
 ros2 run unistackbot_demo demo_cartesian.py --pattern reject
 

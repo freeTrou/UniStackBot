@@ -63,7 +63,9 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_configure(
 
 	pub_ = std::make_shared<realtime_tools::RealtimePublisher<geometry_msgs::msg::PoseStamped>>(
 		get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
-			"~/ee_state", rclcpp::QoS(10)));   // 状态流: 默认 reliable 即可 (50Hz 小包)
+			"/ee_state", rclcpp::QoS(10)));   // 顶层标准位 (2026-10-12 接口定名, 与 /joint_states
+	// 对仗; JSB 先例: 框架认定的标准位优先于节点命名空间。多实例 (双臂各一 EEB) 时
+	// 需加 use_local_topics 类参数 —— 单实例期从简。状态流: 默认 reliable 即可 (50Hz 小包)
 	ULOG_INFO("%s: 配置完成 (%s -> %s @%.0fHz)", kPluginName,
 		base_link_.c_str(), tip_link_.c_str(), publish_hz_);
 	return controller_interface::CallbackReturn::SUCCESS;

@@ -47,7 +47,7 @@ namespace unistackbot_controller
  * (OtgStream 每拍从当前状态重规划 C2 = 原生可打断语义)。
  *
  * 数据通路 (IK 出环, RT 只做整形):
- *   ~/target (点流) → 回调线程每条一次 IK (种子=实测, 墙钟预算 ik_timeout_ms)
+ *   ~/command (点流) → 回调线程每条一次 IK (种子=实测, 墙钟预算 ik_timeout_ms)
  *   → SpLatest<SolvedTarget> → RT 环 OtgStream 追最新关节终点 (C2, vmax 界)
  *   → 安全钳位 (NaN 门 + 限位 + 步长, 皮带扣; OtgStream Limits 已主约束)
  *   → 接口输出
@@ -55,8 +55,8 @@ namespace unistackbot_controller
  * 每条消息种子=实测 → 物理链下垂按消息率补偿 (闭环性保留)。
  *
  * 对外契约 (冻结于骨架期, 2026-09-17; §16.6 后语义不变):
- *   ~/target  geometry_msgs/PoseStamped   值通道 (base 系期望末端位姿, 点流)
- *   ~/control unistackbot_interface/CartesianControl   事件通道 (TRACKING/HOLD)
+ *   ~/command  geometry_msgs/PoseStamped   值通道 (base 系期望末端位姿, 点流)
+ *   ~/pause unistackbot_interface/CartesianControl   事件通道 (TRACKING/HOLD)
  *   ~/status  unistackbot_interface/CartesianMotionStatus   位姿反馈 + 求解器健康
  *   关节反馈不新增: /joint_states (joint_state_broadcaster) 是关节空间单一事实源
  *
@@ -135,7 +135,7 @@ private:
 	std::string warned_frame_;           // 非本帧目标的单次警告去重 (回调线程私有)
 
 	// ---- 跨线程通道 (POD; §16.6 改版核心) ----
-	// 回调 → RT: 每条 ~/target 消息一次 IK 的结果 (关节终点 + 遥测)
+	// 回调 → RT: 每条 ~/command 消息一次 IK 的结果 (关节终点 + 遥测)
 	struct SolvedTarget
 	{
 		CartesianPose target;                       // 原始笛卡尔目标 (status 误差基准)
@@ -164,7 +164,7 @@ private:
 	bool otg_ready_{false};
 
 	// ---- 断流语义 (2026-10-10 统一, 用户裁决) ----
-	// 无专门机制: ~/target 停发 = 最后一条消息的最新终点仍是目标, 每拍重规划
+	// 无专门机制: ~/command 停发 = 最后一条消息的最新终点仍是目标, 每拍重规划
 	// 收敛到它保持; 长静默后恢复的大跳变与任何大跳变同源, 由通用超限防线
 	// 兜底 (OtgStream v/a/j 界 + max_target_jump + 步长钳位)。总线真死由
 	// 驱动器看门狗兜底 —— 控制器不感知"流"的存在。
@@ -182,8 +182,8 @@ private:
 	uint64_t update_count_{0};
 
 	// ---- 契约通道 ----
-	rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_sub_;
-	rclcpp::Subscription<unistackbot_interface::msg::CartesianControl>::SharedPtr control_sub_;
+	rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr command_sub_;
+	rclcpp::Subscription<unistackbot_interface::msg::CartesianControl>::SharedPtr pause_sub_;
 	rclcpp::Publisher<unistackbot_interface::msg::CartesianMotionStatus>::SharedPtr status_pub_;
 	std::shared_ptr<realtime_tools::RealtimePublisher<unistackbot_interface::msg::CartesianMotionStatus>> rt_status_;
 	std::atomic<uint8_t> control_mode_{unistackbot_interface::msg::CartesianControl::TRACKING};

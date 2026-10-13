@@ -249,7 +249,7 @@ JS 整体退位导致对侧失管）。**镜像在基座摆放**（右臂基座 
 
 ```
 命令面统一: /joint_stream_controller/command (14 关节一条消息, 桥按关节名拆)
-           /cartesian_motion_controller/target (按 header.frame_id 路由)
+           /cartesian_motion_controller/command (按 header.frame_id 路由)
 反馈面统一: /joint_states (本来一个) · /ee_state (remap 合流, frame_id 区分)
            /status (remap 合流 + 显式 chain 字段——唯一 msg 改动)
 桥接层:    非 RT 外观节点 (命令拆分, 零控制语义) + 纯 remap (反馈合流)

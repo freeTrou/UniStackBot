@@ -214,7 +214,7 @@ class DemoCartesian(Node):
 
 		# CM 契约同款 QoS: reliable + KeepLast(1) (深度 10 会在 rclpy 跟不上时积压
 		# 10 条陈旧目标, CM 追着滞后目标走而 demo 以为发的是最新 —— 审查实锤 2026-09-23)
-		pub = self.create_publisher(PoseStamped, '/cartesian_motion_controller/target',
+		pub = self.create_publisher(PoseStamped, '/cartesian_motion_controller/command',
 			QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
 			           history=HistoryPolicy.KEEP_LAST, depth=1))
 		try:

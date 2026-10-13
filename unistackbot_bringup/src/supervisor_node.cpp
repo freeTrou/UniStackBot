@@ -1,52 +1,52 @@
 /*
- * supervisor_node —— 编排层最小版 (0d, 2026-09-21)。
+ * supervisor_node —— 编排层诊断 (0d 2026-09-21; 2026-10-12 升级统一错误契约)。
  *
- * 非RT诊断节点 (设计裁决: 诊断通道走 diagnostic_msgs, hardware_framework_design §P):
- * 汇聚链上健康信号 → /supervisor/alerts (diagnostic_msgs/DiagnosticArray, 1Hz)。
+ * 非RT诊断节点: 汇聚链上健康信号 → /supervisor/alerts (SystemAlert 单板, 50Hz)。
  * 纯订阅+定时器, 零服务调用零轮询 —— 任何被监控源死亡都表现为"话题静默", 由
- * 陈旧检测捕获 (编排层不活跃于控制路径, 它死了不影响链)。
+ * 陈旧检测捕获 (编排层不活跃于控制路径, 它死了不影响链; 自身死亡 = 话题静默,
+ * 订阅方 20ms 级发现 —— 心跳语义)。
  *
- * 监控面 (最小版):
- *   cm            /cartesian_motion_controller/status: mode/last_result/
- *                 timed_out + 话题静默检测 (active 后 >2s 无帧 = WARN)
- *   joint_states  /joint_states: >1s 无帧 = ERROR (链路核心反馈断流)
- *   ee_state      /ee_state_broadcaster/ee_state: >1s 无帧 = WARN (反馈流降级,
- *                 /tf 仍在不算 ERROR)
- *   alerts        汇总帧本身 1Hz —— 消费者用它做 supervisor 活性心跳
+ * 三错误域 (SystemAlert 三区块; 本节点仿真链只产 SYSTEM 域三源):
+ *   DEVICE  关节电机/驱动器 —— 真机批次接入 (协议轴 error_bits 映射, per-joint 槽)
+ *   BUS     总线通信        —— 真机批次接入 (serial 遥测 tx_failed/rx_nofit)
+ *   SYSTEM  控制器/软件域   —— 本版: cm/js/ee 三源固定字段
  *
- * 后续扩展位 (非本版): write 防线 fault 计数器 (需 sim_control 暴露诊断话题)、
- * 控制器生命周期事件 (需 CM 提供事件或本节点轮询 list_controllers)。
+ * state 聚合 = worst-of(err_code_severity), 唯一裁决处; js 从未收到 = UNKNOWN
+ * (链未起窗口), seen 后断流才升级 (FAULT 级)。人话不进消息 —— 消费端查
+ * err_code_message(code) (码表 hpp 单一事实源)。
+ *
+ * 扩展位 (非本版): write 防线计数器 (SYSTEM 域新字段)、DEVICE/BUS 域真机源、
+ * 控制器生命周期事件。
  *
  * 三链通用 (mock/gz/mujoco), 由各链 launch 拉起。
  */
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
-#include <string>
 
-#include "diagnostic_msgs/msg/diagnostic_array.hpp"
-#include "diagnostic_msgs/msg/diagnostic_status.hpp"
-#include "diagnostic_msgs/msg/key_value.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "ulog/ulog.hpp"
 
+#include "unistackbot_interface/error_codes.hpp"
 #include "unistackbot_interface/msg/cartesian_motion_status.hpp"
+#include "unistackbot_interface/msg/system_alert.hpp"
 
-using diagnostic_msgs::msg::DiagnosticArray;
-using diagnostic_msgs::msg::DiagnosticStatus;
-using diagnostic_msgs::msg::KeyValue;
+using unistackbot_interface::ErrCode;
 using unistackbot_interface::msg::CartesianMotionStatus;
+using unistackbot_interface::msg::SystemAlert;
 
 namespace
 {
 
-constexpr int kLevelOk = DiagnosticStatus::OK;
-constexpr int kLevelWarn = DiagnosticStatus::WARN;
-constexpr int kLevelError = DiagnosticStatus::ERROR;
+constexpr std::chrono::milliseconds kPublishPeriod{20};   // 50Hz 心跳
+constexpr double kCmSilentS = 2.0;    // cm status 静默阈值 (active 后)
+constexpr double kJsDropS = 1.0;      // /joint_states 断流阈值 (核心反馈)
+constexpr double kEeDropS = 1.0;      // /ee_state 断流阈值
 
-// 状态码翻译 (CartesianMotionStatus 常量 → 人话; 消费者也看原始值)
+// 状态码翻译 (CartesianMotionStatus 常量 → 人话; 仅本节点日志用)
 const char * cmModeName(uint8_t mode)
 {
 	switch (mode)
@@ -84,6 +84,8 @@ int main(int argc, char ** argv)
 	bool js_seen = false;
 	rclcpp::Time ee_last_time = node->now();
 	bool ee_seen = false;
+	// 异常累计拍数 (按源; 正常拍不清零 —— 语义 = 上电以来异常总量, 趋势可差分)
+	uint64_t cm_count = 0, js_count = 0, ee_count = 0;
 
 	auto sub_cm = node->create_subscription<CartesianMotionStatus>(
 		"/cartesian_motion_controller/status", 10,
@@ -105,108 +107,84 @@ int main(int argc, char ** argv)
 			js_seen = true;
 		});
 	auto sub_ee = node->create_subscription<geometry_msgs::msg::PoseStamped>(
-		"/ee_state_broadcaster/ee_state", 10,
+		"/ee_state", 10,
 		[&](const geometry_msgs::msg::PoseStamped::SharedPtr)
 		{
 			ee_last_time = node->now();
 			ee_seen = true;
 		});
 
-	auto alerts = node->create_publisher<DiagnosticArray>("/supervisor/alerts", 10);
+	auto alerts = node->create_publisher<SystemAlert>("/supervisor/alerts", 10);
 
-	const auto kv = [](const std::string & k, const std::string & v)
-	{
-		KeyValue e;
-		e.key = k;
-		e.value = v;
-		return e;
-	};
-
-	// ---- 1Hz 汇总发布 ----
+	// ---- 50Hz 状态板发布 (三源 → SYSTEM 域平行数组 + worst-of state) ----
 	auto publish = [&]()
 	{
 		const auto now = node->now();
-		DiagnosticArray msg;
+		SystemAlert msg;
 		msg.header.stamp = now;
-
-		// cm
+		// DEVICE/BUS 域: 仿真链恒空数组 (真机批次接入; 变长模式零写死)
+		uint8_t worst = 0;   // worst-of severity: 0=无贡献 1=DEGRADED 级 3=FAULT 级
+		const auto pushSystem = [&](const char * loc, ErrCode code, uint64_t & count)
 		{
-			DiagnosticStatus st;
-			st.name = "cm";
-			st.hardware_id = "cartesian_motion_controller";
-			if (!cm_seen)
-			{
-				st.level = kLevelOk;
-				st.message = "未激活 (无 status 帧, CM 以 inactive 注册属正常)";
-			}
-			else if (cm_was_active && (now - cm_last_stamp).seconds() > 2.0)
-			{
-				st.level = kLevelWarn;
-				st.message = "status 静默 >2s (active 后断流; 上次 mode 见键值)";
-			}
-			else if (cm_last.mode == CartesianMotionStatus::DEGRADED)
-			{
-				st.level = kLevelWarn;
-				st.message = "求解连续失败降级";
-			}
-			else
-			{
-				st.level = kLevelOk;
-				st.message = std::string("mode=") + cmModeName(cm_last.mode);
-			}
-			st.values.push_back(kv("mode", cmModeName(cm_last.mode)));
-			st.values.push_back(kv("last_result", std::to_string(cm_last.last_result)));
-			st.values.push_back(kv("timed_out", cm_last.timed_out ? "1" : "0"));
-			st.values.push_back(kv("position_error_m", std::to_string(cm_last.position_error)));
-			msg.status.push_back(st);
+			msg.system_locations.emplace_back(loc);
+			msg.system_codes.push_back(static_cast<uint16_t>(code));
+			if (code != ErrCode::NONE) {++count;}
+			msg.system_counts.push_back(count);
+			worst = std::max(worst, unistackbot_interface::err_code_severity(code));
+		};
+
+		// cm (DEGRADED/静默 = DEGRADED 级)
+		ErrCode cm_code = ErrCode::NONE;
+		if (cm_seen && cm_was_active && (now - cm_last_stamp).seconds() > kCmSilentS)
+		{
+			cm_code = ErrCode::CM_SILENT;
 		}
-
-		// joint_states (核心反馈: 断 = ERROR)
+		else if (cm_last.mode == CartesianMotionStatus::DEGRADED)
 		{
-			DiagnosticStatus st;
-			st.name = "joint_states";
-			st.hardware_id = "joint_state_broadcaster";
-			const double quiet = js_seen ? (now - js_last_time).seconds() : -1.0;
-			if (!js_seen || quiet > 1.0)
-			{
-				st.level = kLevelError;
-				st.message = !js_seen ? "从未收到 /joint_states (链未起?)"
-					: "断流 >1s (核心反馈丢失)";
-			}
-			else
-			{
-				st.level = kLevelOk;
-				st.message = "流正常";
-			}
-			st.values.push_back(kv("quiet_s", std::to_string(quiet)));
-			msg.status.push_back(st);
+			cm_code = ErrCode::CM_DEGRADED;
 		}
+		pushSystem("cm", cm_code, cm_count);
 
-		// ee_state (反馈流增强: 断 = WARN, /tf 仍在)
+		// joint_states (断流 = FAULT 级 —— 核心反馈丢失)
+		ErrCode js_code = ErrCode::NONE;
+		if (js_seen && (now - js_last_time).seconds() > kJsDropS)
 		{
-			DiagnosticStatus st;
-			st.name = "ee_state";
-			st.hardware_id = "ee_state_broadcaster";
-			const double quiet = ee_seen ? (now - ee_last_time).seconds() : -1.0;
-			if (ee_seen && quiet > 1.0)
-			{
-				st.level = kLevelWarn;
-				st.message = "断流 >1s (EE 独立反馈降级; /tf 仍可用)";
-			}
-			else
-			{
-				st.level = kLevelOk;
-				st.message = ee_seen ? "流正常" : "未见 /ee_state (ee_state_broadcaster 未起?)";
-			}
-			st.values.push_back(kv("quiet_s", std::to_string(quiet)));
-			msg.status.push_back(st);
+			js_code = ErrCode::JS_DROPOUT;
+		}
+		pushSystem("joint_states", js_code, js_count);
+
+		// ee_state (断流 = DEGRADED 级 —— /tf 仍可用)
+		ErrCode ee_code = ErrCode::NONE;
+		if (ee_seen && (now - ee_last_time).seconds() > kEeDropS)
+		{
+			ee_code = ErrCode::EE_DROPOUT;
+		}
+		pushSystem("ee_state", ee_code, ee_count);
+
+		// state 聚合 (唯一裁决处; js 从未收到 = 源数据不足窗口)
+		if (!js_seen)
+		{
+			msg.state = SystemAlert::STATE_UNKNOWN;
+		}
+		else if (worst >= 3)
+		{
+			msg.state = SystemAlert::STATE_FAULT;
+		}
+		else if (worst >= 1)
+		{
+			msg.state = SystemAlert::STATE_DEGRADED;
+		}
+		else
+		{
+			msg.state = SystemAlert::STATE_OK;
 		}
 
 		alerts->publish(msg);
 	};
 
-	auto timer = node->create_wall_timer(std::chrono::seconds(1), publish);
-	ULOG_INFO("supervisor 就绪: 监控 cm/joint_states/ee_state → /supervisor/alerts @1Hz");
+	auto timer = node->create_wall_timer(kPublishPeriod, publish);
+	ULOG_INFO("supervisor 就绪: 监控 cm/joint_states/ee_state → /supervisor/alerts "
+		"@50Hz (SystemAlert 单板: DEVICE/BUS 真机批次接入, SYSTEM=cm/js/ee)");
 	rclcpp::spin(node);
 	rclcpp::shutdown();
 	return 0;

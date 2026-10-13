@@ -12,7 +12,7 @@ std_msgs/Header header
 uint8 INACTIVE = 0	# 控制器未激活
 uint8 IDLE	= 1	# 激活, 无目标
 uint8 TRACKING	= 2	# 跟踪目标中
-uint8 HOLD	= 3	# 冻结 (来自 ~/control)
+uint8 HOLD	= 3	# 冻结 (来自 ~/pause)
 uint8 DEGRADED	= 4	# 连续求解失败, 保持上一命令 (可观测降级)
 
 uint8 mode
