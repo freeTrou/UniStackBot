@@ -113,12 +113,24 @@ def main(args=None):
             settle = float(argv.pop(0))
         else:
             raise SystemExit("未知参数 '%s'" % a)
-    if not pf or not side or not seq:
-        print('--points-file/--side/--seq 必填')
+    if not pf or not seq:
+        print('--points-file/--seq 必填 (--side/--hz 缺省时从文件 meta 读)')
         return 2
     data = json.load(open(pf))
     # 数据录制规范 v1 (unistackbot_tool/README §3): {meta, points, sequences};
     # v0 (裸 {side: {...}}) 双兼容
+    meta = data.get('meta', {})
+    # side/hz 兜底链: CLI 显式 > 文件 meta (v1 必填) > 报错
+    if not side:
+        side = meta.get('side') or ''
+    if not side:
+        print('--side 必填 (文件无 meta.side 时)')
+        return 2
+    if '--hz' not in sys.argv:
+        try:
+            hz = float(meta.get('hz'))
+        except (TypeError, ValueError):
+            pass   # meta 无/非法 hz → 保持默认 20.0
     sequences = data.get('sequences', {})
     if 'points' in data:
         points = data['points'].get(side)
@@ -127,7 +139,6 @@ def main(args=None):
     if not points:
         print("文件无 '%s' 节或为空" % side)
         return 2
-    meta = data.get('meta', {})
     if meta:
         print('meta: robot=%s side=%s hz=%s source=%s' % (
             meta.get('robot'), meta.get('side'), meta.get('hz'), meta.get('source')))

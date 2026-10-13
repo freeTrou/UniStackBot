@@ -10,7 +10,6 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>orocos_kdl_vendor</depend>
-  <depend>orocos_kdl</depend>
   <depend>urdf</depend>
   <depend>urdfdom</depend>
   <depend>kdl_parser</depend>
