@@ -77,6 +77,7 @@ tf2、realtime_tools、rosbag2+mcap（录制）、tinyxml2_vendor、interactive_
 |---|---|---|
 | `ros-humble-mujoco-ros2-control` | 0.1.2 | MuJoCo 链宿主，内嵌 MuJoCo 3.12.0；headless/sim_speed_factor 走 URDF 硬件参数。上游主循环节拍有已知特性（见 mujoco README），**升级前先对账** |
 | `ros-humble-gz-ros2-control` | 0.7.21 | gz 链 ros2_control 插件（mimic 接口读 ros2_control 块参数） |
+| `ros-humble-ros-gz-bridge` / `-interfaces` / `-sim` | — | gz 链的桥/消息/启停全家（**unistackbot_gazebo 构建必需**；缺 `-interfaces` 时 CMake 在 find_package 直接失败——首台部署机实锤 2026-10-13） |
 | `ignition-fortress` | 1.0.3 | Gazebo Sim 发行版（launch/世界 API 按 Fortress 写，Garden+ 不兼容） |
 | `libnlopt-cxx-dev` | 2.7.1 | TRAC-IK 的外部依赖（求解器本体已 **vendored 随仓**：`unistackbot_algorithm/trac_ik_solver/vendor/`，无需安装上游包；构建开关 `UNISTACKBOT_BUILD_TRAC_IK` 默认 ON，OFF 时勿编 controller） |
 | `libeigen3-dev` / `liborocos-kdl-dev` | — | Eigen / KDL（算法库直引系统头） |
@@ -84,6 +85,7 @@ tf2、realtime_tools、rosbag2+mcap（录制）、tinyxml2_vendor、interactive_
 
 ```bash
 sudo apt install ros-humble-mujoco-ros2-control ros-humble-gz-ros2-control \
+    ros-humble-ros-gz-bridge ros-humble-ros-gz-interfaces ros-humble-ros-gz-sim \
     ignition-fortress libnlopt-cxx-dev libeigen3-dev liborocos-kdl-dev \
     ros-humble-rmw-cyclonedds-cpp
 ```
