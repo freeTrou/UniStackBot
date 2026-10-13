@@ -5,7 +5,9 @@
        / 全关节 damping+frictionloss+actuatorfrcrange / ts 0.001 / 起步 kp 低档
        零位压限位线 (J2/J4 下限=0) 已知, 先直接跑有抖动再按 #5 调 -->
   <compiler angle="radian" meshdir="../meshes/visual/"/>
-  <option timestep="0.001"/>
+  <option timestep="0.001" integrator="implicitfast"/>
+  <!-- implicitfast 必要 (2026-10-10): 默认 Euler 下位置伺服 kp≥300 即失稳
+       (J4-J7 |v|max 冲到 30-40 rad/s 极限环); piper kp=24000 稳定同款配置参照 -->
   <asset>
     <mesh name="base_link" file="base_link.STL"/>
     <mesh name="Link1" file="Link1.STL"/>
@@ -63,13 +65,17 @@
       </body>
     </body>
   </worldbody>
+  <!-- 执行器刚度 (2026-10-12 收口): 初版 kp=50~500 伺服偏软 (CM up 垂差 1.876mm),
+       重定为 2000/8000/6000/3000/800/300/300 —— 验收: up 0.711mm 进 1mm 线 /
+       sweep 14 腿全收敛 0.25-0.97mm / 静态零振动 (agile 激励后 |v|=0)。
+       gravcomp 不上 (kp 够硬, stationlite 先例为后备); 完整账见同目录 README.md -->
   <actuator>
-    <position name="J1" joint="J1" kp="500" dampratio="1.0" ctrlrange="-2.723 2.723"/>
-    <position name="J2" joint="J2" kp="500" dampratio="1.0" ctrlrange="0 3.1416"/>
-    <position name="J3" joint="J3" kp="300" dampratio="1.0" ctrlrange="-0.349 3.491"/>
-    <position name="J4" joint="J4" kp="300" dampratio="1.0" ctrlrange="0 3.1415"/>
-    <position name="J5" joint="J5" kp="200" dampratio="1.0" ctrlrange="-2.269 2.269"/>
-    <position name="J6" joint="J6" kp="50" dampratio="1.0" ctrlrange="-0.524 0.524"/>
-    <position name="J7" joint="J7" kp="50" dampratio="1.0" ctrlrange="-1.571 1.571"/>
+    <position name="J1" joint="J1" kp="2000" dampratio="1.0" ctrlrange="-2.723 2.723"/>
+    <position name="J2" joint="J2" kp="8000" dampratio="1.0" ctrlrange="0 3.1416"/>
+    <position name="J3" joint="J3" kp="6000" dampratio="1.0" ctrlrange="-0.349 3.491"/>
+    <position name="J4" joint="J4" kp="3000" dampratio="1.0" ctrlrange="0 3.1415"/>
+    <position name="J5" joint="J5" kp="800" dampratio="1.0" ctrlrange="-2.269 2.269"/>
+    <position name="J6" joint="J6" kp="300" dampratio="1.0" ctrlrange="-0.524 0.524"/>
+    <position name="J7" joint="J7" kp="300" dampratio="1.0" ctrlrange="-1.571 1.571"/>
   </actuator>
 </mujoco>
