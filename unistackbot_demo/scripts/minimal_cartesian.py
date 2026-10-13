@@ -22,6 +22,7 @@
 (last_result=3) 或想往下走, 用 --dz 负值自愈: ros2 run ... --dz -0.15
 """
 
+import re
 import subprocess
 import sys
 import time
@@ -69,11 +70,35 @@ class MinimalCartesianDemo(Node):
         self.status = {}
         self.sent = None   # 对账锚点: 最近发布的目标
 
-    def switch(self, *args):
-        r = subprocess.run(['ros2', 'control', 'switch_controllers', *args],
-                           capture_output=True, text=True, timeout=15)
-        if r.returncode != 0:
-            raise RuntimeError('switch 失败: ' + r.stderr.strip()[-120:])
+    def ensure_controllers(self, activate, deactivate, retries=7):
+        """进入声明 (幂等): 先查当前态, 只对需要变化的发 switch。
+        activate 已 active 的控制器会被 CM 硬拒 (not inactive) —— 幂等由状态查询实现。"""
+        import subprocess
+        for attempt in range(retries):
+            r = subprocess.run(['ros2', 'control', 'list_controllers'],
+                               capture_output=True, text=True, timeout=15)
+            states = {}
+            for line in r.stdout.splitlines():
+                clean = re.sub(r'\x1b\[[0-9;]*m', '', line.strip())
+                parts = clean.split()
+                if len(parts) >= 3:
+                    states[parts[0]] = parts[-1]
+            args = []
+            for c in deactivate:
+                if states.get(c) == 'active':
+                    args += ['--deactivate', c]
+            for c in activate:
+                if states.get(c) != 'active':
+                    args += ['--activate', c]
+            if not args:
+                return
+            s = subprocess.run(['ros2', 'control', 'switch_controllers'] + args,
+                               capture_output=True, text=True, timeout=15)
+            if s.returncode == 0:
+                return
+            self.get_logger().warn('switch 未就绪 (attempt %d/%d), 5s 重试' % (attempt + 1, retries))
+            time.sleep(5.0)
+        raise RuntimeError('switch 失败: %s' % s.stderr.strip()[-120:])
 
     def goto(self, pub, tf, dz, tag):
         """走一个点: 流式插值 (smoothstep 起停零速度) → 等收敛或拒绝。"""
@@ -109,8 +134,8 @@ class MinimalCartesianDemo(Node):
 
         # 1. 第一步 = 切换自己需要的控制器 (与 JS 命令接口互斥——同一批 position
         #    接口至多一个 active 持有; 笛卡尔域的第一动作就是拿到 CM 控制权)
-        self.switch('--deactivate', 'joint_stream_controller',
-                    '--activate', 'cartesian_motion_controller')
+        self.ensure_controllers(activate=['cartesian_motion_controller'],
+                                deactivate=['joint_stream_controller'])
         self.get_logger().info('CM 接管: z 走 %+.0fcm (单程; 多点位看 r1_7a_demo_cartesian)' % (dz * 100))
         pub = self.create_publisher(PoseStamped, CM_CMD,
             QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
@@ -136,8 +161,8 @@ class MinimalCartesianDemo(Node):
             self.goto(pub, tf, dz, 'z %+.0fcm' % (dz * 100))
         finally:
             # 4. 切回 JS (命令接口让还给关节域)
-            self.switch('--deactivate', 'cartesian_motion_controller',
-                        '--activate', 'joint_stream_controller')
+            self.ensure_controllers(activate=['joint_stream_controller'],
+                                    deactivate=['cartesian_motion_controller'])
             self.get_logger().info('已切回 joint_stream')
 
     def _on_status(self, msg):

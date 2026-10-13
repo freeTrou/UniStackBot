@@ -13,6 +13,7 @@
 """
 
 import math
+import re
 import subprocess
 import sys
 import time
@@ -50,11 +51,35 @@ class R17aDemoCartesian(Node):
 
 	# ---- 链路契约消费 (接入方照抄的三件套) ----
 
-	def switch(self, *args):
-		r = subprocess.run(['ros2', 'control', 'switch_controllers', *args],
-		                   capture_output=True, text=True, timeout=15)
-		if r.returncode != 0:
-			raise RuntimeError('switch_controllers 失败: ' + r.stderr.strip()[-160:])
+	def ensure_controllers(self, activate, deactivate, retries=7):
+		"""进入声明 (幂等): 先查当前态, 只对需要变化的发 switch。
+		activate 已 active 的控制器会被 CM 硬拒 (not inactive) —— 幂等由状态查询实现。"""
+		import subprocess
+		for attempt in range(retries):
+			r = subprocess.run(['ros2', 'control', 'list_controllers'],
+				capture_output=True, text=True, timeout=15)
+			states = {}
+			for line in r.stdout.splitlines():
+				clean = re.sub(r'\x1b\[[0-9;]*m', '', line.strip())
+				parts = clean.split()
+				if len(parts) >= 3:
+					states[parts[0]] = parts[-1]
+			args = []
+			for c in deactivate:
+				if states.get(c) == 'active':
+					args += ['--deactivate', c]
+			for c in activate:
+				if states.get(c) != 'active':
+					args += ['--activate', c]
+			if not args:
+				return
+			s = subprocess.run(['ros2', 'control', 'switch_controllers'] + args,
+				capture_output=True, text=True, timeout=15)
+			if s.returncode == 0:
+				return
+			self.get_logger().warn('switch 未就绪 (attempt %d/%d), 5s 重试' % (attempt + 1, retries))
+			time.sleep(5.0)
+		raise RuntimeError('switch 失败: %s' % s.stderr.strip()[-120:])
 
 	def publish_target(self, pub, snapshot, dxyz):
 		"""发一条 CM 目标 = TF 快照 + 偏移。QoS 必须 reliable+KeepLast(1):
@@ -178,8 +203,8 @@ class R17aDemoCartesian(Node):
 			QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
 			           history=HistoryPolicy.KEEP_LAST, depth=1))
 
-		self.switch('--deactivate', 'joint_stream_controller',
-		            '--activate', 'cartesian_motion_controller')
+		self.ensure_controllers(activate=['cartesian_motion_controller'],
+			deactivate=['joint_stream_controller'])
 		self.get_logger().info('CM 接管 (%s → %s), 部署→圆周/横扫/竖扫/8字→收回' % (BASE, TIP))
 		try:
 			# 部署 (逐点确认)
@@ -216,8 +241,8 @@ class R17aDemoCartesian(Node):
 			self.goto(pub, snapshot, (0.0, 0.0, 0.02), '落回近起点')   # z+2cm 离奇异核心
 		finally:
 			try:
-				self.switch('--deactivate', 'cartesian_motion_controller',
-				            '--activate', 'joint_stream_controller')
+				self.ensure_controllers(activate=['joint_stream_controller'],
+					deactivate=['cartesian_motion_controller'])
 				self.send_zero()
 			except Exception as e:
 				self.get_logger().error('收尾失败 (%s) —— 手动: ros2 control switch_controllers '

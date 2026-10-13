@@ -13,6 +13,8 @@
 用法: ros2 run unistackbot_demo r1_7a_demo_joint.py [--hz 50] [--cycles 1]
 """
 
+import re
+import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -106,21 +108,33 @@ class R17aDemoJoint(Node):
 		return [got[n] for n in joints]
 
 	def run(self, hz, cycles):
-		# 第一步 = 切换自己需要的控制器 (进入声明): 别假设 JS"默认在"——
-		# 上一轮笛卡尔 demo 可能把 JS 切走了; 对已 inactive 的 CM deactivate 幂等。
-		# 链刚起时 JS 可能还在 spawner 的 activating 中间态, switch 会被拒——重试等就绪。
-		import subprocess
+		# 第一步 = 切换自己需要的控制器 (进入声明, 幂等——查态后只切需要变的;
+		# activate 已 active 的 JS 会被 CM 硬拒, 这正是上一版在新机常态路径炸的根)
+		import re
 		for attempt in range(7):
-			r = subprocess.run(['ros2', 'control', 'switch_controllers',
-				'--deactivate', 'cartesian_motion_controller',
-				'--activate', 'joint_stream_controller'],
+			r = subprocess.run(['ros2', 'control', 'list_controllers'],
 				capture_output=True, text=True, timeout=15)
-			if r.returncode == 0:
+			states = {}
+			for line in r.stdout.splitlines():
+				clean = re.sub(r'\x1b\[[0-9;]*m', '', line.strip())
+				parts = clean.split()
+				if len(parts) >= 3:
+					states[parts[0]] = parts[-1]
+			args = []
+			if states.get('cartesian_motion_controller') == 'active':
+				args += ['--deactivate', 'cartesian_motion_controller']
+			if states.get('joint_stream_controller') != 'active':
+				args += ['--activate', 'joint_stream_controller']
+			if not args:
+				break   # 已达目标态 (链起后常态) = 幂等成功
+			s = subprocess.run(['ros2', 'control', 'switch_controllers'] + args,
+				capture_output=True, text=True, timeout=15)
+			if s.returncode == 0:
 				break
-			self.get_logger().warn('JS 未就绪 (attempt %d/7, 起链后 spawner 窗口), 5s 重试' % (attempt + 1))
+			self.get_logger().warn('switch 未就绪 (attempt %d/7), 5s 重试' % (attempt + 1))
 			time.sleep(5.0)
 		else:
-			raise RuntimeError('切换 JS 失败 (35s): ' + r.stderr.strip()[-120:])
+			raise RuntimeError('切换 JS 失败: ' + s.stderr.strip()[-120:])
 		joints, lims = self._fetch_contract()
 		self.get_logger().info('关节表 (读自链上 URDF): %s' % joints)
 		# 航点限位断言 (2% 内缩带): 常量写错在启动期暴露, 不进运行时

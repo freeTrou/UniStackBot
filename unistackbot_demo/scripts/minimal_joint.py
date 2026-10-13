@@ -54,17 +54,37 @@ class MinimalJointDemo(Node):
     def __init__(self):
         super().__init__('minimal_joint')
 
-    def switch(self, *args, retries=7):
+    def ensure_controllers(self, activate, deactivate, retries=7):
+        """进入声明 (幂等): 先查当前态, 只对需要变化的发 switch。
+        注意 activate 已 active 的控制器会被 CM 硬拒 (not inactive) ——
+        幂等必须由状态查询实现, 不能盲发。链刚起时 spawner 窗口内重试。"""
+        import re
         import subprocess
         for attempt in range(retries):
-            r = subprocess.run(['ros2', 'control', 'switch_controllers', *args],
+            r = subprocess.run(['ros2', 'control', 'list_controllers'],
                                capture_output=True, text=True, timeout=15)
-            if r.returncode == 0:
+            states = {}
+            for line in r.stdout.splitlines():
+                clean = re.sub(r'\x1b\[[0-9;]*m', '', line.strip())   # 剥 ANSI 色码
+                parts = clean.split()
+                if len(parts) >= 3:
+                    states[parts[0]] = parts[-1]
+            args = []
+            for c in deactivate:
+                if states.get(c) == 'active':
+                    args += ['--deactivate', c]
+            for c in activate:
+                if states.get(c) != 'active':
+                    args += ['--activate', c]
+            if not args:
+                return   # 已达目标态 = 幂等成功
+            s = subprocess.run(['ros2', 'control', 'switch_controllers'] + args,
+                               capture_output=True, text=True, timeout=15)
+            if s.returncode == 0:
                 return
-            # 链刚起时控制器可能还在 spawner 的 activating 窗口, switch 会被拒——重试
             self.get_logger().warn('switch 未就绪 (attempt %d/%d), 5s 重试' % (attempt + 1, retries))
             time.sleep(5.0)
-        raise RuntimeError('switch 失败 (%ds): %s' % (retries * 5, r.stderr.strip()[-120:]))
+        raise RuntimeError('switch 失败: %s' % s.stderr.strip()[-120:])
 
     def get_feedback(self, names):
         """拿反馈: 等一帧 /joint_states, 按名对齐。"""
@@ -78,10 +98,11 @@ class MinimalJointDemo(Node):
         return {n: got.get(n, 0.0) for n in names}
 
     def run(self):
-        # 第一步 = 切换自己需要的控制器: 关节域入口是 JS。别假设"默认在"——
-        # 上一轮笛卡尔 demo 可能把 JS 切走了; 对已 inactive 的 CM deactivate 是幂等的。
-        self.switch('--deactivate', 'cartesian_motion_controller',
-                    '--activate', 'joint_stream_controller')
+        # 第一步 = 切换自己需要的控制器 (进入声明, 幂等): 关节域入口是 JS。
+        # 别假设 JS"默认在" (上一轮笛卡尔 demo 可能切走了); 也不盲 activate
+        # 已 active 的 JS (会被 CM 拒) —— ensure 内部查态后只切需要变的。
+        self.ensure_controllers(activate=['joint_stream_controller'],
+                                deactivate=['cartesian_motion_controller'])
 
         names = command_joints(self)
         self.get_logger().info('命令关节 (%d): %s' % (len(names), names))
