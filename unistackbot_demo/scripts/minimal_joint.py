@@ -69,6 +69,8 @@ class MinimalJointDemo(Node):
                 parts = clean.split()
                 if len(parts) >= 3:
                     states[parts[0]] = parts[-1]
+            if not states:
+                raise RuntimeError('list_controllers 无输出 —— 链未启动? 先 ros2 launch 再跑 demo')
             args = []
             for c in deactivate:
                 if states.get(c) == 'active':
