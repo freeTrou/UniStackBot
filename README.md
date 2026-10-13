@@ -88,12 +88,13 @@ xacro 等全部 ROS 依赖。
 | `libnlopt-cxx-dev` | 2.7.1 | TRAC-IK 的外部依赖（求解器本体已 **vendored 随仓**：`unistackbot_algorithm/trac_ik_solver/vendor/`，无需安装上游包；构建开关 `UNISTACKBOT_BUILD_TRAC_IK` 默认 ON，OFF 时勿编 controller） |
 | `libeigen3-dev` / `liborocos-kdl-dev` | — | Eigen / KDL（算法库直引系统头） |
 | `ros-humble-rmw-cyclonedds-cpp` | 1.3.5 | CycloneDDS RMW（desktop 默认 Fast DDS，不带此包） |
+| `ros-humble-ros2controlcli` | — | `ros2 control` CLI（**独立 deb，rosdep 不装**；缺它则一切控制器切换/demo 报 invalid choice: control——部署机实锤 2026-10-13） |
 
 ```bash
 sudo apt install ros-humble-mujoco-ros2-control ros-humble-gz-ros2-control \
     ros-humble-ros-gz-bridge ros-humble-ros-gz-interfaces ros-humble-ros-gz-sim \
     ignition-fortress libnlopt-cxx-dev libeigen3-dev liborocos-kdl-dev \
-    ros-humble-rmw-cyclonedds-cpp
+    ros-humble-rmw-cyclonedds-cpp ros-humble-ros2controlcli
 ```
 
 > 版本列是验收时点实测值（apt 源会随时间前移 minor），命令**不锁 apt 版本串**
