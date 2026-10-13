@@ -60,7 +60,7 @@ wget http://fishros.com/install -O fishros && bash fishros
 sudo apt install python3-colcon-common-extensions   # colcon 构建
 ```
 
-### 2. 工作区依赖（rosdep 一把梭，推荐）
+### 2. 工作区依赖（rosdep 一把梭，**必跑，不可跳**）
 
 ```bash
 cd <path-to>/UniStackBot_ws/src/UniStackBot
@@ -68,8 +68,14 @@ rosdep install --from-paths . --ignore-src -y -r
 ```
 
 覆盖 ros2_control 套件（controller_manager/joint_state_broadcaster 等）、
-tf2、realtime_tools、rosbag2+mcap（录制）、tinyxml2_vendor、interactive_markers
-等全部 ROS 依赖。
+tf2、realtime_tools、rosbag2+mcap（录制）、tinyxml2_vendor、interactive_markers、
+xacro 等全部 ROS 依赖。
+
+> **部署实锤警告（2026-10-13 首台部署机三连坑）**：跳过此步 = 大量**运行时依赖**
+> 潜伏到 launch/spawner 才炸——编译不需要它们，colcon 全绿不代表环境齐：
+> 缺 `xacro` → launch 报 "executable not found on PATH"；
+> 缺 `joint_state_broadcaster` → spawner 报 "Loader for controller not found"。
+> 跑完检查输出：**无 ERROR、且看到它装了东西（或输出空=已齐）**才算过。
 
 ### 3. rosdep 覆盖外的系统包（手动）
 
