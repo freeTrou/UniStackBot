@@ -6,6 +6,9 @@
  *                     + FK 回代闭合 (<1e-4 m / <1e-3 rad) + 耗时分位数;
  *                     参考线 = Speed 档 AB (2026-09-29, /tmp 工具): R1 50ms 100.0% / 1ms 96.0%。
  *                     Distance 档可用解集合 ⊇ Speed (烧满预算收集), 预期不降。
+ * 层1b 不可达拦截:    oracle U 行全量 COLD_START 50ms (最强尝试) —— 绝不出假解:
+ *                     解出且回代不闭合 = 假解 FAIL; 解出且回代闭合 = oracle 误标
+ *                     (r1_7a 真值降级单解, 贴边界带可能假 U), 记账报告。
  * 层2 流式连续性:     圆弧 100 点 STREAMING (实测种子), 单步增量 <0.15 rad, 零失败
  *                     —— 2026-10-08 Speed 构型渐移破案的回归锚 (Distance+粘性守卫)。
  * 层3 契约面:         失败不改 out_q / LOCK_JOINT=UNSUPPORTED / NOT_READY。
@@ -47,7 +50,20 @@ static double pct(std::vector<double> & v, double p)
 {
 	if (v.empty()) {return 0.0;}
 	std::sort(v.begin(), v.end());
-	return v[std::min(static_cast<std::size_t>(p * (v.size() - 1)), v.size() - 1)];
+	return v[std::min(static_cast<std::size_t>(p * static_cast<double>(v.size() - 1)),
+		v.size() - 1)];
+}
+
+static double posErr(const CartesianPose & a, const CartesianPose & b)
+{
+	return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) +
+		(a.z - b.z) * (a.z - b.z));
+}
+
+static double rotErr(const CartesianPose & a, const CartesianPose & b)
+{
+	const double qd = std::fabs(a.qw * b.qw + a.qx * b.qx + a.qy * b.qy + a.qz * b.qz);
+	return 2.0 * std::acos(std::clamp(qd, 0.0, 1.0));
 }
 
 struct OraclePoint
@@ -78,25 +94,28 @@ int main(int argc, char ** argv)
 	CHECK(ik.ready());
 
 	// 解析 oracle P 行 (位姿行; 解行忽略 —— 本床只测成功率/回代, 不对真值解集)
+	// U 行 (不可达) 收进 upts —— 层1b 拦截面消费
 	std::vector<OraclePoint> pts;
+	std::vector<OraclePoint> upts;
 	{
 		std::istringstream is(loadFile(argv[2]));
 		std::string line;
 		while (std::getline(is, line))
 		{
-			if (line.empty() || line[0] != 'P') {continue;}
+			if (line.empty() || (line[0] != 'P' && line[0] != 'U')) {continue;}
 			OraclePoint e;
 			double qx = 0, qy = 0, qz = 0;
 			if (std::sscanf(line.c_str(), "%*c %lf %lf %lf %lf %lf %lf %lf",
 				&e.pose.x, &e.pose.y, &e.pose.z, &e.pose.qw, &qx, &qy, &qz) == 7)
 			{
 				e.pose.qx = qx; e.pose.qy = qy; e.pose.qz = qz;
-				pts.push_back(e);
+				(line[0] == 'P' ? pts : upts).push_back(e);
 			}
 		}
 	}
-	std::printf("[oracle] %zu 个可达位姿\n", pts.size());
+	std::printf("[oracle] %zu 个可达位姿, %zu 个不可达位姿\n", pts.size(), upts.size());
 	CHECK(pts.size() >= 100);
+	CHECK(upts.size() >= 100);
 	const RedundancyPreference preserve{RedundancyType::PRESERVE, {}};
 
 	// ---- 层1: COLD_START 成功率 × 预算档 (限位中点种子在适配层内建) ----
@@ -127,20 +146,12 @@ int main(int argc, char ** argv)
 			CartesianPose got;
 			if (fk.fk(out, got))
 			{
-				const double dp = std::sqrt(
-					(got.x - e.pose.x) * (got.x - e.pose.x) +
-					(got.y - e.pose.y) * (got.y - e.pose.y) +
-					(got.z - e.pose.z) * (got.z - e.pose.z));
-				const double qd = std::fabs(
-					got.qw * e.pose.qw + got.qx * e.pose.qx +
-					got.qy * e.pose.qy + got.qz * e.pose.qz);
-				const double dr = 2.0 * std::acos(std::clamp(qd, 0.0, 1.0));
-				pos_worst = std::max(pos_worst, dp);
-				rot_worst = std::max(rot_worst, dr);
+				pos_worst = std::max(pos_worst, posErr(got, e.pose));
+				rot_worst = std::max(rot_worst, rotErr(got, e.pose));
 			}
 		}
 		const double rate = 100.0 * ok_n / static_cast<double>(pts.size());
-		std::printf("[层1 %5.0fms] 成功率 %5.1f%% (%zu/%zu)  耗时 p50=%.2fms p95=%.2fms  "
+		std::printf("[层1 %5.0fms] 成功率 %5.1f%% (%d/%zu)  耗时 p50=%.2fms p95=%.2fms  "
 			"回代 worst pos=%.2e m rot=%.2e rad  (%s)\n",
 			b.ms, rate, ok_n, pts.size(), pct(times, 0.50) / 1000.0,
 			pct(times, 0.95) / 1000.0, pos_worst, rot_worst, b.speed_ref);
@@ -148,6 +159,46 @@ int main(int argc, char ** argv)
 		CHECK(rate >= (b.ms >= 50.0 ? 98.0 : 90.0));
 		CHECK(pos_worst < 1e-4);        // AB 实测 <1e-4 全过 (适配层 eps 口径)
 		CHECK(rot_worst < 1e-3);
+	}
+
+	// ---- 层1b: 不可达拦截 (oracle U 行全量; playbook §5 "绝不出假解") ----
+	// 50ms Distance = 最强求解尝试: 此档不吐解, 短档更不会。解出分两类:
+	//   回代不闭合 → 假解 (求解器缺陷) 硬失败;
+	//   回代闭合   → 目标本可达 = oracle 误标 (r1_7a 真值降级单解, 贴边界带
+	//                生成 30% 近边界 U 样本的已知风险), 记账非求解器罪。
+	{
+		ik.setBudgetMs(50.0);
+		int rej_ok = 0, mislabel = 0, fake = 0;
+		double worst_fake_pos = 0.0;
+		std::vector<double> q(n, 0.0);
+		for (const auto & e : upts)
+		{
+			std::vector<double> out(n, -12345.0);
+			if (ik.solve(e.pose, q, preserve, out, nullptr,
+				SolveMode::COLD_START) != IkResult::OK)
+			{
+				++rej_ok;
+				continue;
+			}
+			CartesianPose got;
+			if (fk.fk(out, got) &&
+				posErr(got, e.pose) < 1e-4 && rotErr(got, e.pose) < 1e-3)
+			{
+				++mislabel;
+			}
+			else
+			{
+				++fake;
+				if (fk.fk(out, got))
+				{
+					worst_fake_pos = std::max(worst_fake_pos, posErr(got, e.pose));
+				}
+			}
+		}
+		std::printf("[层1b 不可达] 拒绝 %d / %zu  误标(解出且闭合) %d  假解(解出不闭合) %d\n",
+			rej_ok, upts.size(), mislabel, fake);
+		CHECK(fake == 0);                       // 绝不出假解 (playbook §5 硬线)
+		CHECK(mislabel * 100 / static_cast<int>(upts.size()) <= 10);  // 误标=oracle 质量, 宽线防劣化
 	}
 
 	// ---- 层2: 流式连续性 (圆弧 100 点, STREAMING, Distance+粘性回归锚) ----
