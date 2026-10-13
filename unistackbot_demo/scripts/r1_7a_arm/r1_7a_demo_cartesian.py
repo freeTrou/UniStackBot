@@ -113,7 +113,9 @@ class R17aDemoCartesian(Node):
 			if self.status_t and time.time() - self.status_t > 5.0:
 				raise RuntimeError('CM status 静默 >5s —— 链已死或 CM 未激活')
 			tgt = self.status.get('tgt')
-			if self.status.get('conv') and self.sent and tgt and \
+			# 到位判定用 arrival 单枚举 (2026-10-13 新正字段; converged 已 deprecated):
+			# 逐条下发场景取 SETTLED 档 ("到了且停住", 双条件防抖动穿越容差带假亮)
+			if self.status.get('arrival') == 2 and self.sent and tgt and \
 				max(abs(a - b) for a, b in zip(tgt, self.sent)) < 1e-9:
 				return 'conv', self.status['err']
 			if time.time() - t0 > reject_after and self.status.get('res', 0) != 0:
