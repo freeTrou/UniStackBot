@@ -38,6 +38,17 @@ install(PROGRAMS
   scripts/demo_teleop_key.py
   scripts/demo_teleop_joint.py
   scripts/demo_points_playback.py
+  scripts/minimal_joint.py
+  scripts/minimal_cartesian.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# 机型专属 demo (2026-10-12 约定): scripts/<robot>_arm/ 每机一文件夹, 文件名带
+# 机型前缀 —— install 平铺进 lib/ (ros2 run 不认子目录, 重名即冲突)。
+# 首件 = r1_7a_arm (关节 + 笛卡尔两 demo); 后续机器人按此复制。
+install(PROGRAMS
+  scripts/r1_7a_arm/r1_7a_demo_joint.py
+  scripts/r1_7a_arm/r1_7a_demo_cartesian.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
