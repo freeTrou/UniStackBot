@@ -89,12 +89,16 @@ xacro 等全部 ROS 依赖。
 | `libeigen3-dev` / `liborocos-kdl-dev` | — | Eigen / KDL（算法库直引系统头） |
 | `ros-humble-rmw-cyclonedds-cpp` | 1.3.5 | CycloneDDS RMW（desktop 默认 Fast DDS，不带此包） |
 | `ros-humble-ros2controlcli` | — | `ros2 control` CLI（**独立 deb，rosdep 不装**；缺它则一切控制器切换/demo 报 invalid choice: control——部署机实锤 2026-10-13） |
+| `ros-humble-xacro` / `joint-state-broadcaster` / `joint-trajectory-controller` | — | rosdep 理论覆盖但部署实锤缺过（坑②③）——**防御性纳入手动命令**，跑完这条 = 永不再缺 |
+
+**手动一遍全装**（跑完此命令 = 环境对齐开发机，含全部四坑）：
 
 ```bash
 sudo apt install ros-humble-mujoco-ros2-control ros-humble-gz-ros2-control \
     ros-humble-ros-gz-bridge ros-humble-ros-gz-interfaces ros-humble-ros-gz-sim \
     ignition-fortress libnlopt-cxx-dev libeigen3-dev liborocos-kdl-dev \
-    ros-humble-rmw-cyclonedds-cpp ros-humble-ros2controlcli
+    ros-humble-rmw-cyclonedds-cpp ros-humble-ros2controlcli \
+    ros-humble-xacro ros-humble-joint-state-broadcaster ros-humble-joint-trajectory-controller
 ```
 
 > 版本列是验收时点实测值（apt 源会随时间前移 minor），命令**不锁 apt 版本串**
