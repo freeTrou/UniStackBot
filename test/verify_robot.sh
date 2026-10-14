@@ -52,7 +52,14 @@ tally() {  # 汇总 verify_motion.py 的输出行
 # ---- 前置: 机型文件存在 (显式错误, 不让后面每步都摔一遍) ----
 DESC_SHARE="$(ros2 pkg prefix --share unistackbot_description 2>/dev/null)" || { echo "找不到 unistackbot_description, 先 colcon build + source"; exit 1; }
 BRINGUP_SHARE="$(ros2 pkg prefix --share unistackbot_bringup 2>/dev/null)" || { echo "找不到 unistackbot_bringup"; exit 1; }
-XACRO="$DESC_SHARE/arms/$ROBOT/urdf/$ROBOT.urdf.xacro"
+# 形态分类目录 (2026-10-14): 机型在各类别下搜索, 无映射表
+CATEGORIES="arms mobile_manipulators humanoids"
+ROBOT_DIR=""
+for cat in $CATEGORIES; do
+	[ -d "$DESC_SHARE/$cat/$ROBOT" ] && ROBOT_DIR="$DESC_SHARE/$cat/$ROBOT"
+done
+[ -n "$ROBOT_DIR" ] || { echo "未知机型 $ROBOT: 各类别目录均无 (分类: $CATEGORIES)"; exit 1; }
+XACRO="$ROBOT_DIR/urdf/$ROBOT.urdf.xacro"
 CYAML="$BRINGUP_SHARE/config/${ROBOT}_controllers.yaml"
 [ -f "$XACRO" ] || { echo "未知机型 '$ROBOT': $XACRO 不存在 (可用: $(ls "$DESC_SHARE/arms" | tr '\n' ' '))"; exit 1; }
 [ -f "$CYAML" ] || { echo "机型 '$ROBOT' 缺控制器配置: $CYAML"; exit 1; }
@@ -273,7 +280,7 @@ fi
 # ================= 5. MuJoCo 链 (可选) =================
 if [ "$WITH_MJ" -eq 1 ]; then
 	say "== [5] MuJoCo 链: mujoco.launch.py robot:=$ROBOT headless:=true =="
-	MJCF="$DESC_SHARE/arms/$ROBOT/mujoco/$ROBOT.xml"
+	MJCF="$ROBOT_DIR/mujoco/$ROBOT.xml"
 	if [ ! -f "$MJCF" ]; then
 		say "跳过: 机型 $ROBOT 无 MJCF 资产 ($MJCF, 生成法见 arms/$ROBOT/mujoco/README.md)"
 	else

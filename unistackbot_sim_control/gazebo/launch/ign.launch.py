@@ -33,15 +33,24 @@ def _launch_setup(context):
     _ = LaunchConfiguration('bus_hz').perform(context)
 
     desc_share = get_package_share_directory('unistackbot_description')
-    xacro_path = os.path.join(desc_share, 'arms', robot, 'urdf', f'{robot}.urdf.xacro')
+    # 形态分类目录 (2026-10-14 资产分类: arms/mobile_manipulators/humanoids);
+    # 机型发现 = 各类别下 glob, 无 robot→类别映射 (映射表 = 第二份要维护的硬编码)
+    CATEGORIES = ('arms', 'mobile_manipulators', 'humanoids')
+    def find_robot_dir(desc_share, robot):
+        for cat in CATEGORIES:
+            d = os.path.join(desc_share, cat, robot)
+            if os.path.isdir(d):
+                return d
+        return None
+
+    robot_dir = find_robot_dir(desc_share, robot)
+    if robot_dir is None:
+        available = sorted(r for cat in CATEGORIES for r in os.listdir(os.path.join(desc_share, cat))
+                           if os.path.isfile(os.path.join(desc_share, cat, r, 'urdf', f'{r}.urdf.xacro')))
+        raise RuntimeError(f'未知机型 {robot!r}: 各类别目录下均无。可用机型: {available}')
+    xacro_path = os.path.join(robot_dir, 'urdf', f'{robot}.urdf.xacro')
 
     # 显式错误流: 机型不存在时报错并列出可用项
-    arms_root = os.path.join(desc_share, 'arms')
-    if not os.path.isfile(xacro_path):
-        available = sorted(d for d in os.listdir(arms_root)
-                           if os.path.isfile(os.path.join(arms_root, d, 'urdf', f'{d}.urdf.xacro')))
-        raise RuntimeError(f'未知机型 {robot!r}: 找不到 {xacro_path}. 可用机型: {available}')
-
     # 渲染 URDF
     robot_description_content = Command([
         FindExecutable(name='xacro'), ' ', xacro_path,
