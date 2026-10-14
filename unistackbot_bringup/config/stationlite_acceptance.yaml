@@ -8,6 +8,10 @@ fingerprint:                # 静态判据 (2026-10-08 实测登记)
     mock:   [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6, left_gripper_joint1, left_gripper_joint2, right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6, right_gripper_joint1, right_gripper_joint2]
     ign:    [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6, left_gripper_joint1, left_gripper_joint2, right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6, right_gripper_joint1, right_gripper_joint2]
     mujoco: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6, left_gripper_joint1, right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6, right_gripper_joint1]
+  plugins:               # 判据③½: per-chain 硬件插件名 (2026-10-14 立, 堵 ign 分支缺失假绿那类洞)
+    mock: unistackbot_sim_control/SimControlHardware
+    ign: gz_ros2_control/GazeboSimSystem
+    mujoco: mujoco_ros2_control/MujocoSystemInterface
 tolerance:                  # 测试容差登记 (初始=历史常数, 同 piper 建表口径)
   js_mock: 0.01
   cm_mock: 0.002

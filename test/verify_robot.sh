@@ -66,7 +66,7 @@ CYAML="$BRINGUP_SHARE/config/${ROBOT}_controllers.yaml"
 # 机型验收登记表 (§5.7 定义判据的登记值单一事实源): 形态指纹 + 容差/mimic/软关节收口于此
 AYAML="$BRINGUP_SHARE/config/${ROBOT}_acceptance.yaml"
 [ -f "$AYAML" ] || { echo "机型 '$ROBOT' 缺验收登记表: $AYAML (建表见 piper_acceptance.yaml 同型)"; exit 1; }
-IFS='|' read -r SUBCHAIN_EXP JM_EXP JI_EXP JJ_EXP TJS_MOCK TCM_MOCK TJS_GZ TCM_GZ TJS_MJ TCM_MJ SOFT_GZ MIM_PAIRS MIM_MJ <<< "$(python3 - "$AYAML" <<'PY'
+IFS='|' read -r SUBCHAIN_EXP JM_EXP JI_EXP JJ_EXP PLG_MOCK PLG_IGN PLG_MJ TJS_MOCK TCM_MOCK TJS_GZ TCM_GZ TJS_MJ TCM_MJ SOFT_GZ MIM_PAIRS MIM_MJ <<< "$(python3 - "$AYAML" <<'PY'
 import sys, yaml
 d = yaml.safe_load(open(sys.argv[1]))
 fp, tol = d.get('fingerprint') or {}, d.get('tolerance') or {}
@@ -74,6 +74,7 @@ jb = fp.get('joints_by_chain') or {}
 print('|'.join([
     str(fp.get('subchain_count', -1)),
     ','.join(jb.get('mock') or []), ','.join(jb.get('ign') or []), ','.join(jb.get('mujoco') or []),
+    (fp.get('plugins') or {}).get('mock') or '', (fp.get('plugins') or {}).get('ign') or '', (fp.get('plugins') or {}).get('mujoco') or '',
     str(tol.get('js_mock', 0)), str(tol.get('cm_mock', 0)),
     str(tol.get('js_gz', 0)), str(tol.get('cm_gz', 0)),
     str(tol.get('js_mujoco', 0)), str(tol.get('cm_mujoco', 0)),
@@ -148,6 +149,22 @@ jointset_check() {  # $1=use_gazebo 值 $2=登记集(逗号串)
 jointset_check false "$JM_EXP"
 jointset_check ign "$JI_EXP"
 jointset_check mujoco "$JJ_EXP"
+
+# 静态判据③½: per-chain 硬件插件名 = 登记值 (2026-10-14 立, 堵 r1_7a ign 分支缺失
+# 假绿 17 天那类洞 —— 关节集对但插件错 = 链根本起不来或起错链)
+plugin_check() {  # $1=use_gazebo 值 $2=登记插件名
+	local actual
+	actual=$(python3 -c "
+import xml.etree.ElementTree as ET
+r = ET.parse('/tmp/verify_${ROBOT}_$1.urdf').getroot()
+hw = r.find('.//hardware')
+p = hw.find('plugin') if hw is not None else None
+print(p.text if p is not None else 'NONE')")
+	[ "$actual" = "$2" ] && ok "形态指纹③½[$1]: 插件 = $actual" 		|| bad "形态指纹③½[$1]: 实际[$actual] ≠ 登记[$2] (xacro 分支缺失/错插件 —— 2026-10-13 r1_7a ign 假绿同型洞)"
+}
+plugin_check false "$PLG_MOCK"
+plugin_check ign "$PLG_IGN"
+plugin_check mujoco "$PLG_MJ"
 
 # CM 链名 (切换检查用, 从 yaml 读)
 read -r CM_BASE CM_TIP <<< "$(python3 -c "
