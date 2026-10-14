@@ -17,5 +17,7 @@
 - **验证 (2026-09-29)**: mock + mujoco 双链 4 控制器就位、demo_motion 50Hz、
   mujoco 零发散警告、静止段速度 ~1e-10 (导入一次过, 未踩 stationlite 任一坑)
 - **真机**: RS485@6M 宇树 IM 协议 MIT 原生 (protocol 包已实现 256 oracle) —
-  资料包 `/home/work/R1_7A_DOC` (SDK/说明 PDF/电机 demo); 重力补偿/拖动示教见真机架构 §6A
+  官方支持页 https://support.unitree.com/home/zh/R1-7a/R1%20Robotic%20Arm
+  (资料下载入口); 本地资料包 `/home/work/R1_7A_DOC` (SDK/说明 PDF/电机 demo);
+  重力补偿/拖动示教见真机架构 §6A
 - 待办: acceptance.yaml (A-G 验收) · RT 基线 · 与 xarm7 对比的 DLS AB 账

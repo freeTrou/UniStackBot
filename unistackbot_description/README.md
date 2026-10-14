@@ -27,7 +27,7 @@ humanoids)` 搜索, 无 robot→类别映射表）。mesh 路径一律用 `packa
 | **piper** | arms/ | 6-DoF 球腕臂+夹爪, 参考模型 | [Piper 社区 ROS 包](https://github.com/Piper-Lang)（社区发起方 AgileX 系; 提取提交 `94fea82`） | 2026-09 早期 | 见 `original/` |
 | **xarm7** | arms/ | 7-DoF 臂, UFACTORY | [xArm-Developer/xarm_ros2](https://github.com/xArm-Developer/xarm_ros2)（`xarm_description` 包; 提取提交 `e7e7201`） | 早期 | BSD（`LICENSE.xarm_ros2`） |
 | **stationlite** | arms/ | 双臂固定台座, Lumos | 厂商私有提供（经合作方; 无公开仓库） | 2026-09-29 | 厂商协议 |
-| **r1_7a** | arms/ | 宇树 R1-7A 七轴冗余臂 | 宇树官方 R1_7A SDK 内置 URDF（V1.1-0915; 资料包本地 `/home/work/R1_7A_DOC`, 无公开直链） | 2026-09-29 | 宇树 SDK 条款 |
+| **r1_7a** | arms/ | 宇树 R1-7A 七轴冗余臂 | [宇树官方支持页 R1 Robotic Arm](https://support.unitree.com/home/zh/R1-7a/R1%20Robotic%20Arm)（R1_7A SDK 内置 URDF V1.1-0915; 本地资料包 `/home/work/R1_7A_DOC`） | 2026-09-29 | 宇树 SDK 条款 |
 | **r1_pro** | mobile_manipulators/ | Galaxea R1 Pro: 三轮矢量底盘+4-DoF 旋转腰+双 6-DoF 臂 | [behavior-robot-suite/brs-ctrl](https://github.com/behavior-robot-suite/brs-ctrl) `assets/robot/r1_pro/`（Stanford BRS, CoRL 2025） | 2026-10-14 | MIT |
 | **galbot_s1** | mobile_manipulators/ | Galbot S1: 四轮独立转向底盘+升降柱+双 7-DoF 臂 | [GalaxyGeneralRobotics/galbot_s1_description](https://github.com/GalaxyGeneralRobotics/galbot_s1_description)（官方描述包; 含官方 MJCF） | 2026-10-14 | Apache-2.0 |
 
