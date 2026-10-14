@@ -32,7 +32,8 @@ def mode_js(args):
 	node = Node('verify_js')
 	qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
 	                 history=HistoryPolicy.KEEP_LAST, depth=1)
-	pub = node.create_publisher(JointCommand, '/joint_stream_controller/command', qos)
+	js = args.get('js_name', 'joint_stream_controller')
+	pub = node.create_publisher(JointCommand, f'/{js}/command', qos)
 	latest = {}
 
 	def on_js(msg):
@@ -121,7 +122,8 @@ def mode_cm(args):
 			['ros2', 'control', 'switch_controllers', *args_],
 			capture_output=True, text=True, timeout=15)
 
-	r = switch('--deactivate', 'joint_stream_controller', '--activate',
+	js = args.get('js_name', 'joint_stream_controller')
+	r = switch('--deactivate', js, '--activate',
 	           'cartesian_motion_controller')
 	if r.returncode != 0:
 		print(f'FAIL: cm 切换失败 {r.stderr.strip()[-120:]}')
@@ -157,7 +159,7 @@ def mode_cm(args):
 		return 1
 	finally:
 		switch('--deactivate', 'cartesian_motion_controller', '--activate',
-		       'joint_stream_controller')
+		       args.get('js_name', 'joint_stream_controller'))
 		print('PASS: cm 切回 (链恢复 joint_stream)')
 
 

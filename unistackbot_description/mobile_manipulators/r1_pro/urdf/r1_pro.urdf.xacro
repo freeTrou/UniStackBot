@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="r1_pro">
+    <!-- r1_pro 顶层入口 (Galaxea R1 Pro, 2026-10-14 接入)
+         五参数同 piper 范本; body 宏只含控制域 16 关节 (腰4+双臂12, 四件式分割),
+         轮域分离式接入暂不声明 (底盘生态件后续按需)。 -->
+    <xacro:arg name="use_gripper" default="true"/>
+    <xacro:arg name="use_ros2_control" default="false"/>
+    <xacro:arg name="use_world" default="false"/>
+    <xacro:arg name="use_gazebo" default="false"/>
+    <xacro:arg name="headless" default="true"/>
+
+    <xacro:include filename="$(find unistackbot_description)/mobile_manipulators/r1_pro/urdf/r1_pro_macro.xacro"/>
+    <xacro:include filename="$(find unistackbot_description)/mobile_manipulators/r1_pro/urdf/r1_pro.ros2_control.xacro"/>
+
+    <xacro:r1_pro_body/>
+
+    <xacro:if value="$(arg use_world)">
+        <link name="world"/>
+        <joint name="r1_pro_world" type="fixed">
+            <parent link="world"/><child link="base_link"/>
+        </joint>
+    </xacro:if>
+
+    <xacro:if value="$(arg use_ros2_control)">
+        <xacro:r1_pro_ros2_control use_gazebo="$(arg use_gazebo)" headless="$(arg headless)"/>
+    </xacro:if>
+</robot>

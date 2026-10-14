@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- r1_pro ros2_control 块 (2026-10-14): 分支同 piper 范本——
+         ign=GazeboSimSystem / mujoco=mujoco_ros2_control / 其余=SimControlHardware kinematic。
+         四件式: 本块 = js_arms (双臂 12) + js_torso (腰 4) 两组 ros2_control 声明
+         (控制器实例各认各的; 轮 = velocity 接口归底盘生态件, 分离式接入暂不声明)。
+         限位/max_velocity 全部提取自 original; ign 压限位线关节 initial_value 待 verify 指纹后按需补。 -->
+    <xacro:macro name="r1_pro_ros2_control" params="use_gazebo:=false headless:=true">
+
+        <!-- ==== js_arms: 双臂 12 关节 ==== -->
+        <ros2_control name="r1_pro_arms" type="system">
+            <hardware>
+                <xacro:if value="${use_gazebo == 'ign'}">
+                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                </xacro:if>
+                <xacro:if value="${use_gazebo == 'mujoco'}">
+                    <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+                </xacro:if>
+                <xacro:unless value="${use_gazebo in ['ign', 'mujoco']}">
+                    <plugin>unistackbot_sim_control/SimControlHardware</plugin>
+                    <param name="backend">kinematic</param>
+                </xacro:unless>
+            </hardware>
+            <xacro:macro name="r1_joint" params="name lo hi vmax:=2.5">
+                <joint name="${name}">
+                    <command_interface name="position"/>
+                    <state_interface name="position"/>
+                    <state_interface name="velocity"/>
+                    <state_interface name="effort"/>
+                    <param name="min">${lo}</param>
+                    <param name="max">${hi}</param>
+                    <param name="max_velocity">${vmax}</param>
+                </joint>
+            </xacro:macro>
+            <xacro:r1_joint name="left_arm_joint1"  lo="-2.8798" hi="2.8798" vmax="20.944"/>
+            <xacro:r1_joint name="left_arm_joint2"  lo="0"       hi="3.2289" vmax="20.944"/>
+            <xacro:r1_joint name="left_arm_joint3"  lo="-3.3161" hi="0"     vmax="7.5398"/>
+            <xacro:r1_joint name="left_arm_joint4"  lo="-2.8798" hi="2.8798" vmax="25.133"/>
+            <xacro:r1_joint name="left_arm_joint5"  lo="-1.6581" hi="1.6581" vmax="25.133"/>
+            <xacro:r1_joint name="left_arm_joint6"  lo="-2.8798" hi="2.8798" vmax="25.133"/>
+            <xacro:r1_joint name="right_arm_joint1" lo="-2.8798" hi="2.8798" vmax="20.944"/>
+            <xacro:r1_joint name="right_arm_joint2" lo="0" hi="3.2289" vmax="20.944"/>
+            <xacro:r1_joint name="right_arm_joint3" lo="-3.3161" hi="0" vmax="7.5398"/>
+            <xacro:r1_joint name="right_arm_joint4" lo="-2.8798" hi="2.8798" vmax="25.133"/>
+            <xacro:r1_joint name="right_arm_joint5" lo="-1.6581" hi="1.6581" vmax="25.133"/>
+            <xacro:r1_joint name="right_arm_joint6" lo="-2.8798" hi="2.8798" vmax="25.133"/>
+        </ros2_control>
+
+        <!-- ==== js_torso: 腰 4 关节 (独立实例; 容量与操作语义分割, 见四件式裁决) ==== -->
+        <ros2_control name="r1_pro_torso" type="system">
+            <hardware>
+                <xacro:if value="${use_gazebo == 'ign'}">
+                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                </xacro:if>
+                <xacro:if value="${use_gazebo == 'mujoco'}">
+                    <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+                </xacro:if>
+                <xacro:unless value="${use_gazebo in ['ign', 'mujoco']}">
+                    <plugin>unistackbot_sim_control/SimControlHardware</plugin>
+                    <param name="backend">kinematic</param>
+                </xacro:unless>
+            </hardware>
+            <xacro:r1_joint name="torso_joint1" lo="-1.1345" hi="1.8326"/>
+            <xacro:r1_joint name="torso_joint2" lo="-2.7925" hi="2.5307"/>
+            <xacro:r1_joint name="torso_joint3" lo="-2.0944" hi="1.8326"/>
+            <xacro:r1_joint name="torso_joint4" lo="-3.0543" hi="3.0543"/>
+        </ros2_control>
+
+        <!-- Gazebo 侧系统插件 (piper 同款): gz server 加载 gz_ros2_control-system 并建 CM -->
+        <xacro:if value="${use_gazebo == 'ign'}">
+            <gazebo>
+                <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+                    <robot_param>robot_description</robot_param>
+                    <robot_param_node>robot_state_publisher</robot_param_node>
+                    <parameters>$(find unistackbot_bringup)/config/r1_pro_controllers.yaml</parameters>
+                </plugin>
+            </gazebo>
+        </xacro:if>
+    </xacro:macro>
+</robot>

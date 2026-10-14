@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- r1_pro 运动学宏 —— 程序化提取自 original/r1_pro.urdf (2026-10-14, 数字零手抄)
+         覆盖控制域: 腰 torso×4 + 双臂 arm×6×2 = 16 关节 (四件式: js_torso + js_arms)
+         轮 (servo+wheel×3) 与传感器挂点不在此宏 (分离式接入: 底盘生态件, 未驱动时省略) -->
+    <xacro:macro name="r1_pro_body">
+        <link name="base_link">
+            <inertial>
+                <origin xyz="-0.0030503 -0.00009624 0.14087" rpy="0 0 0"/>
+                <mass value="68.732"/>
+                <inertia ixx="1.5812" ixy="-0.00001063" ixz="0.053601" iyy="1.4648" iyz="0.00000571" izz="2.835"/>
+            </inertial>
+            <visual>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/base_link.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="torso_joint1" type="revolute">
+            <parent link="base_link"/><child link="torso_link1"/>
+            <origin xyz="-0.032845 0 0.301" rpy="-1.5708 0 0"/><axis xyz="0 0 1"/>
+            <limit lower="-1.1345" upper="1.8326" effort="100" velocity="2.5"/>
+        </joint>
+        <link name="torso_link1">
+            <inertial>
+                <origin xyz="0.00065636 -0.23142 0.0032247" rpy="0 0 0"/>
+                <mass value="10"/>
+                <inertia ixx="0.30931" ixy="0.00017473" ixz="0.00000779" iyy="0.0081222" iyz="-0.00013763" izz="0.30736"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/torso_link1.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="torso_joint2" type="revolute">
+            <parent link="torso_link1"/><child link="torso_link2"/>
+            <origin xyz="0 -0.4 0" rpy="0 0 0"/><axis xyz="0 0 1"/>
+            <limit lower="-2.7925" upper="2.5307" effort="100" velocity="2.5"/>
+        </joint>
+        <link name="torso_link2">
+            <inertial>
+                <origin xyz="0.0052517 -0.15711 0.014411" rpy="0 0 0"/>
+                <mass value="3.4"/>
+                <inertia ixx="0.026081" ixy="-0.00024541" ixz="-0.00000033" iyy="0.0018515" iyz="-0.00000038" izz="0.027574"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/torso_link2.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="torso_joint3" type="revolute">
+            <parent link="torso_link2"/><child link="torso_link3"/>
+            <origin xyz="0 -0.3 0" rpy="0 0 0"/><axis xyz="0 0 -1"/>
+            <limit lower="-2.0944" upper="1.8326" effort="100" velocity="2.5"/>
+        </joint>
+        <link name="torso_link3">
+            <inertial>
+                <origin xyz="-0.00000008 -0.031308 -0.00018966" rpy="0 0 0"/>
+                <mass value="5.5"/>
+                <inertia ixx="0.0035869" ixy="0" ixz="0" iyy="0.0036236" iyz="-0.00010486" izz="0.0043819"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/torso_link3.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="torso_joint4" type="revolute">
+            <parent link="torso_link3"/><child link="torso_link4"/>
+            <origin xyz="0 -0.12474 0" rpy="1.5708 0 0"/><axis xyz="0 0 1"/>
+            <limit lower="-3.0543" upper="3.0543" effort="100" velocity="2.5"/>
+        </joint>
+        <link name="torso_link4">
+            <inertial>
+                <origin xyz="-0.0025153 0.00000031 0.35873" rpy="0 0 0"/>
+                <mass value="16.778"/>
+                <inertia ixx="0.015187" ixy="0.00000007" ixz="0.00054617" iyy="0.013478" iyz="-0.0000002" izz="0.017316"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/torso_link4.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="left_arm_joint1" type="revolute">
+            <parent link="torso_link4"/><child link="left_arm_link1"/>
+            <origin xyz="-0.00033786 0.13608 0.27773" rpy="-1.5708 0 0"/><axis xyz="0 0 1"/>
+            <limit lower="-2.8798" upper="2.8798" effort="40" velocity="20.944"/>
+        </joint>
+        <link name="left_arm_link1">
+            <inertial>
+                <origin xyz="0.0020734 0.00846 0.19171" rpy="0 0 0"/>
+                <mass value="1.319"/>
+                <inertia ixx="0.00058101" ixy="0.00000001" ixz="0.00000003" iyy="0.00070857" iyz="0.00000086" izz="0.00044583"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/left_arm_link1.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="left_arm_joint2" type="revolute">
+            <parent link="left_arm_link1"/><child link="left_arm_link2"/>
+            <origin xyz="0 0 0.11185" rpy="-1.5708 0 0"/><axis xyz="0 0 1"/>
+            <limit lower="0" upper="3.2289" effort="40" velocity="20.944"/>
+        </joint>
+        <link name="left_arm_link2">
+            <inertial>
+                <origin xyz="-0.23622 -0.016352 0.00013272" rpy="0 0 0"/>
+                <mass value="1.3"/>
+                <inertia ixx="0.00060638" ixy="0.00004182" ixz="-0.00014956" iyy="0.0075936" iyz="0.00000809" izz="0.0075712"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/left_arm_link2.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="left_arm_joint3" type="revolute">
+            <parent link="left_arm_link2"/><child link="left_arm_link3"/>
+            <origin xyz="-0.34928 -0.019999 0" rpy="0 0 0"/><axis xyz="0 0 1"/>
+            <limit lower="-3.3161" upper="0" effort="27" velocity="7.5398"/>
+        </joint>
+        <link name="left_arm_link3">
+            <inertial>
+                <origin xyz="0.045114 -0.054616 0.00045585" rpy="0 0 0"/>
+                <mass value="0.818"/>
+                <inertia ixx="0.00060107" ixy="0.00022467" ixz="0.00000712" iyy="0.0013959" iyz="-0.00000975" izz="0.0015027"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/left_arm_link3.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="left_arm_joint4" type="revolute">
+            <parent link="left_arm_link3"/><child link="left_arm_link4"/>
+            <origin xyz="0.02735 -0.069767 0" rpy="-3.1416 1.5708 3.1416"/><axis xyz="0 0 1"/>
+            <limit lower="-2.8798" upper="2.8798" effort="7" velocity="25.133"/>
+        </joint>
+        <link name="left_arm_link4">
+            <inertial>
+                <origin xyz="0.00000082 -0.0023773 0.24285" rpy="0 0 0"/>
+                <mass value="0.816"/>
+                <inertia ixx="0.00009704" ixy="-0.00000001" ixz="0" iyy="0.00010174" iyz="0.00000083" izz="0.0000845"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/left_arm_link4.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="left_arm_joint5" type="revolute">
+            <parent link="left_arm_link4"/><child link="left_arm_link5"/>
+            <origin xyz="0 -0.0025 0.2463" rpy="1.5708 -1.5703 0.0077846"/><axis xyz="0 0 1"/>
+            <limit lower="-1.6581" upper="1.6581" effort="7" velocity="25.133"/>
+        </joint>
+        <link name="left_arm_link5">
+            <inertial>
+                <origin xyz="0.054309 0.00003483 0.0011809" rpy="0 0 0"/>
+                <mass value="0.801"/>
+                <inertia ixx="0.000084" ixy="0.00000004" ixz="0.00001623" iyy="0.00011332" iyz="-0.00000009" izz="0.0000985"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/left_arm_link5.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="left_arm_joint6" type="revolute">
+            <parent link="left_arm_link5"/><child link="left_arm_link6"/>
+            <origin xyz="0.16215 0.00006892 -0.0024999" rpy="-1.5708 -0.0077846 -1.5702"/><axis xyz="0 0 1"/>
+            <limit lower="-2.8798" upper="2.8798" effort="7" velocity="25.133"/>
+        </joint>
+        <link name="left_arm_link6">
+            <inertial>
+                <origin xyz="-0.00000015 0.00000007 -0.031107" rpy="0 0 0"/>
+                <mass value="0.465"/>
+                <inertia ixx="0.00016512" ixy="0.00000008" ixz="0" iyy="0.00009864" iyz="0" izz="0.00017588"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/left_arm_link6.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="right_arm_joint1" type="revolute">
+            <parent link="torso_link4"/><child link="right_arm_link1"/>
+            <origin xyz="-0.0003367 -0.13609 0.27773" rpy="1.5786 -0.00054698 0"/><axis xyz="0 0 1"/>
+            <limit lower="-2.8798" upper="2.8798" effort="40" velocity="20.944"/>
+        </joint>
+        <link name="right_arm_link1">
+            <inertial>
+                <origin xyz="0.0020139 0.0089421 0.19171" rpy="0 0 0"/>
+                <mass value="1.319"/>
+                <inertia ixx="0.00058101" ixy="-0.00000001" ixz="-0.00000003" iyy="0.00070857" iyz="0.00000086" izz="0.00044583"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/right_arm_link1.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="right_arm_joint2" type="revolute">
+            <parent link="right_arm_link1"/><child link="right_arm_link2"/>
+            <origin xyz="0 0.00087053 0.11185" rpy="-1.5786 0 -0.00054696"/><axis xyz="0 0 1"/>
+            <limit lower="0" upper="3.2289" effort="40" velocity="20.944"/>
+        </joint>
+        <link name="right_arm_link2">
+            <inertial>
+                <origin xyz="-0.23622 -0.016354 0.00013181" rpy="0 0 0"/>
+                <mass value="1.3"/>
+                <inertia ixx="0.00060639" ixy="-0.00041823" ixz="-0.00014959" iyy="0.0075936" iyz="-0.00000809" izz="0.0075712"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/right_arm_link2.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="right_arm_joint3" type="revolute">
+            <parent link="right_arm_link2"/><child link="right_arm_link3"/>
+            <origin xyz="-0.34928 -0.020001 0" rpy="0 0 0"/><axis xyz="0 0 1"/>
+            <limit lower="-3.3161" upper="0" effort="27" velocity="7.5398"/>
+        </joint>
+        <link name="right_arm_link3">
+            <inertial>
+                <origin xyz="0.045115 -0.054616 0.00045605" rpy="0 0 0"/>
+                <mass value="0.818"/>
+                <inertia ixx="0.00060107" ixy="0.00022466" ixz="0.00000712" iyy="0.0013959" iyz="-0.00000975" izz="0.0015027"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/right_arm_link3.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="right_arm_joint4" type="revolute">
+            <parent link="right_arm_link3"/><child link="right_arm_link4"/>
+            <origin xyz="0.02735 -0.069767 0" rpy="0 -1.5708 3.1416"/><axis xyz="0 0 1"/>
+            <limit lower="-2.8798" upper="2.8798" effort="7" velocity="25.133"/>
+        </joint>
+        <link name="right_arm_link4">
+            <inertial>
+                <origin xyz="-0.00000082 0.0023773 0.24285" rpy="0 0 0"/>
+                <mass value="0.816"/>
+                <inertia ixx="0.00009704" ixy="-0.00000001" ixz="0" iyy="0.00010174" iyz="-0.00000083" izz="0.0000845"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/right_arm_link4.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="right_arm_joint5" type="revolute">
+            <parent link="right_arm_link4"/><child link="right_arm_link5"/>
+            <origin xyz="0 0.0025 0.2463" rpy="-1.5708 -1.5703 0.0077846"/><axis xyz="0 0 1"/>
+            <limit lower="-1.6581" upper="1.6581" effort="7" velocity="25.133"/>
+        </joint>
+        <link name="right_arm_link5">
+            <inertial>
+                <origin xyz="0.054309 -0.00002438 0.0011809" rpy="0 0 0"/>
+                <mass value="0.801"/>
+                <inertia ixx="0.000084" ixy="0.00000007" ixz="0.00001623" iyy="0.00011332" iyz="-0.00000011" izz="0.0000985"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/right_arm_link5.STL"/></geometry>
+            </visual>
+        </link>
+        <joint name="right_arm_joint6" type="revolute">
+            <parent link="right_arm_link5"/><child link="right_arm_link6"/>
+            <origin xyz="0.16215 -0.00010784 -0.0024999" rpy="1.5708 0 1.5703"/><axis xyz="0 0 1"/>
+            <limit lower="-2.8798" upper="2.8798" effort="7" velocity="25.133"/>
+        </joint>
+        <link name="right_arm_link6">
+            <inertial>
+                <origin xyz="-0.00000002 -0.00000006 -0.031107" rpy="0 0 0"/>
+                <mass value="0.465"/>
+                <inertia ixx="0.00016512" ixy="-0.00000044" ixz="0" iyy="0.00009864" iyz="0" izz="0.00017588"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry><mesh filename="package://unistackbot_description/mobile_manipulators/r1_pro/meshes/right_arm_link6.STL"/></geometry>
+            </visual>
+        </link>
+    </xacro:macro>
+</robot>

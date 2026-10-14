@@ -101,13 +101,17 @@ def _launch_setup(context):
     #   模式 = 一个 spawner 进程传控制器列表, 收拢并发服务调用风暴。--service-call-timeout
     #   30s 让 3 次内建重试变耐心(实测疲劳机硬件 init >4s)。--controller-manager-timeout
     #   默认 0.0 已是永远等服务, 不调。RMW 层 wait 卡死无解, 由流水线 ⓪ 残留检查兜底。
+    # JS 实例名参数化 (2026-10-14 轮式双臂四件式): 默认单实例 (单臂机型零改动),
+    # r1_pro 类双臂机型起链传 js_controllers:="[js_arms, js_torso]"
+    js_ctrls_arg = LaunchConfiguration('js_controllers')
+    js_ctrls = [s.strip() for s in js_ctrls_arg.perform(context).strip('[]').split(',') if s.strip()]
     controller_spawners = [
         # 激活组: 一个 spawner 进程按序 load/configure/activate (官方 example_13 模式)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_state_broadcaster', 'joint_stream_controller',
-                       'ee_state_broadcaster',
+            arguments=['joint_state_broadcaster'] + js_ctrls +
+                       ['ee_state_broadcaster',
                        '--controller-manager', '/controller_manager',
                        '--service-call-timeout', '30'],
             output='screen',
@@ -147,6 +151,8 @@ def _launch_setup(context):
 def generate_launch_description():
     return LaunchDescription([
         # DDS 跟随机器默认配置 (~/cyclonedds.xml), launch 不再覆盖
+        DeclareLaunchArgument('js_controllers', default_value='[joint_stream_controller]',
+                              description='JS 实例名列表 (单臂默认; 双臂四件式传 [js_arms, js_torso])'),
         DeclareLaunchArgument('robot',
                               description='机型名(必填), 对应 unistackbot_description/arms/<robot>/ 与 bringup config/<robot>_controllers.yaml'),
         DeclareLaunchArgument('use_rviz', default_value='false',

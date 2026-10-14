@@ -172,6 +172,16 @@ import yaml
 c = yaml.safe_load(open('$CYAML'))['cartesian_motion_controller']['ros__parameters']
 print(c['base_link'], c['tip_link'])")"
 
+# JS 实例名 = yaml 中 type=JointStreamController 的全部键 (单一事实源, 零机型硬编码;
+# 单臂机型=[joint_stream_controller], 轮式双臂四件式=[js_arms js_torso])
+JS_INSTANCES=$(python3 -c "
+import yaml
+cm = yaml.safe_load(open('$CYAML'))['controller_manager']['ros__parameters']
+print(' '.join(k for k, v in cm.items() if isinstance(v, dict) and 'JointStreamController' in str(v.get('type', ''))))")
+JS_FIRST=$(echo "$JS_INSTANCES" | awk '{print $1}')   # 主 JS (CM 互斥配对 / verify_motion 消费)
+JS_EXTRA="${JS_INSTANCES#* }"; [ "$JS_EXTRA" = "$JS_INSTANCES" ] && JS_EXTRA=""
+say "JS 实例: $JS_INSTANCES (主=$JS_FIRST${JS_EXTRA:+ 额外=$JS_EXTRA})"
+
 # ================= 2. launch 参数化错误路径 =================
 say "== [2] 错误路径: 必填参数 / 未知机型 / 未知链 =="
 E=$(timeout 15 ros2 launch unistackbot_bringup control.launch.py 2>&1)
@@ -185,7 +195,7 @@ echo "$E" | grep -q "未知链" && ok "统一入口未知链显式报错" || bad
 wait_controllers() {  # $1=最长等待秒数 $2=log
 	for _ in $(seq 1 "$1"); do
 		C=$(timeout 5 ros2 control list_controllers 2>/dev/null)
-		if echo "$C" | grep -q "joint_state_broadcaster.*active" && echo "$C" | grep -q "joint_stream_controller.*active"; then
+		if echo "$C" | grep -q "joint_state_broadcaster.*active" && echo "$C" | grep -q "$JS_FIRST.*active"; then
 			return 0
 		fi
 		[ -s "$2" ] && grep -qE "Error|error while" "$2" && return 2
@@ -201,8 +211,8 @@ run_motion() {
 	if [[ "$J" == ERROR* ]]; then bad "关节集推算失败 ($1): $J"; return 1; fi
 	local SOFT="${4:+--soft-joints $4}"
 	local MIM="${5:+--mimic $5}"
-	tally "$(timeout 30 python3 "$SCRIPT_DIR/verify_motion.py" js --joints "$J" --targets "$T" --tol "$2" $SOFT $MIM 2>&1)"
-	tally "$(timeout 40 python3 "$SCRIPT_DIR/verify_motion.py" cm --base "$CM_BASE" --tip "$CM_TIP" --tol "$3" --timeout 15 2>&1)"
+	tally "$(timeout 30 python3 "$SCRIPT_DIR/verify_motion.py" js --joints "$J" --targets "$T" --tol "$2" --js-name "$JS_FIRST" $SOFT $MIM 2>&1)"
+	tally "$(timeout 40 python3 "$SCRIPT_DIR/verify_motion.py" cm --base "$CM_BASE" --tip "$CM_TIP" --tol "$3" --timeout 15 --js-name "$JS_FIRST" 2>&1)"
 }
 
 # ---- 公共: 收集进程的传递后代 (精确 PID, 勿用 pkill 模式——会误杀宿主) ----
@@ -244,7 +254,7 @@ cleanup_launch() {  # $1=launch pid
 say "== [3] mock 链: control.launch.py robot:=$ROBOT =="
 ros2 run unistackbot_gazebo gz_clean.sh >/dev/null 2>&1
 LOG=/tmp/verify_${ROBOT}_mock.log
-ros2 launch unistackbot_bringup control.launch.py "robot:=$ROBOT" > "$LOG" 2>&1 &
+ros2 launch unistackbot_bringup control.launch.py "robot:=$ROBOT" "js_controllers:=[${JS_INSTANCES// /,}]" > "$LOG" 2>&1 &
 LPID=$!
 if wait_controllers 40 "$LOG"; then
 	ok "控制器就绪 (JSB+JS active)"
