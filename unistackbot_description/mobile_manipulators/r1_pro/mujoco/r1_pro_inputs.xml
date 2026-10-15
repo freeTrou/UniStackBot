@@ -1,0 +1,41 @@
+<mujoco_inputs>
+
+  <!-- r1_pro URDF→MJCF 转换定制输入 (2026-10-14 程序化生成)
+       限位/ctrlrange 全部提取自 original/urdf/r1pro_2026.urdf
+       kp 为起步值 (参照 r1_7a 谱系: 腰/肩重载高, 腕末梢低), 首跑后按跟踪调
+       无 mimic (r1_pro 夹爪双指是独立 prismatic, 非 mimic) -->
+
+  <raw_inputs>
+    <option integrator="implicitfast"/>
+
+    <default>
+      <default class="visual">
+        <geom group="2" type="mesh" contype="0" conaffinity="0"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+      </default>
+    </default>
+
+    <actuator>
+      <position name="torso_joint1" joint="torso_joint1" kp="800" dampratio="1.0" ctrlrange="-1.2735467075 1.8125467075"/>
+      <position name="torso_joint2" joint="torso_joint2" kp="800" dampratio="1.0" ctrlrange="-2.6703467075 2.6825467075"/>
+      <position name="torso_joint3" joint="torso_joint3" kp="800" dampratio="1.0" ctrlrange="-1.7095467075 1.5358467075"/>
+      <position name="torso_joint4" joint="torso_joint4" kp="800" dampratio="1.0" ctrlrange="-3.0193934150 3.0193934150"/>
+      <position name="left_arm_joint1" joint="left_arm_joint1" kp="800" dampratio="1.0" ctrlrange="-4.4156934150 1.2740934150"/>
+      <position name="left_arm_joint2" joint="left_arm_joint2" kp="800" dampratio="1.0" ctrlrange="-0.1395934150 3.1066934150"/>
+      <position name="left_arm_joint3" joint="left_arm_joint3" kp="500" dampratio="1.0" ctrlrange="-2.3212894150 2.3212894150"/>
+      <position name="left_arm_joint4" joint="left_arm_joint4" kp="500" dampratio="1.0" ctrlrange="-2.0594934150 0.3141934150"/>
+      <position name="left_arm_joint5" joint="left_arm_joint5" kp="300" dampratio="1.0" ctrlrange="-2.3212894150 2.3212894150"/>
+      <position name="left_arm_joint6" joint="left_arm_joint6" kp="300" dampratio="1.0" ctrlrange="-1.0122914150 1.0122914150"/>
+      <position name="left_arm_joint7" joint="left_arm_joint7" kp="300" dampratio="1.0" ctrlrange="-1.5358934150 1.5358934150"/>
+      <position name="right_arm_joint1" joint="right_arm_joint1" kp="800" dampratio="1.0" ctrlrange="-4.4156934150 1.2740934150"/>
+      <position name="right_arm_joint2" joint="right_arm_joint2" kp="800" dampratio="1.0" ctrlrange="-3.1066934150 0.1395934150"/>
+      <position name="right_arm_joint3" joint="right_arm_joint3" kp="500" dampratio="1.0" ctrlrange="-2.3212894150 2.3212894150"/>
+      <position name="right_arm_joint4" joint="right_arm_joint4" kp="500" dampratio="1.0" ctrlrange="-2.0594934150 0.3141934150"/>
+      <position name="right_arm_joint5" joint="right_arm_joint5" kp="300" dampratio="1.0" ctrlrange="-2.3212894150 2.3212894150"/>
+      <position name="right_arm_joint6" joint="right_arm_joint6" kp="300" dampratio="1.0" ctrlrange="-1.0122914150 1.0122914150"/>
+      <position name="right_arm_joint7" joint="right_arm_joint7" kp="300" dampratio="1.0" ctrlrange="-1.5358934150 1.5358934150"/>
+    </actuator>
+  </raw_inputs>
+</mujoco_inputs>

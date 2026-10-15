@@ -1,24 +1,22 @@
-# r1_pro 机型验收登记表 —— 测试判据登记值单一事实源 (verify_robot.sh 消费)
-# 定义依据: docs/sim/sim_validation_pipeline.md + docs/guides/robot_import_sop.md
-# 纪律: 改模型/改判据阈值 → 先改这里 (登记值变更要说明理由), verify 按此断言
-fingerprint:                # 静态判据 (2026-10-14 首接入登记)
-  subchain_count: 18       # 判据②: check_urdf child 数实测 (17 link + world; 控制域 16 + base_link + world)
-  joints_by_chain:          # 判据③: 各形态命令关节集 (arms 12 + torso 4 两组 ros2_control, 三链同集)
-    mock:   [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4, left_arm_joint5, left_arm_joint6, right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4, right_arm_joint5, right_arm_joint6, torso_joint1, torso_joint2, torso_joint3, torso_joint4]
-    ign:    [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4, left_arm_joint5, left_arm_joint6, right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4, right_arm_joint5, right_arm_joint6, torso_joint1, torso_joint2, torso_joint3, torso_joint4]
-    mujoco: [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4, left_arm_joint5, left_arm_joint6, right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4, right_arm_joint5, right_arm_joint6, torso_joint1, torso_joint2, torso_joint3, torso_joint4]
-  plugins:               # 判据③½: per-chain 硬件插件名 (2026-10-14 立断言)
+# r1_pro 机型验收登记表 (官方 2026 g1z 首接入 2026-10-14)
+fingerprint:
+  subchain_count: 22     # 展开 link 数 (18 控制域 child + base_link; world 模式 +1 → verify 实测修正)
+  joints_by_chain:
+    mock:   [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4, left_arm_joint5, left_arm_joint6, left_arm_joint7, right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4, right_arm_joint5, right_arm_joint6, right_arm_joint7, torso_joint1, torso_joint2, torso_joint3, torso_joint4]
+    ign:    [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4, left_arm_joint5, left_arm_joint6, left_arm_joint7, right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4, right_arm_joint5, right_arm_joint6, right_arm_joint7, torso_joint1, torso_joint2, torso_joint3, torso_joint4]
+    mujoco: [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4, left_arm_joint5, left_arm_joint6, left_arm_joint7, right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4, right_arm_joint5, right_arm_joint6, right_arm_joint7, torso_joint1, torso_joint2, torso_joint3, torso_joint4]
+  plugins:
     mock: unistackbot_sim_control/SimControlHardware
     ign: gz_ros2_control/GazeboSimSystem
     mujoco: mujoco_ros2_control/MujocoSystemInterface
-tolerance:                  # 测试容差登记 (首接入保守值; 收敛后按实测调整)
+tolerance:
   js_mock: 0.01
   cm_mock: 0.002
   js_gz: 0.05
   cm_gz: 0.005
   js_mujoco: 0.02
   cm_mujoco: 0.003
-mimic:                      # mimic 契约登记 (r1_pro 夹爪双指在 original 有 prismatic 对; xacro 主体暂未含夹爪)
+mimic:
   pairs: ""
-soft_joints:                # 已知回归不计失败
+soft_joints:
   gz: ""

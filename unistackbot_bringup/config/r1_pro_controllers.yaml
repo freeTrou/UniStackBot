@@ -1,57 +1,64 @@
-# r1_pro 控制器配置 (2026-10-14 首接入; 四件式: js_arms + js_torso + cm, 底盘生态件后续)
-# 分割依据: docs/guides/robot_import_sop.md S1 解剖报告 + 四件式裁决 (mobile_manipulator 首例)
+# r1_pro 控制器配置 (官方 2026 g1z 提取 2026-10-14; 四件式: js_arms+js_torso+cm)
 controller_manager:
   ros__parameters:
-    update_rate: 500  # Hz
+    update_rate: 500
     thread_priority: 80
     cpu_affinity: 1
     lock_memory: true
-
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
-
     js_arms:
       type: unistackbot_controller/JointStreamController
-
     js_torso:
       type: unistackbot_controller/JointStreamController
-
     cartesian_motion_controller:
       type: unistackbot_controller/CartesianMotionController
-
     ee_state_broadcaster:
       type: unistackbot_controller/EeStateBroadcaster
-
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
-/**:
-  ros__parameters: {} # 逐控制器段见下
-
-joint_state_broadcaster:
-  ros__parameters: {}
-
 js_arms:
   ros__parameters:
+    joints: [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4,
+             left_arm_joint5, left_arm_joint6, left_arm_joint7,
+             right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4,
+             right_arm_joint5, right_arm_joint6, right_arm_joint7]
     interpolation: ruckig
     observe_applied_command: false
 
 js_torso:
   ros__parameters:
+    joints: [torso_joint1, torso_joint2, torso_joint3, torso_joint4]
     interpolation: ruckig
     observe_applied_command: false
+
+# MoveIt 执行器 (inactive 常驻; mock 链 spawner 拉起, Humble 须 spawner -t 传 type)
+joint_trajectory_controller:
+  ros__parameters:
+    type: joint_trajectory_controller/JointTrajectoryController
+    joints: [left_arm_joint1, left_arm_joint2, left_arm_joint3, left_arm_joint4,
+             left_arm_joint5, left_arm_joint6, left_arm_joint7,
+             right_arm_joint1, right_arm_joint2, right_arm_joint3, right_arm_joint4,
+             right_arm_joint5, right_arm_joint6, right_arm_joint7,
+             torso_joint1, torso_joint2, torso_joint3, torso_joint4]
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
 
 ee_state_broadcaster:
   ros__parameters:
     base_link: base_link
-    tip_link: left_arm_link6      # 主臂 = 左臂 (单 CM 裁决; 右臂走 JS)
+    tip_link: left_arm_link7
     publish_hz: 50.0
 
 cartesian_motion_controller:
   ros__parameters:
     base_link: base_link
-    tip_link: left_arm_link6
-    ik_solver: trac_ik            # 7-DoF 单臂链数值解; message_rate 必配 (2026-10-12 卡顿根因)
+    tip_link: left_arm_link7
+    ik_solver: trac_ik
     ik_timeout_ms: 50.0
     ik_timeout_mode: message_rate
     max_acceleration: 5.0

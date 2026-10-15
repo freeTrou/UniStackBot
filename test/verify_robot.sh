@@ -112,12 +112,14 @@ fi
 # multiplier×主关节目标 + offset —— JS 契约要求消息列全命令关节, mimic 也得给值。
 # 用法: derive <use_gazebo 值>; 单行输出 "j1,j2 0.1,0.2"
 # (单行! read <<< 只消费首行 —— 两行输出的第二行会被静默丢弃, 2026-09-21 实测踩坑)
-derive() {
+derive() {  # $1=use_gazebo 值 $2=关节逗号串(可选, 多 JS 实例机型按 yaml joints 显式列表过滤)
 	xacro "$XACRO" use_world:=true use_ros2_control:=true "use_gazebo:=$1" > /tmp/verify_${ROBOT}_$1.urdf 2>/dev/null
 	python3 -c "
 import xml.etree.ElementTree as ET, sys
 lim, mim, order = {}, {}, []
-for j in ET.parse('/tmp/verify_${ROBOT}_$1.urdf').iter('joint'):
+_sel = '${2-}'
+_root = ET.parse('/tmp/verify_${ROBOT}_$1.urdf').getroot()
+for j in _root.iter('joint'):
     if j.get('name') is None or j.find('command_interface') is None: continue
     if (j.find('command_interface').get('name') != 'position'): continue
     name = j.get('name')
@@ -131,7 +133,13 @@ if not lim: print('ERROR 无命令关节'); sys.exit(1)
 targ = {n: round(lo + 0.3*(hi-lo), 4) for n, (lo, hi) in lim.items()}
 for n, (master, k, off) in mim.items():
     if master in targ: targ[n] = round(k*targ[master] + off, 4)
-names = [n for n in order if n in targ]
+if _sel:
+    want = [s.strip() for s in _sel.split(',') if s.strip()]
+    miss = [n for n in want if n not in targ]
+    if miss: print('ERROR 关节不在命令表: ' + ','.join(miss)); sys.exit(1)
+    names = want
+else:
+    names = [n for n in order if n in targ]
 print(','.join(names), ','.join(str(targ[n]) for n in names))" 2>&1
 }
 read -r JOINS TARGS <<< "$(derive false)"
@@ -194,11 +202,14 @@ echo "$E" | grep -q "未知链" && ok "统一入口未知链显式报错" || bad
 # ---- 公共: 等控制器 (JSB+JS active, CM 已注册) ----
 wait_controllers() {  # $1=最长等待秒数 $2=log
 	for _ in $(seq 1 "$1"); do
-		C=$(timeout 5 ros2 control list_controllers 2>/dev/null)
+		C=$(timeout 8 ros2 control list_controllers 2>/dev/null)
 		if echo "$C" | grep -q "joint_state_broadcaster.*active" && echo "$C" | grep -q "$JS_FIRST.*active"; then
 			return 0
 		fi
 		[ -s "$2" ] && grep -qE "Error|error while" "$2" && return 2
+		# CLI 守护进程被 timeout 中断会楔死 (!rclpy.ok(), 2026-10-14 实锤) ——
+		# 空结果即重启守护, 否则余下循环全部空转误判"未激活"
+		[ -z "$C" ] && ros2 daemon stop >/dev/null 2>&1
 		sleep 1
 	done
 	return 1
@@ -207,12 +218,22 @@ wait_controllers() {  # $1=最长等待秒数 $2=log
 # ---- 公共: 一条链的运动验证 (JS 流 + CM 切换) ----
 # $1=use_gazebo 值(定关节集) $2=JS容差 $3=CM容差 $4=soft-joints(可空) $5=mimic规格(可空)
 run_motion() {
-	read -r J T <<< "$(derive "$1")"
+	# 主 JS 实例的关节集 (yaml joints 显式列表, 2026-10-14 单块化; 单块机型空 = 全合并旧行为)
+	local JS_JOINTS
+	JS_JOINTS=$(python3 -c "
+import yaml
+try:
+    p = yaml.safe_load(open('$CYAML')).get('$JS_FIRST', {}).get('ros__parameters', {})
+    print(','.join(p.get('joints', [])))
+except Exception:
+    print('')")
+	read -r J T <<< "$(derive "$1" "$JS_JOINTS")"
 	if [[ "$J" == ERROR* ]]; then bad "关节集推算失败 ($1): $J"; return 1; fi
 	local SOFT="${4:+--soft-joints $4}"
 	local MIM="${5:+--mimic $5}"
 	tally "$(timeout 30 python3 "$SCRIPT_DIR/verify_motion.py" js --joints "$J" --targets "$T" --tol "$2" --js-name "$JS_FIRST" $SOFT $MIM 2>&1)"
-	tally "$(timeout 40 python3 "$SCRIPT_DIR/verify_motion.py" cm --base "$CM_BASE" --tip "$CM_TIP" --tol "$3" --timeout 15 --js-name "$JS_FIRST" 2>&1)"
+	VERIFY_CYAML="$CYAML" timeout 40 python3 "$SCRIPT_DIR/verify_motion.py" cm --base "$CM_BASE" --tip "$CM_TIP" --tol "$3" --timeout 15 --js-name "$JS_FIRST" > /tmp/vm_cm.out 2>&1
+	tally "$(cat /tmp/vm_cm.out)"
 }
 
 # ---- 公共: 收集进程的传递后代 (精确 PID, 勿用 pkill 模式——会误杀宿主) ----

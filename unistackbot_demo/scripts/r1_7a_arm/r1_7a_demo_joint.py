@@ -108,33 +108,30 @@ class R17aDemoJoint(Node):
 		return [got[n] for n in joints]
 
 	def run(self, hz, cycles):
-		# 第一步 = 切换自己需要的控制器 (进入声明, 幂等——查态后只切需要变的;
-		# activate 已 active 的 JS 会被 CM 硬拒, 这正是上一版在新机常态路径炸的根)
-		import re
+		# 第一步 = 切换自己需要的控制器 (进入声明, 幂等+两段式: 先 deact 占用方并落定, 再 act)
+		import subprocess
 		for attempt in range(7):
-			try:
-				r = subprocess.run(['ros2', 'control', 'list_controllers'],
-					capture_output=True, text=True, timeout=15)
-			except subprocess.TimeoutExpired:
-				raise RuntimeError('list_controllers 超时 —— 链未启动或 CLI 缺失?'
-					' 先起链 (ros2 launch ...); CLI 缺失装 ros-humble-ros2controlcli')
+			r = subprocess.run(['ros2', 'control', 'list_controllers'],
+				capture_output=True, text=True, timeout=15)
 			states = {}
 			for line in r.stdout.splitlines():
 				clean = re.sub(r'\x1b\[[0-9;]*m', '', line.strip())
 				parts = clean.split()
 				if len(parts) >= 3:
 					states[parts[0]] = parts[-1]
-			if not states:
-							raise RuntimeError('list_controllers 无输出 —— 链未启动? 先 ros2 launch 再跑 demo')
-			args = []
+			need = []
 			if states.get('cartesian_motion_controller') == 'active':
-				args += ['--deactivate', 'cartesian_motion_controller']
+				need += ['--deactivate', 'cartesian_motion_controller']
 			if states.get('joint_stream_controller') != 'active':
-				args += ['--activate', 'joint_stream_controller']
-			if not args:
-				break   # 已达目标态 (链起后常态) = 幂等成功
-			s = subprocess.run(['ros2', 'control', 'switch_controllers'] + args,
-				capture_output=True, text=True, timeout=15)
+				need += ['--activate', 'joint_stream_controller']
+			if not need:
+				break
+			if '--deactivate' in need:
+				subprocess.run(['ros2', 'control', 'switch_controllers', '--deactivate',
+					'cartesian_motion_controller'], capture_output=True, timeout=15)
+				time.sleep(0.5)
+			s = subprocess.run(['ros2', 'control', 'switch_controllers', '--activate',
+				'joint_stream_controller'], capture_output=True, text=True, timeout=15)
 			if s.returncode == 0:
 				break
 			self.get_logger().warn('switch 未就绪 (attempt %d/7), 5s 重试' % (attempt + 1))

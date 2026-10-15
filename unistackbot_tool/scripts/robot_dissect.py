@@ -36,7 +36,7 @@ def main():
         n = (j.get('name') or '').lower()
         if t == 'fixed':
             buckets['fixed'].append(j.get('name'))
-        elif any(k in n for k in ('wheel', 'caster', 'servo', 'steering', 'drive')):
+        elif any(k in n for k in ('wheel', 'caster', 'servo', 'steering', 'steer_motor', 'drive')):
             buckets['wheel'].append((j.get('name'), t))
         elif any(k in n for k in ('torso', 'waist', 'lift', 'column', 'spine', 'waist')):
             buckets['torso'].append((j.get('name'), t))

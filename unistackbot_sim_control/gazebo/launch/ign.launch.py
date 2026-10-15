@@ -143,13 +143,27 @@ def _launch_setup(context):
     #   ①delay the spawners(TimerAction 2s) ②launch_utils/example_13 模式 = 一个 spawner
     #   进程传控制器列表收拢并发风暴。--service-call-timeout 30s 让内建重试变耐心。
     #   RMW 层 wait 卡死无解, 由流水线 ⓪ 残留检查兜底; supervisor 即时拉起(纯订阅容忍迟到)。
+    # JS 实例按类型发现 (2026-10-14 四件式, 与 mujoco 链同口径): yaml controller_manager
+    # 节里 type 含 JointStreamController 的条目即实例名 (单块机型=joint_stream_controller,
+    # 多实例机型 r1_pro=js_arms+js_torso); gz 链 yaml 由 URDF <gazebo> 块消费, 此处路径同源
+    import yaml
+    gz_controllers_yaml = os.path.join(
+        get_package_share_directory('unistackbot_bringup'),
+        'config', f'{robot}_controllers.yaml')
+    with open(gz_controllers_yaml) as f:
+        cm_params = yaml.safe_load(f)['controller_manager']['ros__parameters']
+    js_instances = sorted(k for k, v in cm_params.items()
+                          if isinstance(v, dict)
+                          and 'JointStreamController' in str(v.get('type', '')))
+    if not js_instances:
+        raise RuntimeError(f'{gz_controllers_yaml} 未声明任何 JointStreamController 实例')
+
     controller_spawners = [
         # 激活组: 一个 spawner 进程按序 load/configure/activate (官方 example_13 模式)
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_state_broadcaster', 'joint_stream_controller',
-                       'ee_state_broadcaster',
+            arguments=['joint_state_broadcaster'] + js_instances + ['ee_state_broadcaster',
                        '--controller-manager', '/controller_manager',
                        '--service-call-timeout', '30'],
             output='screen',

@@ -1,0 +1,144 @@
+<mujoco model="r1_pro">
+  <compiler angle="radian" meshdir="../meshes/"/>
+  <option timestep="0.001" integrator="implicitfast"/>
+  <asset>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5"/>
+    <mesh name="base_link" file="base_link.STL"/>
+    <mesh name="left_arm_link1" file="left_arm_link1.STL"/>
+    <mesh name="left_arm_link2" file="left_arm_link2.STL"/>
+    <mesh name="left_arm_link3" file="left_arm_link3.STL"/>
+    <mesh name="left_arm_link4" file="left_arm_link4.STL"/>
+    <mesh name="left_arm_link5" file="left_arm_link5.STL"/>
+    <mesh name="left_arm_link6" file="left_arm_link6.STL"/>
+    <mesh name="left_arm_link7" file="left_arm_link7.STL"/>
+    <mesh name="right_arm_link1" file="right_arm_link1.STL"/>
+    <mesh name="right_arm_link2" file="right_arm_link2.STL"/>
+    <mesh name="right_arm_link3" file="right_arm_link3.STL"/>
+    <mesh name="right_arm_link4" file="right_arm_link4.STL"/>
+    <mesh name="right_arm_link5" file="right_arm_link5.STL"/>
+    <mesh name="right_arm_link6" file="right_arm_link6.STL"/>
+    <mesh name="right_arm_link7" file="right_arm_link7.STL"/>
+    <mesh name="torso_link1" file="torso_link1.STL"/>
+    <mesh name="torso_link2" file="torso_link2.STL"/>
+    <mesh name="torso_link3" file="torso_link3.STL"/>
+    <mesh name="torso_link4" file="torso_link4.STL"/>
+  </asset>
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <geom conaffinity="0" contype="1" material="groundplane" name="floor" pos="0 0 -0.01" size="0 0 0.01" type="plane"/>
+
+    <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="base_link"/>
+    <body name="torso_link1" pos="-0.079032 0 0.34865">
+      <inertial pos="0.00065636 0.0032244 0.23142" quat="0.999998 0.000695924 0.000862045 0.00193568" mass="5.72" diaginertia="0.10931 0.10736 0.00812171"/>
+      <joint name="torso_joint1" pos="0 0 0" axis="0 1 0" range="-1.27355 1.81255" actuatorfrcrange="-100 100"/>
+      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="torso_link1"/>
+      <body name="torso_link2" pos="0 0 0.35">
+        <inertial pos="0.0052517 0.014411 0.15711" quat="0.70702 -0.00357506 -0.00358591 0.707175" mass="3.5" diaginertia="0.027574 0.0260835 0.00184901"/>
+        <joint name="torso_joint2" pos="0 0 0" axis="0 1 0" range="-2.67035 2.68255" actuatorfrcrange="-100 100"/>
+        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="torso_link2"/>
+        <body name="torso_link3" pos="0 0 0.35">
+          <inertial pos="-9.8e-07 -0.0055146 0.020182" quat="0.49373 0.506454 0.49479 0.504895" mass="3.4" diaginertia="0.00230141 0.00170239 0.0016099"/>
+          <joint name="torso_joint3" pos="0 0 0" axis="0 -1 0" range="-1.70955 1.53585" actuatorfrcrange="-100 100"/>
+          <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="torso_link3"/>
+          <body name="torso_link4" pos="0 -0.0010063 0.075322">
+            <inertial pos="0.0049601 -1.25e-05 0.21237" quat="0.707074 0.707015 0.00972216 -0.00905433" mass="5" diaginertia="0.0268398 0.0215373 0.013023"/>
+            <joint name="torso_joint4" pos="0 0 0" axis="0 0 1" range="-3.01939 3.01939" actuatorfrcrange="-100 100"/>
+            <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="torso_link4"/>
+            <body name="left_arm_link1" pos="-0.000422246 0.170735 0.32738" quat="1 0 0 -0.000352205">
+              <inertial pos="0.00042258 0.074131 7.916e-05" quat="0.705774 0.708431 0.000394246 -0.0030106" mass="1.135" diaginertia="0.000616038 0.000471359 0.000302583"/>
+              <joint name="left_arm_joint1" pos="0 0 0" axis="0 1 0" range="-4.41569 1.27409" actuatorfrcrange="-55 55"/>
+              <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="left_arm_link1"/>
+              <body name="left_arm_link2" pos="0.025012 0.081265 0">
+                <inertial pos="-0.026826 -0.0040392 -0.031835" quat="0.967816 0.250031 -0.0278705 0.00625971" mass="0.92" diaginertia="0.000373947 0.00034547 0.000316693"/>
+                <joint name="left_arm_joint2" pos="0 0 0" axis="1 0 0" range="-0.139593 3.10669" actuatorfrcrange="-55 55"/>
+                <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="left_arm_link2"/>
+                <body name="left_arm_link3" pos="-0.025012 0 -0.1155">
+                  <inertial pos="0.0053849 -0.00086892 -0.1126" quat="0.987418 -0.0126204 0.157363 -0.00908304" mass="1.245" diaginertia="0.000765373 0.000738746 0.000331352"/>
+                  <joint name="left_arm_joint3" pos="0 0 0" axis="0 0 1" range="-2.32129 2.32129" actuatorfrcrange="-25 25"/>
+                  <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="left_arm_link3"/>
+                  <body name="left_arm_link4" pos="0 0.035065 -0.1945">
+                    <inertial pos="-0.0011018 -0.036243 -0.042164" quat="0.707319 -0.0289796 -0.0394916 0.705195" mass="0.827" diaginertia="0.000197531 0.000139188 0.00010192"/>
+                    <joint name="left_arm_joint4" pos="0 0 0" axis="0 1 0" range="-2.05949 0.314193" actuatorfrcrange="-25 25"/>
+                    <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="left_arm_link4"/>
+                    <body name="left_arm_link5" pos="0 -0.035065 -0.095">
+                      <inertial pos="3.8e-07 -0.0028035 -0.062981" quat="0.997254 -0.0740596 1.15694e-05 0.000181843" mass="0.939" diaginertia="0.00070496 0.000677819 0.000322221"/>
+                      <joint name="left_arm_joint5" pos="0 0 0" axis="0 0 1" range="-2.32129 2.32129" actuatorfrcrange="-18 18"/>
+                      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="left_arm_link5"/>
+                      <body name="left_arm_link6" pos="0 -0.028 -0.16305">
+                        <inertial pos="0.0017919 0.027487 0.00025471" quat="0.704387 0.695964 -0.110357 0.0854062" mass="0.527" diaginertia="8.5685e-05 8.25004e-05 8.11846e-05"/>
+                        <joint name="left_arm_joint6" pos="0 0 0" axis="0 1 0" range="-1.01229 1.01229" actuatorfrcrange="-18 18"/>
+                        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="left_arm_link6"/>
+                        <body name="left_arm_link7" pos="0.0295 0.028 0">
+                          <inertial pos="-0.022945 8.4e-07 -0.056525" quat="0 0.466474 0 0.884535" mass="0.185" diaginertia="5.26999e-05 4.552e-05 3.78101e-05"/>
+                          <joint name="left_arm_joint7" pos="0 0 0" axis="1 0 0" range="-1.53589 1.53589" actuatorfrcrange="-18 18"/>
+                          <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="left_arm_link7"/>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+            <body name="right_arm_link1" pos="-0.000662784 -0.170735 0.32738" quat="1 0 0 -0.000352205">
+              <inertial pos="-0.00042261 -0.074132 7.836e-05" quat="0.70841 0.705795 -0.00301062 0.000394253" mass="1.135" diaginertia="0.000616038 0.000471349 0.000302583"/>
+              <joint name="right_arm_joint1" pos="0 0 0" axis="0 1 0" range="-4.41569 1.27409" actuatorfrcrange="-55 55"/>
+              <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="right_arm_link1"/>
+              <body name="right_arm_link2" pos="0.023988 -0.081265 0">
+                <inertial pos="-0.022361 0.0049527 -0.032732" quat="0.973839 -0.224114 0.0325696 0.0186805" mass="0.92" diaginertia="0.000382058 0.000345952 0.00032461"/>
+                <joint name="right_arm_joint2" pos="0 0 0" axis="1 0 0" range="-3.10669 0.139593" actuatorfrcrange="-55 55"/>
+                <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="right_arm_link2"/>
+                <body name="right_arm_link3" pos="-0.023988 0 -0.1155">
+                  <inertial pos="0.0053839 -0.00087109 -0.11261" quat="0.987422 -0.0126577 0.15733 -0.00922188" mass="1.245" diaginertia="0.000765324 0.000738726 0.00033133"/>
+                  <joint name="right_arm_joint3" pos="0 0 0" axis="0 0 1" range="-2.32129 2.32129" actuatorfrcrange="-25 25"/>
+                  <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="right_arm_link3"/>
+                  <body name="right_arm_link4" pos="0 0.035058 -0.1945">
+                    <inertial pos="-0.00058877 -0.035687 -0.057422" quat="0.707257 -0.0306126 -0.0413243 0.705084" mass="0.827" diaginertia="0.000220262 0.000161936 0.000126442"/>
+                    <joint name="right_arm_joint4" pos="0 0 0" axis="0 1 0" range="-2.05949 0.314193" actuatorfrcrange="-25 25"/>
+                    <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="right_arm_link4"/>
+                    <body name="right_arm_link5" pos="0 -0.035058 -0.095">
+                      <inertial pos="-2.3e-07 0.0031762 -0.07334" quat="0.997325 0.0730908 -1.13941e-05 0.000181215" mass="0.63" diaginertia="0.00069134 0.000664096 0.000303914"/>
+                      <joint name="right_arm_joint5" pos="0 0 0" axis="0 0 1" range="-2.32129 2.32129" actuatorfrcrange="-18 18"/>
+                      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="right_arm_link5"/>
+                      <body name="right_arm_link6" pos="0 0.028001 -0.16305">
+                        <inertial pos="0.0017914 -0.027486 0.00025485" quat="0.695964 0.704387 -0.0854062 0.110357" mass="0.527" diaginertia="8.5685e-05 8.25004e-05 8.11846e-05"/>
+                        <joint name="right_arm_joint6" pos="0 0 0" axis="0 1 0" range="-1.01229 1.01229" actuatorfrcrange="-18 18"/>
+                        <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="right_arm_link6"/>
+                        <body name="right_arm_link7" pos="0.0295 -0.028001 0">
+                          <inertial pos="-0.022945 2.3e-07 -0.056523" quat="0.949518 0 0.313713 0" mass="0.185" diaginertia="9.98357e-05 9.467e-05 3.98343e-05"/>
+                          <joint name="right_arm_joint7" pos="0 0 0" axis="1 0 0" range="-1.53589 1.53589" actuatorfrcrange="-18 18"/>
+                          <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="right_arm_link7"/>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  
+  </worldbody>
+    <actuator>
+        <position name="torso_joint1" joint="torso_joint1" kp="800" dampratio="1.0" ctrlrange="-1.27354671 1.81254671"/>
+        <position name="torso_joint2" joint="torso_joint2" kp="800" dampratio="1.0" ctrlrange="-2.67034671 2.68254671"/>
+        <position name="torso_joint3" joint="torso_joint3" kp="800" dampratio="1.0" ctrlrange="-1.70954671 1.53584671"/>
+        <position name="torso_joint4" joint="torso_joint4" kp="800" dampratio="1.0" ctrlrange="-3.01939342 3.01939342"/>
+        <position name="left_arm_joint1" joint="left_arm_joint1" kp="800" dampratio="1.0" ctrlrange="-4.41569341 1.27409342"/>
+        <position name="left_arm_joint2" joint="left_arm_joint2" kp="800" dampratio="1.0" ctrlrange="-0.13959341 3.10669342"/>
+        <position name="left_arm_joint3" joint="left_arm_joint3" kp="500" dampratio="1.0" ctrlrange="-2.32128941 2.32128941"/>
+        <position name="left_arm_joint4" joint="left_arm_joint4" kp="500" dampratio="1.0" ctrlrange="-2.05949341 0.31419341"/>
+        <position name="left_arm_joint5" joint="left_arm_joint5" kp="300" dampratio="1.0" ctrlrange="-2.32128941 2.32128941"/>
+        <position name="left_arm_joint6" joint="left_arm_joint6" kp="300" dampratio="1.0" ctrlrange="-1.01229141 1.01229141"/>
+        <position name="left_arm_joint7" joint="left_arm_joint7" kp="300" dampratio="1.0" ctrlrange="-1.53589342 1.53589342"/>
+        <position name="right_arm_joint1" joint="right_arm_joint1" kp="800" dampratio="1.0" ctrlrange="-4.41569341 1.27409342"/>
+        <position name="right_arm_joint2" joint="right_arm_joint2" kp="800" dampratio="1.0" ctrlrange="-3.10669342 0.13959341"/>
+        <position name="right_arm_joint3" joint="right_arm_joint3" kp="500" dampratio="1.0" ctrlrange="-2.32128941 2.32128941"/>
+        <position name="right_arm_joint4" joint="right_arm_joint4" kp="500" dampratio="1.0" ctrlrange="-2.05949341 0.31419341"/>
+        <position name="right_arm_joint5" joint="right_arm_joint5" kp="300" dampratio="1.0" ctrlrange="-2.32128941 2.32128941"/>
+        <position name="right_arm_joint6" joint="right_arm_joint6" kp="300" dampratio="1.0" ctrlrange="-1.01229141 1.01229141"/>
+        <position name="right_arm_joint7" joint="right_arm_joint7" kp="300" dampratio="1.0" ctrlrange="-1.53589342 1.53589342"/>
+    </actuator>
+</mujoco>

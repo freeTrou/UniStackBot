@@ -38,8 +38,8 @@ install(PROGRAMS
   scripts/demo_teleop_key.py
   scripts/demo_teleop_joint.py
   scripts/demo_points_playback.py
-  scripts/minimal_joint.py
-  scripts/minimal_cartesian.py
+  scripts/minimal/arms/minimal_joint.py
+  scripts/minimal/arms/minimal_cartesian.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -20,6 +20,9 @@ namespace unistackbot_controller
  *  关节契约解析必须单源; 函数体逐行保持不变)
  * 上界 fail-fast (2026-09-23 审查补): 消费方 JS/门用 kMaxJoints 定长数组按序写入,
  * 17+ 命令关节的 URDF 会在配置期越界 —— 在唯一入口拒绝, 不留给运行期。
+ * 多块全合并 (2026-10-14 定形): ros2_control 块 = 硬件描述, 一机型一块;
+ * 控制器编组 (js_arms/js_torso 等) 归 yaml joints 显式列表, 不在块层过滤 ——
+ * mujoco 插件按组件加载, 双块=双仿真实例 (进程单例被打破, 实证 2026-10-14)。
  */
 inline bool parseJointsFromUrdf(
 	const std::string & urdf, std::vector<std::string> & names,

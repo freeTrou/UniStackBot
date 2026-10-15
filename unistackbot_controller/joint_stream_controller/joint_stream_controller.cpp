@@ -68,10 +68,64 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 		return controller_interface::CallbackReturn::ERROR;
 	}
 	std::string err;
-	if (!parseJointsFromUrdf(urdf, joint_names_, q_min_, q_max_, vmax_, err))
+	// 关节编组 (2026-10-14 单块化收编): ros2_control 块 = 硬件描述 (一机型一块),
+	// 控制器编组 (js_arms/js_torso 等多实例) 归 yaml joints 显式列表 —— 编组是
+	// 控制器层决策, 各实例认领互斥子集; 空列表 = 单块机型旧行为 (URDF 全合并)。
+	// 显式列表的限位/速度仍逐关节回 URDF 解析 (单一事实源不变), 缺关节 fail-fast。
+	// yaml 已带 joints 时 declare 会撞 "already declared" (重配置路径)——
+	// 先读, 读不到再声明 (auto_declare 的防御序)
+	std::vector<std::string> sel;
+	if (!get_node()->get_parameter("joints", sel))
+	{
+		get_node()->declare_parameter<std::vector<std::string>>("joints", std::vector<std::string>{});
+		get_node()->get_parameter("joints", sel);
+	}
+	std::vector<std::string> all_names;
+	std::vector<double> all_qmin, all_qmax, all_vmax;
+	if (!parseJointsFromUrdf(urdf, all_names, all_qmin, all_qmax, all_vmax, err))
 	{
 		ULOG_ERROR("%s: %s", kPluginName, err.c_str());
 		return controller_interface::CallbackReturn::ERROR;
+	}
+	bool explicit_joints = !sel.empty();
+	if (!explicit_joints)
+	{
+		joint_names_ = all_names;
+		q_min_ = all_qmin;
+		q_max_ = all_qmax;
+		vmax_ = all_vmax;
+	}
+	else
+	{
+		// 顺序即 yaml 声明序; 重复/未知关节 fail-fast (列表与 URDF 漂移配置期暴露)
+		for (const std::string & name : sel)
+		{
+			std::size_t k = 0;
+			while (k < joint_names_.size() && joint_names_[k] != name)
+			{
+				++k;
+			}
+			if (k < joint_names_.size())
+			{
+				ULOG_ERROR("%s: joints 列表重复关节 '%s'", kPluginName, name.c_str());
+				return controller_interface::CallbackReturn::ERROR;
+			}
+			std::size_t i = 0;
+			while (i < all_names.size() && all_names[i] != name)
+			{
+				++i;
+			}
+			if (i == all_names.size())
+			{
+				ULOG_ERROR("%s: joints 关节 '%s' 不在 URDF position 命令表 (共 %zu 个: %s...)",
+					kPluginName, name.c_str(), all_names.size(), all_names[0].c_str());
+				return controller_interface::CallbackReturn::ERROR;
+			}
+			joint_names_.push_back(name);
+			q_min_.push_back(all_qmin[i]);
+			q_max_.push_back(all_qmax[i]);
+			vmax_.push_back(all_vmax[i]);
+		}
 	}
 	const double hz = std::max<double>(static_cast<double>(get_update_rate()), 1.0);
 	// update_rate 定源 (2026-09-23, Humble 2.54.2 源码核实): yaml /** 通配节把
@@ -168,8 +222,9 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 			}
 		});
 
-	ULOG_INFO("%s: %zu 关节, 插值=%s, 步长上限=%.3f rad/拍",
+	ULOG_INFO("%s: %zu 关节 (%s), 插值=%s, 步长上限=%.3f rad/拍",
 		kPluginName, joint_names_.size(),
+		explicit_joints ? "yaml 显式列表" : "URDF 全合并",
 		interpolation_ == Interpolation::RUCKIG ? "ruckig" : "hold",
 		step_limits_.empty() ? 0.0 : step_limits_[0]);
 	return controller_interface::CallbackReturn::SUCCESS;

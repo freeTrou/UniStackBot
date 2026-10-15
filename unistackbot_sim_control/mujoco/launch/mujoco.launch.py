@@ -76,6 +76,18 @@ def _launch_setup(context):
                            if f.endswith('_controllers.yaml'))
         raise RuntimeError(f'机型 {robot!r} 缺控制器配置: 找不到 {controllers_yaml}. 现有配置: {available}')
 
+    # JS 实例按类型发现 (2026-10-14 四件式): yaml controller_manager 节里 type 含
+    # JointStreamController 的条目即实例名 (单块机型=joint_stream_controller,
+    # 多实例机型 r1_pro=js_arms+js_torso) —— 零参即用, 不加 launch 参数
+    import yaml
+    with open(controllers_yaml) as f:
+        cm_params = yaml.safe_load(f)['controller_manager']['ros__parameters']
+    js_instances = sorted(k for k, v in cm_params.items()
+                          if isinstance(v, dict)
+                          and 'JointStreamController' in str(v.get('type', '')))
+    if not js_instances:
+        raise RuntimeError(f'{controllers_yaml} 未声明任何 JointStreamController 实例')
+
     # mujoco_ros2_control 的定制 ros2_control_node (等上游 ros2_control 合入仿真
     # PR 后可换回标准节点——临时措施): controller_manager + MuJoCo 引擎 + 物理线程
     # 同进程; RT 线程调优 (thread_priority/cpu_affinity) 走 controllers yaml 官方参数,
@@ -134,8 +146,7 @@ def _launch_setup(context):
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_state_broadcaster', 'joint_stream_controller',
-                       'ee_state_broadcaster',
+            arguments=['joint_state_broadcaster'] + js_instances + ['ee_state_broadcaster',
                        '--controller-manager', '/controller_manager',
                        '--service-call-timeout', '30'],
             output='screen',

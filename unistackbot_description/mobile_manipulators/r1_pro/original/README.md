@@ -1,20 +1,12 @@
-# r1_pro 原始档案（死档案, 导入时点快照）
+# r1_pro 原始资产留档
 
-- **来源**: [behavior-robot-suite/brs-ctrl](https://github.com/behavior-robot-suite/brs-ctrl) `assets/robot/r1_pro/`
-  （Stanford BEHAVIOR Robot Suite, CoRL 2025 —— Galaxea R1 Pro 的 BRS 接入资产）
-- **License**: MIT（见本目录 LICENSE, Copyright 2025 behavior-robot-suite）
-- **拉取日期**: 2026-10-14; 本目录 = 原样快照, 禁止修改（diff 基线; git 是真版本管理, 见 `arms/original_README.md`）
-- **内容**: `r1_pro.urdf` + `meshes/`（STL, 34MB）
+- **包**: `r1pro_urdf` v1.0.0（Galaxea 官方 `urdf_r1pro_g1z_2026` 资产包, 2026-10-14 导入）
+- **License**: BSD——**仅 `package.xml` 内声明, 上游包不带 LICENSE 文本文件**（如后续找到
+  官方 LICENSE 原文或仓库地址, 放回本目录并更新 `unistackbot_description/README.md` 登记表）
+- **内容**: 官方 URDF + collision/visual meshes + 骨架 package.xml/CMakeLists（上游占位符未改）
+- **提取关系**: `../urdf/r1_pro_macro.xacro` 程序化提取自本包 URDF（数字零手抄,
+  覆盖控制域 18 关节 = 腰 4 + 双臂 7×2; 轮/夹爪/传感器挂点不在控制域宏内）
+- **历史**: 2026-10-14 早先曾以 Stanford BRS `brs-ctrl` assets（MIT, 双 6-DoF 臂版本）入库,
+  同日换源为官方 g1z 包（双 7-DoF）——旧档案连同其 MIT LICENSE 一并移除, 勿混用血统
 
-## 结构指纹（拉取时解剖, 供后续 xacro 转换对照）
-
-| 部位 | 关节 | 类型 | 备注 |
-|---|---|---|---|
-| 底盘 | wheel_joint1-3 + servo_joint1-3 | wheel=continuous(z), servo=revolute | 三轮独立转向矢量底盘 |
-| 躯干 | torso_joint1-4 | revolute ×4, 全 z 轴(yaw) | **4-DoF 旋转腰**（扭转冗余, 无升降） |
-| 双臂 | left/right_arm_joint1-6 ×2 | revolute ×12 | 双 6-DoF |
-| 夹爪 | left/right_gripper_axis1-2 ×2 | prismatic ×4 | 平行爪 |
-| 头/相机 | head/zed/t265 等 | 多为 fixed | 传感器挂点（22 个 fixed） |
-
-计 48 joint / 49 link；非轮非腰非臂的关节多为传感器挂点（fixed）。
-对应四件式控制器分割预案: 底盘(velocity 生态件) / js_arms(12) / js_torso(4) / CM(主臂链)。
+导入方法与目录纪律见 `docs/guides/robot_import_sop.md` 与 `arms/original_README.md`。

@@ -30,7 +30,8 @@
 namespace unistackbot_bus
 {
 
-// 节点表上限 (总线一段的节点数界; 与 interface 的 kMaxJoints=16 同口径镜像)
+// 节点表上限 (总线一段的节点数界; 2026-10-14 与 interface 的 kMaxJoints 解耦——
+// kMaxJoints 已扩 32 适配整机命令关节数, 总线一段挂几个节点是另一根轴, 各自预算)
 constexpr std::size_t kMaxNodes = 16;
 
 // 总线段装配配置 (组合根从机器配置读入)

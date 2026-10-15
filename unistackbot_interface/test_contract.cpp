@@ -79,9 +79,9 @@ int main()
 	}
 	CHECK(sim_result_message(SimResult::RESET_DANGEROUS)[0] != '\0');
 
-	// ---- 容量常量: 反馈/指令帧共享 (16 = 现役机型覆盖, 见 joint_capacity.hpp 的账) ----
-	CHECK(kMaxJoints == 16);
-	CHECK(kMaxJoints >= 9);   // piper 含 mimic 手指
+	// ---- 容量常量: 反馈/指令帧共享 (32 = 现役机型覆盖, 见 joint_capacity.hpp 的账) ----
+	CHECK(kMaxJoints == 32);
+	CHECK(kMaxJoints >= 18);   // r1_pro 轮式双臂 18 命令关节
 
 	std::printf("结果: PASS=%d FAIL=%d\n", g_pass, g_fail);
 	return g_fail == 0 ? 0 : 1;

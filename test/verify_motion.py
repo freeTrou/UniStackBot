@@ -123,12 +123,30 @@ def mode_cm(args):
 			capture_output=True, text=True, timeout=15)
 
 	js = args.get('js_name', 'joint_stream_controller')
-	r = switch('--deactivate', js, '--activate',
-	           'cartesian_motion_controller')
+	# 四件式: CM 链可能跨多个 JS 实例的关节 (如 r1_pro CM=torso+左臂 跨 js_arms+js_torso)
+	# → deactivate 全部 JS 实例 (从 yaml type 字段自动发现, 单块机型退化为单实例)
+	import os, yaml
+	js_all = [js]
+	try:
+		_cm = yaml.safe_load(open(os.environ.get('VERIFY_CYAML', '')))['controller_manager']['ros__parameters']
+		js_all += [k for k, v in _cm.items()
+		           if isinstance(v, dict) and 'JointStreamController' in str(v.get('type', '')) and k != js]
+	except Exception:
+		pass
+	# 单 flag 多值 (2026-10-14 实锤): ros2controlcli 的 --deactivate/--activate 是
+	# nargs='*', argparse 重复同名 flag 后者覆盖前者 —— "--deactivate a --deactivate b"
+	# 到 CM 只剩 [b], 返回 "Successfully switched" 但 a 根本没停 (昨天的"偶发 Resource
+	# conflict"实为确定性参数覆盖)。正确写法: --deactivate a b
+	r = switch('--deactivate', *js_all)
 	if r.returncode != 0:
 		print(f'FAIL: cm 切换失败 {r.stderr.strip()[-120:]}')
 		return 1
-	print('PASS: cm 切换接管 (joint_stream → cartesian_motion)')
+	time.sleep(0.5)
+	r = switch('--activate', 'cartesian_motion_controller')
+	if r.returncode != 0:
+		print(f'FAIL: cm 激活失败 {r.stderr.strip()[-120:]}')
+		return 1
+	print('PASS: cm 切换接管 (%s → cartesian_motion)' % '+'.join(js_all))
 	try:
 		end = time.time() + 5
 		while time.time() < end:
@@ -158,9 +176,10 @@ def mode_cm(args):
 		      f"mode={status.get('mode')}, result={status.get('result')})")
 		return 1
 	finally:
-		switch('--deactivate', 'cartesian_motion_controller', '--activate',
-		       args.get('js_name', 'joint_stream_controller'))
-		print('PASS: cm 切回 (链恢复 joint_stream)')
+		switch('--deactivate', 'cartesian_motion_controller')
+		time.sleep(0.5)
+		switch('--activate', *js_all)   # 单 flag 多值, 同上
+		print('PASS: cm 切回 (链恢复 %s)' % '+'.join(js_all))
 
 
 def main():
