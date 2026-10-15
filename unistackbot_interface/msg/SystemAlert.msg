@@ -38,7 +38,11 @@ uint8 STATE_UNKNOWN = 0     # 初始/源数据不足 (如 /joint_states 从未�
 uint8 STATE_OK = 1          # 三域全零码
 uint8 STATE_DEGRADED = 2    # 可用但降质 —— 可继续, 建议保守
 uint8 STATE_FAULT = 3       # 不可派活 —— 停派/等恢复
+uint8 STATE_PAUSED = 4      # 操作态挂起 (2026-10-15): 仿真被 /sim_control/pause 故意
+                            # 停住 —— 非故障, 静默类裁决挂起 (codes 全 0); 暂停心跳流
+                            # 断 (适配器死) 自动回落正常裁决, 宁误报不漏报
 # 聚合规则 (worst-of(err_code_severity), 唯一裁决处 = supervisor; 宁误停不误跑):
 #   任一 DEVICE 非零码 → FAULT (设备错不经降级)
 #   任一定位码 = 0xFFFE (源静默) → FAULT
 #   全零码但核心源数据不足 → UNKNOWN
+#   操作态 (paused 心跳有效) → PAUSED (判断挂起, 不参与 worst-of)

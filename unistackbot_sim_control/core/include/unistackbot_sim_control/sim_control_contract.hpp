@@ -52,6 +52,31 @@ struct SimCommand
 static_assert(std::is_trivially_copyable_v<SimCommand>, "SimCommand must be trivially copyable for the lock-free queue");
 
 /*
+ * 操作态通道·暂停 (2026-10-15): kPausedTopic = /sim_control/paused
+ * (std_msgs/Bool, @kPausedTopicHz 心跳式发布)。
+ *
+ * 动机: 暂停期间全链源静默 (js/ee/cm 断流) 是暂停的正常形态, 不是故障 ——
+ * supervisor 若按静默=断流裁决会把每次 set_joint_state/reset 的标准前置
+ * pause 变成假 FAULT (告警疲劳, 实测 2026-10-15)。
+ *
+ * 生产者 = 各链 /sim_control 适配器:
+ *   gz     /stats (WorldStatistics.paused) 真值翻译 —— gz server ground truth,
+ *          含 GUI 手点暂停
+ *   mujoco 自持命令镜像 (SetPause 命令的状态机) —— MuJoCo 窗口 GUI 暂停不可见
+ *          (off-contract 用法, 盲区入档)
+ *   mock   不发布 —— 它的 pause 不停 CM 循环 (js 照流, 无假警报问题);
+ *          话题缺席 = 消费端默认"运行", 零配置
+ *
+ * 消费纪律 (supervisor): 心跳式而非 latched —— 流断即回落正常裁决
+ * (误报方向安全, 顺带把适配器死亡暴露出来)。
+ *
+ * 【挂账 2026-10-15】第一期 = 仿真暂停专用。通用操作态框架 (真机软停/维护
+ * 模式 = 第二、三个生产者) 待需求落地再定形状, 不提前造 —— 用户标记待更优想法。
+ */
+inline constexpr const char * kPausedTopic = "/sim_control/paused";
+inline constexpr double kPausedTopicHz = 10.0;
+
+/*
  * /sim_control 系列服务的统一门面。
  * 在给定节点上创建 5 个绝对名服务:
  *   /sim_control/reset            std_srvs/srv/Trigger

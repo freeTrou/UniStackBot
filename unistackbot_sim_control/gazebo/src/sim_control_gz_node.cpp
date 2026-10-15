@@ -12,6 +12,9 @@
  * 本节点是纯 ROS 进程: 无 ignition 编译依赖, ign 侧全部经由 launch 里的
  * parameter_bridge (话题 /clock、/stats + 服务 /world/<world>/control)。
  *
+ * 操作态通道 (2026-10-15): 订阅 /stats → 翻译发布 kPausedTopic (契约头)。
+ * 真值源 = WorldStatistics.paused (gz server ground truth, GUI 手点暂停也覆盖)。
+ *
  * 参数: world (string, 默认 unistack_world) —— 须与 world 文件里的 <world name>
  *       及 launch 里桥接的服务名一致。
  */
@@ -22,7 +25,9 @@
 
 #include "rclcpp/rclcpp.hpp"
 
+#include "ros_gz_interfaces/msg/world_statistics.hpp"
 #include "ros_gz_interfaces/srv/control_world.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "ulog/ulog.hpp"
 #include "unistackbot_sim_control/sim_control_contract.hpp"
 
@@ -99,6 +104,28 @@ int main(int argc, char ** argv)
 	};
 
 	SimControlServer server(node, sink, reject_all);
+
+	// 操作态通道: /stats.paused 真值 → kPausedTopic 心跳翻译 (默认回调组,
+	// 单线程执行器与全部回调串行, paused_now 无需原子)。
+	// 句柄必须持有 —— create_* 返回的共享指针不存则立即析构 (2026-10-15 实锤:
+	// 话题在但 publisher 无数据/订阅数为 0)
+	bool paused_now = false;
+	auto paused_pub = node->create_publisher<std_msgs::msg::Bool>(
+		unistackbot_sim_control::kPausedTopic, 10);
+	auto paused_sub = node->create_subscription<ros_gz_interfaces::msg::WorldStatistics>(
+		"/stats", 10,
+		[&paused_now](const ros_gz_interfaces::msg::WorldStatistics::SharedPtr m)
+		{
+			paused_now = m->paused;
+		});
+	auto paused_timer = node->create_wall_timer(
+		std::chrono::duration<double>(1.0 / unistackbot_sim_control::kPausedTopicHz),
+		[&paused_now, &paused_pub]()
+		{
+			std_msgs::msg::Bool b;
+			b.data = paused_now;
+			paused_pub->publish(b);
+		});
 
 	// 启动预热: gz server / 桥接可能晚于本节点起。只等待+告警、不致命
 	// (不在 sink 内阻塞等待 —— sink 跑在互斥回调组, 阻塞会卡住全部 /sim_control 服务);

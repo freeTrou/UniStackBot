@@ -9,12 +9,13 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <!-- 编排层最小版 supervisor_node (0d) -->
+  <!-- 编排层最小版 supervisor_node (0d); 操作态通道契约头 (kPausedTopic) -->
   <depend>rclcpp</depend>
   <depend>diagnostic_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>unistackbot_interface</depend>
+  <depend>unistackbot_sim_control</depend>
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
@@ -28,7 +29,6 @@
   <exec_depend>joint_state_broadcaster</exec_depend>
   <exec_depend>unistackbot_controller</exec_depend>
   <exec_depend>unistackbot_description</exec_depend>
-  <exec_depend>unistackbot_sim_control</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

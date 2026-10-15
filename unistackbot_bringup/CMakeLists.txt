@@ -11,6 +11,7 @@ find_package(diagnostic_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(unistackbot_interface REQUIRED)
+find_package(unistackbot_sim_control REQUIRED)   # 操作态通道契约头 (kPausedTopic)
 
 install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
@@ -25,6 +26,7 @@ target_include_directories(supervisor_node PRIVATE
 )
 ament_target_dependencies(supervisor_node
   rclcpp diagnostic_msgs sensor_msgs geometry_msgs unistackbot_interface
+  unistackbot_sim_control
 )
 install(TARGETS supervisor_node
   DESTINATION lib/${PROJECT_NAME}

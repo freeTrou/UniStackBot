@@ -15,6 +15,12 @@
  * (链未起窗口), seen 后断流才升级 (FAULT 级)。人话不进消息 —— 消费端查
  * err_code_message(code) (码表 hpp 单一事实源)。
  *
+ * 操作态输入 (2026-10-15, 第一期=仿真暂停): 订阅 kPausedTopic (契约住 sim_control,
+ * 生产者=各链适配器; mock 缺席=默认运行)。暂停期间静默类裁决整体挂起 (codes 全 0,
+ * state=PAUSED) —— "故意停"不是故障, 假 FAULT 会毁板子信用。心跳式: 暂停流断
+ * (适配器死) 即回落正常裁决 (误报方向安全)。【挂账】通用操作态框架 (真机软停/
+ * 维护模式=第二三个生产者) 待需求落地再定形状 (用户标记待更优想法)。
+ *
  * 扩展位 (非本版): write 防线计数器 (SYSTEM 域新字段)、DEVICE/BUS 域真机源、
  * 控制器生命周期事件。
  *
@@ -28,11 +34,13 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "ulog/ulog.hpp"
 
 #include "unistackbot_interface/error_codes.hpp"
 #include "unistackbot_interface/msg/cartesian_motion_status.hpp"
 #include "unistackbot_interface/msg/system_alert.hpp"
+#include "unistackbot_sim_control/sim_control_contract.hpp"
 
 using unistackbot_interface::ErrCode;
 using unistackbot_interface::msg::CartesianMotionStatus;
@@ -45,6 +53,7 @@ constexpr std::chrono::milliseconds kPublishPeriod{20};   // 50Hz 心跳
 constexpr double kCmSilentS = 2.0;    // cm status 静默阈值 (active 后)
 constexpr double kJsDropS = 1.0;      // /joint_states 断流阈值 (核心反馈)
 constexpr double kEeDropS = 1.0;      // /ee_state 断流阈值
+constexpr double kPausedStaleS = 1.0;   // 暂停心跳静默阈值 (@10Hz 流, 10 拍余量)
 
 // 状态码翻译 (CartesianMotionStatus 常量 → 人话; 仅本节点日志用)
 const char * cmModeName(uint8_t mode)
@@ -78,7 +87,11 @@ int main(int argc, char ** argv)
 	// ---- 监控状态 (全部本节点线程私有, 订阅回调与定时器同默认回调组串行) ----
 	CartesianMotionStatus cm_last;
 	bool cm_seen = false;
-	bool cm_was_active = false;   // active 过之后静默才算异常 (未激活时无 status 帧是正常)
+	// "当前 active" 闩锁: 随帧翻转而非只置位 (2026-10-15 修)。CM on_deactivate 发
+	// 最后一帧 mode=INACTIVE 的 status —— 收到即清闩锁, 之后静默是 inactive 的正常
+	// 形态。旧实现只置位不清 → CM 用过一次切回 JS 后 CM_SILENT 误报永驻 (保守告警
+	// 变成常态降级, JS↔CM 交替作业的板子永远 DEGRADED)。
+	bool cm_was_active = false;
 	rclcpp::Time cm_last_stamp = node->now();
 	rclcpp::Time js_last_time = node->now();
 	bool js_seen = false;
@@ -93,10 +106,7 @@ int main(int argc, char ** argv)
 		{
 			cm_last = *m;
 			cm_seen = true;
-			if (m->mode != CartesianMotionStatus::INACTIVE)
-			{
-				cm_was_active = true;
-			}
+			cm_was_active = m->mode != CartesianMotionStatus::INACTIVE;   // 随帧翻转, 见声明处注释
 			cm_last_stamp = node->now();
 		});
 	auto sub_js = node->create_subscription<sensor_msgs::msg::JointState>(
@@ -116,12 +126,61 @@ int main(int argc, char ** argv)
 
 	auto alerts = node->create_publisher<SystemAlert>("/supervisor/alerts", 10);
 
+	// ---- 操作态输入: 暂停心跳 (生产者=各链适配器; mock 缺席=默认运行) ----
+	bool paused_value = false;
+	bool paused_seen = false;
+	rclcpp::Time paused_last_time = node->now();
+	// 句柄必须持有 (裸 create_* 立即析构 → 订阅静默, 2026-10-15 实锤)
+	auto paused_sub = node->create_subscription<std_msgs::msg::Bool>(
+		unistackbot_sim_control::kPausedTopic, 10,
+		[&](const std_msgs::msg::Bool::SharedPtr m)
+		{
+			paused_value = m->data;
+			paused_seen = true;
+			paused_last_time = node->now();
+		});
+
 	// ---- 50Hz 状态板发布 (三源 → SYSTEM 域平行数组 + worst-of state) ----
+	bool was_paused = false;   // 暂停→运行沿: 三源时基重锚 (见下)
 	auto publish = [&]()
 	{
 		const auto now = node->now();
 		SystemAlert msg;
 		msg.header.stamp = now;
+
+		// 操作态挂起: 暂停心跳有效 (值=true 且未超 kPausedStaleS) = 故意停 ——
+		// 静默类裁决整体挂起 (codes 全 0 保持板形), state=PAUSED。心跳断 (适配器
+		// 死) 即失效回落正常裁决 —— 宁误报不漏报
+		const bool paused = paused_seen && paused_value
+			&& (now - paused_last_time).seconds() <= kPausedStaleS;
+		if (paused)
+		{
+			was_paused = true;
+			// 板形保持 (三行 code=NONE), counts 显示冻结的累计值 (挂起拍不计数)
+			const uint64_t frozen[3] = {cm_count, js_count, ee_count};
+			const char * const loc[3] = {"cm", "joint_states", "ee_state"};
+			for (int i = 0; i < 3; ++i)
+			{
+				msg.system_locations.emplace_back(loc[i]);
+				msg.system_codes.push_back(static_cast<uint16_t>(ErrCode::NONE));
+				msg.system_counts.push_back(frozen[i]);
+			}
+			msg.state = SystemAlert::STATE_PAUSED;
+			alerts->publish(msg);
+			return;
+		}
+
+		// 暂停→运行沿: 暂停期间三源无帧、时基停在暂停前 —— 恢复瞬间首帧未到时
+		// 陈旧差值 = 暂停时长, 会闪 1-2 拍假断流。重锚三源时基到当前时刻,
+		// 静默窗从恢复点重新起算 (真实断流 1s 后照常捕获, 不放宽判据)
+		if (was_paused)
+		{
+			was_paused = false;
+			cm_last_stamp = now;
+			js_last_time = now;
+			ee_last_time = now;
+		}
+
 		// DEVICE/BUS 域: 仿真链恒空数组 (真机批次接入; 变长模式零写死)
 		uint8_t worst = 0;   // worst-of severity: 0=无贡献 1=DEGRADED 级 3=FAULT 级
 		const auto pushSystem = [&](const char * loc, ErrCode code, uint64_t & count)

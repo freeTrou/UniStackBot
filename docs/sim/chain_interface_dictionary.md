@@ -217,13 +217,17 @@ supervisor；任一 DEVICE 非零码或源静默 → FAULT（宁误停不误跑�
 
 | 服务 | 类型 | 语义 |
 |---|---|---|
-| `/sim_control/reset` | std_srvs/Trigger | 回确定性初态（**需 pause 下用**；gz 拒绝——Fortress 有毒；mujoco 原生支持） |
+| `/sim_control/reset` | std_srvs/Trigger | 回确定性初态（**需 pause 下用**； gz 拒绝——Fortress 有毒；mujoco 原生支持） |
 | `/sim_control/pause` / `resume` | std_srvs/Trigger | 暂停/恢复仿真推进 |
 | `/sim_control/step` | std_srvs/Trigger | 暂停态单步推进 |
 | `/sim_control/set_joint_state` | unistackbot_interface/SetJointState | 瞬移关节（仅 mock；**需 pause 下用**——激活控制器每拍覆盖瞬移；gz/mujoco 拒绝） |
 | `/controller_manager/*` | — | 用 CLI 封装：`ros2 control list_controllers` / `switch_controllers` |
 
 `success=true` 只代表**已接受**，不代表执行完成。mujoco 链另有 `/mujoco_ros2_control_node/apply_external_wrench`（扰动注入，gz 没有）。
+
+### 操作态通道 `/sim_control/paused`（std_msgs/Bool @10Hz 心跳，2026-10-15）
+
+暂停的**可观测出口**：生产者=各链 `/sim_control` 适配器（gz 译 `/stats` 真值含 GUI 暂停；mujoco 命令镜像——窗口 GUI 暂停盲区 off-contract）；mock 不发（缺席=默认运行）。消费者=supervisor：暂停期间 `/supervisor/alerts` 的 state=**PAUSED(4)**、静默类裁决挂起——"故意停"不是故障。心跳断（适配器死）自动回落正常裁决（宁误报不漏报）。契约与挂账（通用操作态框架待真机软停需求）见 `sim_control_contract.hpp`。
 
 ## 5. 控制器状态（链健康的"仪表盘"）
 

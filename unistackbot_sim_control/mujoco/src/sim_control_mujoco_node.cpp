@@ -16,6 +16,12 @@
  * 本节点纯 ROS 进程零 MuJoCo 编译依赖 (服务类型来自 mujoco_ros2_control_msgs),
  * 契约头从 unistackbot_sim_control include (依赖方向 mujoco → sim_control, 同 gz)。
  * 由 mujoco.launch.py 启动。
+ *
+ * 操作态通道 (2026-10-15): 自持命令镜像 → kPausedTopic 心跳发布 (契约头)。
+ * PAUSE/RESUME 镜像翻转; STEP 保持 (契约语义=暂停态推进一步, 不改变暂停态);
+ * RESET 保持 (ResetWorld 语义=世界级复位, 不改变暂停态)。
+ * 盲区入档: MuJoCo 窗口 GUI 暂停不经本节点 = 不可见 (off-contract, 契约通道
+ * 是 /sim_control/pause)。
  */
 
 #include <chrono>
@@ -27,6 +33,7 @@
 #include "mujoco_ros2_control_msgs/srv/reset_world.hpp"
 #include "mujoco_ros2_control_msgs/srv/set_pause.hpp"
 #include "mujoco_ros2_control_msgs/srv/step_simulation.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "ulog/ulog.hpp"
 #include "unistackbot_sim_control/sim_control_contract.hpp"
 
@@ -49,6 +56,8 @@ int main(int argc, char ** argv)
 	auto reset_cli = node->create_client<ResetWorld>(ns + "/reset_world");
 
 	// 应答只代表"已接受" (契约语义); 结果经回调告警 (与 gz 适配器同款)
+	// paused_now = 命令镜像 (操作态通道真值, 见文件头); 服务未就绪拒绝时不翻转
+	bool paused_now = false;
 	auto sink = [&](const SimCommand & cmd, std::string & message) -> bool
 	{
 		switch (cmd.type)
@@ -63,6 +72,7 @@ int main(int argc, char ** argv)
 					return false;
 				}
 				pause_cli->async_send_request(req);
+				paused_now = true;
 				message = "已发送 " + ns + "/set_pause(true)";
 				return true;
 			}
@@ -76,6 +86,7 @@ int main(int argc, char ** argv)
 					return false;
 				}
 				pause_cli->async_send_request(req);
+				paused_now = false;
 				message = "已发送 " + ns + "/set_pause(false)";
 				return true;
 			}
@@ -134,6 +145,20 @@ int main(int argc, char ** argv)
 	};
 
 	SimControlServer server(node, sink, reject_all);
+
+	// 操作态通道: 命令镜像 → kPausedTopic 心跳 (默认回调组, 单线程执行器,
+	// paused_now 与 sink 串行, 无需原子)。句柄必须持有 (裸 create_* 立即析构,
+	// 2026-10-15 gz 适配器同日实锤)
+	auto paused_pub = node->create_publisher<std_msgs::msg::Bool>(
+		unistackbot_sim_control::kPausedTopic, 10);
+	auto paused_timer = node->create_wall_timer(
+		std::chrono::duration<double>(1.0 / unistackbot_sim_control::kPausedTopicHz),
+		[&paused_now, &paused_pub]()
+		{
+			std_msgs::msg::Bool b;
+			b.data = paused_now;
+			paused_pub->publish(b);
+		});
 
 	// 启动预热: 定制节点可能晚于本节点起。只等待+告警、不致命
 	// (sink 跑在互斥回调组, 不在其中阻塞 —— gz 适配器同款纪律)
