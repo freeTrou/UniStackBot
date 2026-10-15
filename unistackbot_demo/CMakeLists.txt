@@ -45,10 +45,12 @@ install(PROGRAMS
 
 # 机型专属 demo (2026-10-12 约定): scripts/<robot>_arm/ 每机一文件夹, 文件名带
 # 机型前缀 —— install 平铺进 lib/ (ros2 run 不认子目录, 重名即冲突)。
-# 首件 = r1_7a_arm (关节 + 笛卡尔两 demo); 后续机器人按此复制。
+# r1_7a_arm = 首件 (关节+笛卡尔); r1_pro_arm = 四件式首例 (双 JS 实例+@js 通配切换)。
 install(PROGRAMS
   scripts/r1_7a_arm/r1_7a_demo_joint.py
   scripts/r1_7a_arm/r1_7a_demo_cartesian.py
+  scripts/r1_pro_arm/r1_pro_demo_joint.py
+  scripts/r1_pro_arm/r1_pro_demo_cartesian.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -1,4 +1,10 @@
 # r1_pro 控制器配置 (官方 2026 g1z 提取 2026-10-14; 四件式: js_arms+js_torso+cm)
+# /** 通配节 = 控制器节点的 update_rate 权威定源 (缺它 JS/CM 落激活窗口中位数兜底,
+# CM 的中位数会被激活瞬间 µs period 污染 → OTG 时间尺度错 → 臂以龟速爬; 2026-10-15 实锤)
+/**:
+  ros__parameters:
+    update_rate: 500
+
 controller_manager:
   ros__parameters:
     update_rate: 500

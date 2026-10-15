@@ -43,9 +43,12 @@ ros2 run unistackbot_demo minimal_cartesian.py   # 笛卡尔域: 拿反馈 → �
 | 机型 | 关节 demo | 笛卡尔 demo |
 |---|---|---|
 | r1_7a | `ros2 run unistackbot_demo r1_7a_demo_joint.py` | `ros2 run unistackbot_demo r1_7a_demo_cartesian.py` |
+| r1_pro | `ros2 run unistackbot_demo r1_pro_demo_joint.py` | `ros2 run unistackbot_demo r1_pro_demo_cartesian.py` |
 
 - **r1_7a 关节**: 16 段航点链（基座连续扫/折叠双档/腕组合 A/B）→回近零位，~20s
 - **r1_7a 笛卡尔**: 部署→两圈 36 点连续圆周流（快/慢）→收回→回关节零位（err 全程 <1mm；J6 带几何/落回离奇异核 2cm 已内建；IK 错误语义 last_result+min_sigma 人话打印）
+- **r1_pro 关节（四件式首例）**: 双 JS 实例并发消费——js_arms **一条消息原子驱动双臂 14 关节**（协同语义）+ js_torso 独立腰 4 关节流；六节航点（双臂展示/同向/镜像外展/腰部扫/臂腰协同）→回近零位，~15s
+- **r1_pro 笛卡尔（四件式首例）**: `@js` 按类型发现通配切换（形态盲，多实例单 flag 多值）；CM=左臂，接管期间**右臂冻结**（接口独占的诚实账，docstring 在案）；抬升→前伸→收回→切回全部 JS→双实例回近零位
 - 生命周期纪律样板: 启动切 CM → 退出切回 JS → **收尾回关节零位**（环境留给下一个消费者）
 
 ## 通用命令域 demo
