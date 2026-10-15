@@ -1,24 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="r1_pro">
     <!-- r1_pro 顶层入口 (Galaxea R1 Pro, 2026-10-14 接入)
-         五参数同 piper 范本; body 宏只含控制域 16 关节 (腰4+双臂12, 四件式分割),
-         轮域分离式接入暂不声明 (底盘生态件后续按需)。 -->
+         五参数同 piper 范本; body 宏 = 控制域 18 关节 (腰4+双臂14, 四件式分割)。
+         轮域 (2026-10-15 底盘域 B2): 三舵轮模块仅 gz/mujoco 链声明 (mock 无世界
+         语义不声明, 用户裁决); 该两链同时去掉 world 固定关节 —— 底盘要动, 基座
+         必须浮动 (gz spawn 自由体, 物理由三轮支撑)。 -->
     <xacro:arg name="use_gripper" default="true"/>
     <xacro:arg name="use_ros2_control" default="false"/>
     <xacro:arg name="use_world" default="false"/>
     <xacro:arg name="use_gazebo" default="false"/>
     <xacro:arg name="headless" default="true"/>
 
+    <xacro:property name="ug" value="$(arg use_gazebo)"/>
+    <xacro:property name="mobile_chain" value="${ug in ['ign', 'mujoco']}"/>
+
     <xacro:include filename="$(find unistackbot_description)/mobile_manipulators/r1_pro/urdf/r1_pro_macro.xacro"/>
     <xacro:include filename="$(find unistackbot_description)/mobile_manipulators/r1_pro/urdf/r1_pro.ros2_control.xacro"/>
+    <xacro:include filename="$(find unistackbot_description)/mobile_manipulators/r1_pro/urdf/r1_pro_wheels.xacro"/>
 
     <xacro:r1_pro_body/>
 
+    <xacro:if value="${mobile_chain}">
+        <xacro:r1_pro_wheels/>
+    </xacro:if>
+
     <xacro:if value="$(arg use_world)">
-        <link name="world"/>
-        <joint name="r1_pro_world" type="fixed">
-            <parent link="world"/><child link="base_link"/>
-        </joint>
+        <xacro:if value="${not mobile_chain}">
+            <link name="world"/>
+            <joint name="r1_pro_world" type="fixed">
+                <parent link="world"/><child link="base_link"/>
+            </joint>
+        </xacro:if>
     </xacro:if>
 
     <xacro:if value="$(arg use_ros2_control)">

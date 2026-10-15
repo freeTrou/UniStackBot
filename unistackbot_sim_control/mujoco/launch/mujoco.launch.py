@@ -87,6 +87,10 @@ def _launch_setup(context):
                           and 'JointStreamController' in str(v.get('type', '')))
     if not js_instances:
         raise RuntimeError(f'{controllers_yaml} 未声明任何 JointStreamController 实例')
+    # 底盘控制器 (2026-10-15 底盘域 B2): yaml 声明才进激活组 (机型无关发现, 同 JS)
+    base_instances = sorted(k for k, v in cm_params.items()
+                            if isinstance(v, dict)
+                            and 'BaseVelocityController' in str(v.get('type', '')))
 
     # mujoco_ros2_control 的定制 ros2_control_node (等上游 ros2_control 合入仿真
     # PR 后可换回标准节点——临时措施): controller_manager + MuJoCo 引擎 + 物理线程
@@ -146,7 +150,8 @@ def _launch_setup(context):
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['joint_state_broadcaster'] + js_instances + ['ee_state_broadcaster',
+            arguments=['joint_state_broadcaster'] + js_instances + base_instances
+                      + ['ee_state_broadcaster',
                        '--controller-manager', '/controller_manager',
                        '--service-call-timeout', '30'],
             output='screen',

@@ -66,25 +66,44 @@ private:
 	std::vector<BaseActuatorSpec> specs_;
 };
 
-// 注册表 (A 主轴: 仓内静态表, 加实现 = 此处加一行; 外部化挂账见 framework-positioning)
-const std::map<std::string, std::unique_ptr<BaseKinematics> (*)()> & registry()
+// 注册表 (A 主轴组合根式: 懒初始化 + 公共注册函数; 加内置实现 = ensureBuiltin 加一行;
+// 外部化挂账走同一扇门 registerBaseKinematics)
+std::map<std::string, BaseKinematicsMaker> & registry()
 {
-	static const std::map<std::string, std::unique_ptr<BaseKinematics> (*)()> reg = {
-		{"diff", []() -> std::unique_ptr<BaseKinematics> {return std::make_unique<DiffKinematics>(); }},
-	};
+	static std::map<std::string, BaseKinematicsMaker> reg;
 	return reg;
 }
 
 }  // namespace
 
+bool registerBaseKinematics(const std::string & name, BaseKinematicsMaker maker)
+{
+	return registry().emplace(name, maker).second;   // 重复名 false (组合根 bug fail-fast)
+}
+
+// 内置实现自注册 (首次工厂调用执行一次; 函数显式调用, 不用静态初始化器 —— dead-strip 防线)
+static void ensureBuiltinKinematics()
+{
+	static bool done = false;
+	if (done)
+	{
+		return;
+	}
+	done = true;
+	(void)registerBaseKinematics("diff", []() -> std::unique_ptr<BaseKinematics> {return std::make_unique<DiffKinematics>(); });
+	registerNSteerKinematics();
+}
+
 std::unique_ptr<BaseKinematics> createBaseKinematics(const std::string & name)
 {
+	ensureBuiltinKinematics();
 	const auto it = registry().find(name);
 	return it == registry().end() ? nullptr : it->second();
 }
 
 std::vector<std::string> availableBaseKinematics()
 {
+	ensureBuiltinKinematics();
 	std::vector<std::string> names;
 	for (const auto & kv : registry())
 	{

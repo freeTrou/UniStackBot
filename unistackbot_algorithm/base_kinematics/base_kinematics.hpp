@@ -87,9 +87,17 @@ public:
 	[[nodiscard]] virtual const char * name() const = 0;
 };
 
+// 注册 (组合根式, 懒初始化无静态序问题; 重复名 → false fail-fast)。
+// 内置实现经各实现文件的 register<Name>() 自注册; 未来外部化 (挂账) 走同一扇门。
+using BaseKinematicsMaker = std::unique_ptr<BaseKinematics> (*)();
+[[nodiscard]] bool registerBaseKinematics(const std::string & name, BaseKinematicsMaker maker);
+
 // 工厂 (未知名字 → nullptr + availableBaseKinematics 列可选项; 无默认纪律)
 [[nodiscard]] std::unique_ptr<BaseKinematics> createBaseKinematics(const std::string & name);
 [[nodiscard]] std::vector<std::string> availableBaseKinematics();
+
+// 各实现文件的自注册入口 (ensureBuiltin 首次工厂调用时逐一执行)
+void registerNSteerKinematics();
 
 }  // namespace unistackbot_algorithm
 

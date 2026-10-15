@@ -23,6 +23,8 @@ controller_manager:
       type: unistackbot_controller/EeStateBroadcaster
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
+    base_velocity_controller:
+      type: unistackbot_controller/BaseVelocityController
 
 js_arms:
   ros__parameters:
@@ -58,6 +60,28 @@ ee_state_broadcaster:
   ros__parameters:
     base_link: base_link
     tip_link: left_arm_link7
+    publish_hz: 50.0
+
+# 底盘域 (2026-10-15 B2): 三舵轮, steer=position + wheel=velocity; steer 不在
+# js_arms/js_torso 的 joints 列表 = 无人认领 = 底盘控制器独占 (单块化编组红利)
+base_velocity_controller:
+  ros__parameters:
+    base_kinematics: n_steer
+    kinematics_joints: [steer_motor_joint1, wheel_motor_joint1,
+                        steer_motor_joint2, wheel_motor_joint2,
+                        steer_motor_joint3, wheel_motor_joint3]
+    kinematics_params: [0.0765,                       # 轮半径 m
+                        0.0, 0.0, 0.0,                # 转向零位偏置×3
+                        0.16897, 0.16897, -0.32703,   # 安装位 x (转向轴, base 系)
+                        0.28, -0.28, 0.0]             # 安装位 y
+    cmd_timeout: 0.5
+    max_lin_x: 1.0
+    max_lin_y: 1.0
+    max_ang: 1.0
+    max_lin_accel: 1.0
+    max_lin_jerk: 5.0
+    max_ang_accel: 3.0
+    max_ang_jerk: 15.0
     publish_hz: 50.0
 
 cartesian_motion_controller:

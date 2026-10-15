@@ -54,6 +54,28 @@
             <xacro:r1_joint name="torso_joint2" lo="-2.6703467075" hi="2.6825467075"/>
             <xacro:r1_joint name="torso_joint3" lo="-1.7095467075" hi="1.5358467075"/>
             <xacro:r1_joint name="torso_joint4" lo="-3.0193934150" hi="3.0193934150"/>
+            <!-- 轮系 6 (仅 gz/mujoco 链, 与 body 轮 link 同条件; steer=position 归
+                 BaseVelocityController, yaml joints 显式列表不含它 = JS 不认领) -->
+            <xacro:if value="${use_gazebo in ['ign', 'mujoco']}">
+                <xacro:macro name="r1_wheel_joint" params="idx">
+                    <joint name="steer_motor_joint${idx}">
+                        <command_interface name="position"/>
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                        <param name="min">-3.14</param>
+                        <param name="max">3.14</param>
+                        <param name="max_velocity">6.0</param>
+                    </joint>
+                    <joint name="wheel_motor_joint${idx}">
+                        <command_interface name="velocity"/>
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                    </joint>
+                </xacro:macro>
+                <xacro:r1_wheel_joint idx="1"/>
+                <xacro:r1_wheel_joint idx="2"/>
+                <xacro:r1_wheel_joint idx="3"/>
+            </xacro:if>
         </ros2_control>
 
         <!-- Gazebo 侧系统插件 (ign 三件之二; 三 = 易冻关节 initial_value, 指纹后按需) -->

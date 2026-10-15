@@ -34,6 +34,7 @@ add_library(${PROJECT_NAME} SHARED
 	analytic_piper/analytic_piper.cpp
 	analytic_piper/piper_ikfast.cpp
 	base_kinematics/base_kinematics.cpp
+	base_kinematics/n_steer_kinematics.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

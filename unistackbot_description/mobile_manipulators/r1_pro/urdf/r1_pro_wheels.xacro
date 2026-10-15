@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+    <!-- r1_pro 三舵轮模块 (2026-10-15 底盘域 B2; 程序化提取自 original/r1pro_2026.urdf)
+         布局: 前二 (0.16897, ±0.28) + 后一 (-0.32703, 0); 轮心相对转向轴偏距 -0.09415
+         (运动学一级近似按共点处理, 偏距=转向自对中属动力学, 见 n_steer_kinematics 注)
+         命名纪律: link=*_link / joint=*_joint 分离 (gz SDF 图循环坑, 2026-10-15 实锤)
+         仅 gz/mujoco 链声明 (mock 无世界语义不声明, 2026-10-15 用户裁决) -->
+    <xacro:macro name="r1_pro_wheel_module" params="idx px py">
+        <link name="steer_motor_link${idx}">
+            <inertial>
+                <origin xyz="0 0 0.05" rpy="0 0 0"/>
+                <mass value="2.5"/>
+                <inertia ixx="0.012" ixy="0" ixz="0" iyy="0.012" iyz="0" izz="0.006"/>
+            </inertial>
+            <visual>
+                <geometry><cylinder radius="0.055" length="0.10"/></geometry>
+                <material name="wheel_grey"><color rgba="0.3 0.3 0.3 1"/></material>
+            </visual>
+            <collision>
+                <geometry><cylinder radius="0.055" length="0.10"/></geometry>
+            </collision>
+        </link>
+        <joint name="steer_motor_joint${idx}" type="revolute">
+            <parent link="base_link"/>
+            <child link="steer_motor_link${idx}"/>
+            <origin xyz="${px} ${py} 0.16415" rpy="0 0 0"/>
+            <axis xyz="0 0 1"/>
+            <limit lower="-3.14" upper="3.14" effort="60" velocity="6.0"/>
+        </joint>
+        <link name="wheel_motor_link${idx}">
+            <inertial>
+                <origin xyz="0 0 -0.09415" rpy="0 0 0"/>
+                <mass value="1.8"/>
+                <inertia ixx="0.008" ixy="0" ixz="0" iyy="0.008" iyz="0" izz="0.004"/>
+            </inertial>
+            <visual>
+                <origin xyz="0 0 -0.09415" rpy="1.5708 0 0"/>
+                <geometry><cylinder radius="0.0765" length="0.05"/></geometry>
+                <material name="tyre_black"><color rgba="0.1 0.1 0.1 1"/></material>
+            </visual>
+            <collision>
+                <origin xyz="0 0 -0.09415" rpy="1.5708 0 0"/>
+                <geometry><cylinder radius="0.0765" length="0.05"/></geometry>
+            </collision>
+        </link>
+        <joint name="wheel_motor_joint${idx}" type="continuous">
+            <parent link="steer_motor_link${idx}"/>
+            <child link="wheel_motor_link${idx}"/>
+            <origin xyz="0 0 -0.09415" rpy="0 0 0"/>
+            <axis xyz="0 1 0"/>
+            <limit effort="40" velocity="30.0"/>
+        </joint>
+    </xacro:macro>
+
+    <xacro:macro name="r1_pro_wheels">
+        <!-- 三个轮模块: 触地 = base 原点 z=0 时, 轮心 z = 0.16415-0.09415 = 0.07 (轮半径 0.0765
+             → 触地 z=-0.0065 ≈ 地面; 底盘 spawn 高度由链路 launch 的 -z 补偿调平) -->
+        <xacro:r1_pro_wheel_module idx="1" px="0.16897" py="0.28"/>
+        <xacro:r1_pro_wheel_module idx="2" px="0.16897" py="-0.28"/>
+        <xacro:r1_pro_wheel_module idx="3" px="-0.32703" py="0.0"/>
+    </xacro:macro>
+</robot>
