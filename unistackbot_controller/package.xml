@@ -16,6 +16,8 @@
   <depend>ament_index_cpp</depend>
   <depend>tinyxml2_vendor</depend>
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>tf2_msgs</depend>
   <depend>eigen</depend>
   <depend>unistackbot_interface</depend>
   <depend>unistackbot_algorithm</depend>

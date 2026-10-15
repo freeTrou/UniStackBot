@@ -1,0 +1,27 @@
+# 差速底盘测试夹具控制器配置 (2026-10-15, 底盘域 A5) —— 夹具本地资产, 不进 bringup
+# (验收判据: 接新形态底盘框架包零改动; 本文件随夹具住 test/fixtures/)。
+/**:
+  ros__parameters:
+    update_rate: 500
+
+controller_manager:
+  ros__parameters:
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    base_velocity_controller:
+      type: unistackbot_controller/BaseVelocityController
+
+base_velocity_controller:
+  ros__parameters:
+    base_kinematics: diff                 # 必填无默认 (fail-fast 列可选项)
+    kinematics_joints: [left_wheel_joint, right_wheel_joint]
+    kinematics_params: [0.1, 0.4]         # 轮半径 m, 轮距 m
+    cmd_timeout: 0.5                       # 断流→零速 (与臂域"保持"相反)
+    max_lin_x: 1.0
+    max_lin_y: 0.5                         # diff 非全向: vy 被钳零, 此界不生效
+    max_ang: 1.5
+    max_lin_accel: 1.0
+    max_lin_jerk: 5.0
+    max_ang_accel: 3.0
+    max_ang_jerk: 15.0
+    publish_hz: 50.0

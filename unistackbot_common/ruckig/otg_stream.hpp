@@ -244,5 +244,160 @@ private:
 	double last_duration_{0.0};
 };
 
+/*
+ * VelocityStream —— 速度域点流整形 (2026-10-15, 底盘域: cmd_vel 的 vx,vy,ω 整形)。
+ * OtgStream 的姊妹类, 同一份防御纪律 (输入消毒→返回码检查→输出校验→失败保持),
+ * 消费 ruckig v0.14 的 ControlInterface::Velocity (velocity_second/third_step 独立步进源)。
+ *
+ * 与 OtgStream (位置域) 的两点差异:
+ *   - 无目标跳变限幅: 速度目标"跳"是常态 (点流语义), 整形本来就是干这个的;
+ *     越界目标直接钳到 ±max_velocity (幅值防御)
+ *   - Hold 输出 = 上一拍安全保持速度 (输出恒有效契约同款)。注: 保持速度≠停车,
+ *     停车安全语义住调用方上层 (BaseTwistController 的 cmd 超时→零速), 两层各司其职
+ *
+ * 线程: 实例每线程一份; 稳态 update 零 malloc (与 OtgStream 同契约)。
+ */
+template <std::size_t DOFs>
+class VelocityStream
+{
+public:
+	struct Limits
+	{
+		std::array<double, DOFs> max_velocity;      // 速度幅值界 (目标钳位+轨迹界)
+		std::array<double, DOFs> max_acceleration;
+		std::array<double, DOFs> max_jerk;
+	};
+
+	enum class UpdateResult : uint8_t
+	{
+		Ok,
+		Hold,
+	};
+
+	enum LastError : int
+	{
+		NotInitialized = -1,
+		NonFiniteTarget = 400,
+		NonFiniteOutput = 401,
+	};
+
+	[[nodiscard]] bool init(double dt, const Limits & limits)
+	{
+		for (std::size_t i = 0; i < DOFs; ++i)
+		{
+			if (!std::isfinite(limits.max_velocity[i]) || limits.max_velocity[i] <= 0.0 || !std::isfinite(limits.max_acceleration[i]) || limits.max_acceleration[i] <= 0.0 ||
+				!std::isfinite(limits.max_jerk[i]) || limits.max_jerk[i] <= 0.0 || limits.max_velocity[i] > 1e9 || limits.max_acceleration[i] > 1e9 || limits.max_jerk[i] > 1e9)
+			{
+				return false;
+			}
+		}
+		if (!std::isfinite(dt) || dt <= 0.0)
+		{
+			return false;
+		}
+		otg_.delta_time = dt;
+		lim_ = limits;
+		in_.control_interface = ruckig::ControlInterface::Velocity;
+		initialized_ = false;
+		update_count_ = 0;
+		error_count_ = 0;
+		last_error_ = NotInitialized;
+		return true;
+	}
+
+	// 重锚当前速度状态 (激活/错误恢复后; 加速度未知填 0)
+	void reset(const std::array<double, DOFs> & current_velocity, const std::array<double, DOFs> & current_acceleration = {})
+	{
+		for (std::size_t i = 0; i < DOFs; ++i)
+		{
+			in_.current_velocity[i] = current_velocity[i];
+			in_.current_acceleration[i] = current_acceleration[i];
+			last_out_vel_[i] = current_velocity[i];
+			in_.max_velocity[i] = lim_.max_velocity[i];
+			in_.max_acceleration[i] = lim_.max_acceleration[i];
+			in_.max_jerk[i] = lim_.max_jerk[i];
+			in_.target_velocity[i] = current_velocity[i];   // 未接目标前 = 保持
+		}
+		otg_.reset();
+		initialized_ = true;
+	}
+
+	// 每拍: target_velocity = 最新目标速度 (点流); out_vel = 本拍输出速度 (恒有效)。
+	// Finished (到达目标速度) 与 Working 同为 Ok —— 稳态跟随即 Finished 循环。
+	[[nodiscard]] UpdateResult update(const std::array<double, DOFs> & target_velocity, std::array<double, DOFs> & out_vel)
+	{
+		++update_count_;
+		if (!initialized_)
+		{
+			hold(NotInitialized, out_vel);
+			return UpdateResult::Hold;
+		}
+		std::array<double, DOFs> target = target_velocity;
+		for (std::size_t i = 0; i < DOFs; ++i)
+		{
+			if (!std::isfinite(target[i]))
+			{
+				hold(NonFiniteTarget, out_vel);
+				return UpdateResult::Hold;
+			}
+			target[i] = std::clamp(target[i], -lim_.max_velocity[i], lim_.max_velocity[i]);   // 幅值钳 (速度是有符号量)
+			in_.target_velocity[i] = target[i];
+		}
+		const auto r = otg_.update(in_, out_);
+		if (r != ruckig::Result::Working && r != ruckig::Result::Finished)
+		{
+			hold(static_cast<int>(r), out_vel);
+			return UpdateResult::Hold;
+		}
+		for (std::size_t i = 0; i < DOFs; ++i)
+		{
+			if (!std::isfinite(out_.new_velocity[i]))
+			{
+				hold(NonFiniteOutput, out_vel);
+				return UpdateResult::Hold;
+			}
+		}
+		for (std::size_t i = 0; i < DOFs; ++i)
+		{
+			out_vel[i] = out_.new_velocity[i];
+			last_out_vel_[i] = out_.new_velocity[i];
+		}
+		in_.current_velocity = out_.new_velocity;
+		in_.current_acceleration = out_.new_acceleration;
+		return UpdateResult::Ok;
+	}
+
+	[[nodiscard]] uint64_t updateCount() const {return update_count_;}
+	[[nodiscard]] uint64_t errorCount() const {return error_count_;}
+	[[nodiscard]] int lastError() const {return last_error_;}
+	[[nodiscard]] std::array<double, DOFs> lastAcceleration() const {return out_.new_acceleration;}
+	[[nodiscard]] bool isInitialized() const {return initialized_;}
+
+private:
+	void hold(int code, std::array<double, DOFs> & out_vel)
+	{
+		++error_count_;
+		last_error_ = code;
+		for (std::size_t i = 0; i < DOFs; ++i)
+		{
+			out_vel[i] = last_out_vel_[i];   // 契约: Hold 输出 = 上一拍安全保持速度
+			in_.current_velocity[i] = last_out_vel_[i];
+			in_.current_acceleration[i] = 0.0;
+			in_.target_velocity[i] = last_out_vel_[i];
+		}
+		otg_.reset();
+	}
+
+	ruckig::Ruckig<DOFs> otg_{};
+	ruckig::InputParameter<DOFs> in_;
+	ruckig::OutputParameter<DOFs> out_;
+	Limits lim_{};
+	bool initialized_{false};
+	std::array<double, DOFs> last_out_vel_{};
+	uint64_t update_count_{0};
+	uint64_t error_count_{0};
+	int last_error_{NotInitialized};
+};
+
 }  // namespace unistackbot_common
 #endif  // UNISTACKBOT_COMMON__OTG_STREAM_HPP_

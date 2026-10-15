@@ -33,6 +33,7 @@ add_library(${PROJECT_NAME} SHARED
 	dls_ik/dls_ik.cpp
 	analytic_piper/analytic_piper.cpp
 	analytic_piper/piper_ikfast.cpp
+	base_kinematics/base_kinematics.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -58,7 +59,7 @@ install(TARGETS ${PROJECT_NAME}
 	RUNTIME DESTINATION bin
 )
 # 头文件随算法文件夹整体安装 (只装 .hpp, test/ 与 .cpp 不进 install)
-install(DIRECTORY urdf_fk ik_solver dls_ik analytic_piper
+install(DIRECTORY urdf_fk ik_solver dls_ik analytic_piper base_kinematics
 	DESTINATION include
 	FILES_MATCHING PATTERN "*.hpp"
 )

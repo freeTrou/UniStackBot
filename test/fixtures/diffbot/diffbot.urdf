@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<!-- 差速底盘测试夹具 (2026-10-15, 底盘域 A5) —— 框架自测资产, 不注册机型。
+     用途: BaseVelocityController + DiffKinematics 的 gz 全链 E2E (test_base_controller.sh);
+     验收判据 = 接第二形态底盘框架包零改动 (差速故意选与 r1_pro 三舵轮最不相关)。
+     @CONTROLLERS_YAML@ 由测试脚本渲染成绝对路径后 spawn。 -->
+<robot name="diffbot">
+    <link name="base_link">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="12.0"/>
+            <inertia ixx="0.1044" ixy="0" ixz="0" iyy="0.2169" iyz="0" izz="0.2925"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><box size="0.45 0.30 0.12"/></geometry>
+            <material name="grey"><color rgba="0.6 0.6 0.6 1"/></material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry><box size="0.45 0.30 0.12"/></geometry>
+        </collision>
+    </link>
+
+    <link name="left_wheel_link">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="1.0"/>
+            <inertia ixx="0.00263" ixy="0" ixz="0" iyy="0.00263" iyz="0" izz="0.005"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+            <geometry><cylinder radius="0.1" length="0.04"/></geometry>
+            <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+            <geometry><cylinder radius="0.1" length="0.04"/></geometry>
+        </collision>
+    </link>
+    <joint name="left_wheel_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="left_wheel_link"/>
+        <origin xyz="0.05 0.2 -0.05" rpy="0 0 0"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="10" velocity="50"/>
+    </joint>
+
+    <link name="right_wheel_link">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="1.0"/>
+            <inertia ixx="0.00263" ixy="0" ixz="0" iyy="0.00263" iyz="0" izz="0.005"/>
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+            <geometry><cylinder radius="0.1" length="0.04"/></geometry>
+            <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+            <geometry><cylinder radius="0.1" length="0.04"/></geometry>
+        </collision>
+    </link>
+    <joint name="right_wheel_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="right_wheel_link"/>
+        <origin xyz="0.05 -0.2 -0.05" rpy="0 0 0"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="10" velocity="50"/>
+    </joint>
+
+    <!-- 随动球脚轮 (fixed, 零摩擦): 三点支撑 + 差速物理成立 -->
+    <link name="caster_link">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="0.5"/>
+            <inertia ixx="0.00081" ixy="0" ixz="0" iyy="0.00081" iyz="0" izz="0.00081"/>
+        </inertial>
+        <visual>
+            <geometry><sphere radius="0.045"/></geometry>
+            <material name="grey"><color rgba="0.6 0.6 0.6 1"/></material>
+        </visual>
+        <collision>
+            <geometry><sphere radius="0.045"/></geometry>
+        </collision>
+    </link>
+    <joint name="caster_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="caster_link"/>
+        <origin xyz="-0.18 0 -0.105" rpy="0 0 0"/>
+    </joint>
+
+    <ros2_control name="diffbot" type="system">
+        <hardware>
+            <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+        </hardware>
+        <joint name="left_wheel_joint">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="right_wheel_joint">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+    </ros2_control>
+
+    <gazebo>
+        <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+            <robot_param>robot_description</robot_param>
+            <robot_param_node>robot_state_publisher</robot_param_node>
+            <parameters>@CONTROLLERS_YAML@</parameters>
+        </plugin>
+    </gazebo>
+    <gazebo reference="left_wheel_link"><mu1>30</mu1><mu2>0.5</mu2></gazebo>
+    <gazebo reference="right_wheel_link"><mu1>30</mu1><mu2>0.5</mu2></gazebo>
+    <gazebo reference="caster_link"><mu1>0.0</mu1><mu2>0.0</mu2></gazebo>
+</robot>

@@ -1,0 +1,7 @@
+<library path="base_velocity_controller">
+  <class name="unistackbot_controller/BaseVelocityController"
+         type="unistackbot_controller::BaseVelocityController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Base twist controller: /cmd_vel in, /odom+TF out, timeout-to-zero, pluggable BaseKinematics (2026-10-15)</description>
+  </class>
+</library>

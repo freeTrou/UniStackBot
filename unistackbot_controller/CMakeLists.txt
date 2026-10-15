@@ -22,6 +22,8 @@ list(APPEND CMAKE_MODULE_PATH /opt/ros/humble/share/tinyxml2_vendor/cmake/Module
 find_package(TinyXML2 REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2_msgs REQUIRED)
 find_package(unistackbot_interface REQUIRED)
 find_package(unistackbot_algorithm REQUIRED)
 find_package(interactive_markers REQUIRED)
@@ -61,6 +63,13 @@ pluginlib_export_plugin_description_file(controller_interface
 pluginlib_export_plugin_description_file(controller_interface
   ee_state_broadcaster/ee_state_broadcaster.xml
 )
+pluginlib_export_plugin_description_file(controller_interface
+  base_velocity_controller/base_velocity_controller.xml
+)
+# pluginlib xml 也须安装 (类目索引按 share/<pkg>/<dir>/<xml> 查找, JS/CM 同款)
+install(FILES base_velocity_controller/base_velocity_controller.xml
+  DESTINATION share/${PROJECT_NAME}/base_velocity_controller
+)
 # OTG 门已退役 (2026-09-24 实做删除): §16.6 语义统一后其架构 (回调 IK + RT 环
 # OtgStream 输出级) 并入 CM, 即 CM 本身; 决策记录见设计文档 §16.4/§16.6
 
@@ -98,6 +107,24 @@ ament_target_dependencies(ee_state_broadcaster
   geometry_msgs unistackbot_interface unistackbot_algorithm
 )
 target_link_libraries(ee_state_broadcaster ${TINYXML2_LIBRARY})
+
+# 底盘速度域控制器 (2026-10-15 底盘域 A4): /cmd_vel→整形→BaseKinematics→执行通道;
+# odom 积分+/tf 发布; 断流超时→零速 (与臂域保持相反的安全语义)
+add_library(base_velocity_controller SHARED
+  base_velocity_controller/base_velocity_controller.cpp
+  ${RUCKIG_SOURCES}
+)
+target_compile_features(base_velocity_controller PUBLIC cxx_std_17)
+target_include_directories(base_velocity_controller PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common/ruckig/include>
+)
+ament_target_dependencies(base_velocity_controller
+  rclcpp controller_interface realtime_tools pluginlib
+  geometry_msgs nav_msgs tf2_msgs unistackbot_interface unistackbot_algorithm
+)
 install(TARGETS ee_state_broadcaster
   DESTINATION lib
 )
@@ -133,7 +160,7 @@ target_include_directories(ik_tool PRIVATE
 install(TARGETS fk_tool ik_tool ik_demo_node
   DESTINATION lib/${PROJECT_NAME}
 )
-install(TARGETS cartesian_motion_controller joint_stream_controller
+install(TARGETS cartesian_motion_controller joint_stream_controller base_velocity_controller
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
