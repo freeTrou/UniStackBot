@@ -47,12 +47,10 @@ constexpr double kPriorKd = 0.5;    // 速度刚度 [Nm·s/rad]
 [[nodiscard]] std::uint32_t crc32(const std::uint8_t *data, std::size_t len);
 
 // 纯函数: 命令 → 20B 帧 (语义/失败条件同 ProtocolCore::encode)。
-[[nodiscard]] std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap,
-	const NodeCommand &cmd, std::uint8_t node_id, double ratio);
+[[nodiscard]] std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap, const NodeCommand &cmd, std::uint8_t node_id, double ratio);
 
 // 纯函数: 26B 帧 → 反馈 (语义同 ProtocolCore::decode)。
-[[nodiscard]] bool decodeFrame(const std::uint8_t *frame, std::size_t len,
-	NodeFeedback &fb, double ratio);
+[[nodiscard]] bool decodeFrame(const std::uint8_t *frame, std::size_t len, NodeFeedback &fb, double ratio);
 
 }  // namespace unitree_im
 
@@ -61,8 +59,7 @@ class UnitreeImCore final : public ProtocolCore
 {
 public:
 	[[nodiscard]] FrameSpec framespec() const override;
-	[[nodiscard]] std::size_t encode(std::uint8_t *buf, std::size_t cap, 
-		const NodeCommand &cmd, std::uint8_t node_id, double ratio) const override;
+	[[nodiscard]] std::size_t encode(std::uint8_t *buf, std::size_t cap, const NodeCommand &cmd, std::uint8_t node_id, double ratio) const override;
 	[[nodiscard]] bool decode(const std::uint8_t *frame, std::size_t len, NodeFeedback &fb, double ratio) const override;
 };
 

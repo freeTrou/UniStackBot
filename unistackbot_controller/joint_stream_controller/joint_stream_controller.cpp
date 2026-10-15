@@ -33,8 +33,7 @@ controller_interface::CallbackReturn JointStreamController::on_init()
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn JointStreamController::on_configure(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn JointStreamController::on_configure(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	unistackbot_common::ulog_config log_cfg;
 	log_cfg.console = true;
@@ -117,8 +116,7 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 			}
 			if (i == all_names.size())
 			{
-				ULOG_ERROR("%s: joints 关节 '%s' 不在 URDF position 命令表 (共 %zu 个: %s...)",
-					kPluginName, name.c_str(), all_names.size(), all_names[0].c_str());
+				ULOG_ERROR("%s: joints 关节 '%s' 不在 URDF position 命令表 (共 %zu 个: %s...)", kPluginName, name.c_str(), all_names.size(), all_names[0].c_str());
 				return controller_interface::CallbackReturn::ERROR;
 			}
 			joint_names_.push_back(name);
@@ -146,8 +144,7 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 	observe_applied_ = get_node()->get_parameter("observe_applied_command").as_bool();
 	if (observe_applied_)
 	{
-		auto pub = get_node()->create_publisher<unistackbot_interface::msg::JointCommand>(
-			"~/applied_command", rclcpp::QoS(rclcpp::KeepLast(50)).reliable());
+		auto pub = get_node()->create_publisher<unistackbot_interface::msg::JointCommand>("~/applied_command", rclcpp::QoS(rclcpp::KeepLast(50)).reliable());
 		rt_applied_ = std::make_shared<realtime_tools::RealtimePublisher<
 			unistackbot_interface::msg::JointCommand>>(pub);
 		// 预分配复用载体: RT 热路径只写 position 值, 零分配
@@ -158,8 +155,7 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 		applied_msg_.effort.clear();
 		applied_msg_.kp.clear();
 		applied_msg_.kd.clear();
-		ULOG_INFO("%s: 应用命令观测 ~/applied_command @全率 (tryPublish, 丢拍可接受)",
-			kPluginName);
+		ULOG_INFO("%s: 应用命令观测 ~/applied_command @全率 (tryPublish, 丢拍可接受)", kPluginName);
 	}
 	rate_calibrated_ = false;
 	period_n_ = 0;
@@ -183,8 +179,7 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 	}
 
 	// 契约通道 (reliable+KeepLast(1), 与 CM ~/target 同款裁决)
-	cmd_sub_ = get_node()->create_subscription<unistackbot_interface::msg::JointCommand>(
-		"~/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
+	cmd_sub_ = get_node()->create_subscription<unistackbot_interface::msg::JointCommand>("~/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
 		[this](const unistackbot_interface::msg::JointCommand::SharedPtr m)
 		{
 			if (m->mode != unistackbot_interface::msg::JointCommand::MODE_CSP)
@@ -192,8 +187,7 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 				++dropped_mode_;   // 仿真链仅 CSP; 其余模式计数 (真机 MIT 批次启用)
 				return;
 			}
-			if (m->joint_names.size() != joint_names_.size() ||
-				m->position.size() < joint_names_.size())
+			if (m->joint_names.size() != joint_names_.size() || m->position.size() < joint_names_.size())
 			{
 				++dropped_len_;
 				return;
@@ -203,8 +197,7 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 			snap.seq = ++cmd_seq_pub_;
 			for (std::size_t i = 0; i < joint_names_.size(); ++i)
 			{
-				const auto it = std::find(m->joint_names.begin(), m->joint_names.end(),
-					joint_names_[i]);
+				const auto it = std::find(m->joint_names.begin(), m->joint_names.end(), joint_names_[i]);
 				if (it == m->joint_names.end())
 				{
 					++dropped_len_;
@@ -216,16 +209,11 @@ controller_interface::CallbackReturn JointStreamController::on_configure(
 			// 投递遥测 (2026-10-09 走廊冻结排查): 回调级计数 —— 停止增长=DDS 投递断
 			if (cmd_seq_pub_ % 25 == 0)
 			{
-				ULOG_INFO("%s: 回调采纳 seq=%lu j4=%.3f", kPluginName,
-					static_cast<unsigned long>(cmd_seq_pub_),
-					snap.position[3]);
+				ULOG_INFO("%s: 回调采纳 seq=%lu j4=%.3f", kPluginName, static_cast<unsigned long>(cmd_seq_pub_), snap.position[3]);
 			}
 		});
 
-	ULOG_INFO("%s: %zu 关节 (%s), 插值=%s, 步长上限=%.3f rad/拍",
-		kPluginName, joint_names_.size(),
-		explicit_joints ? "yaml 显式列表" : "URDF 全合并",
-		interpolation_ == Interpolation::RUCKIG ? "ruckig" : "hold",
+	ULOG_INFO("%s: %zu 关节 (%s), 插值=%s, 步长上限=%.3f rad/拍", kPluginName, joint_names_.size(), explicit_joints ? "yaml 显式列表" : "URDF 全合并", interpolation_ == Interpolation::RUCKIG ? "ruckig" : "hold",
 		step_limits_.empty() ? 0.0 : step_limits_[0]);
 	return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -254,14 +242,12 @@ JointStreamController::state_interface_configuration() const
 	return conf;
 }
 
-controller_interface::CallbackReturn JointStreamController::on_activate(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn JointStreamController::on_activate(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	const std::size_t n = joint_names_.size();
 	if (state_interfaces_.size() != n || command_interfaces_.size() != n)
 	{
-		ULOG_ERROR("%s: 接口数不匹配 (state=%zu cmd=%zu 关节=%zu)",
-			kPluginName, state_interfaces_.size(), command_interfaces_.size(), n);
+		ULOG_ERROR("%s: 接口数不匹配 (state=%zu cmd=%zu 关节=%zu)", kPluginName, state_interfaces_.size(), command_interfaces_.size(), n);
 		return controller_interface::CallbackReturn::ERROR;
 	}
 	// 命令 = 当前状态 (激活零跳变); 目标同置 (周期步进语义下不追陈旧目标)
@@ -298,8 +284,7 @@ bool JointStreamController::sanitize(std::vector<double> & q) const
 	return true;
 }
 
-controller_interface::return_type JointStreamController::update(
-	const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
+controller_interface::return_type JointStreamController::update(const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
 	const std::size_t n = joint_names_.size();
 
@@ -356,8 +341,7 @@ controller_interface::return_type JointStreamController::update(
 			}
 			if (hz_auth > 0)
 			{
-				ULOG_INFO("%s: update_rate %.0f Hz (权威参数; 步长 %.4f rad/拍)",
-					kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
+				ULOG_INFO("%s: update_rate %.0f Hz (权威参数; 步长 %.4f rad/拍)", kPluginName, hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
 			}
 			else
 			{
@@ -384,15 +368,13 @@ controller_interface::return_type JointStreamController::update(
 			target_ = q;   // hold/ruckig 同: 采纳为当前目标
 			if (cmd_seq_ % 25 == 0)
 			{
-				ULOG_INFO("%s: update 采纳 seq=%lu j4=%.3f", kPluginName,
-					static_cast<unsigned long>(cmd_seq_), target_[3]);
+				ULOG_INFO("%s: update 采纳 seq=%lu j4=%.3f", kPluginName, static_cast<unsigned long>(cmd_seq_), target_[3]);
 			}
 		}
 		else
 		{
 			++dropped_mode_;   // NaN/限位拒绝计数 (复用观测通道)
-			ULOG_WARN("%s: sanitize 拒绝 seq=%lu j4=%.3f", kPluginName,
-				static_cast<unsigned long>(snap_seq), q[3]);
+			ULOG_WARN("%s: sanitize 拒绝 seq=%lu j4=%.3f", kPluginName, static_cast<unsigned long>(snap_seq), q[3]);
 		}
 	}
 
@@ -436,10 +418,8 @@ controller_interface::return_type JointStreamController::update(
 			++hold_total_;
 			if (hold_run_ == 1 || hold_run_ % 500 == 0)
 			{
-				ULOG_WARN("%s: ruckig Hold 连续 %lu 拍 (累计 %lu, lastError=%d, 目标j4=%.3f, 输出j4=%.3f)",
-					kPluginName, static_cast<unsigned long>(hold_run_),
-					static_cast<unsigned long>(hold_total_), otg_.lastError(),
-					target_[3], cmd_[3]);
+				ULOG_WARN("%s: ruckig Hold 连续 %lu 拍 (累计 %lu, lastError=%d, 目标j4=%.3f, 输出j4=%.3f)", kPluginName, static_cast<unsigned long>(hold_run_),
+					static_cast<unsigned long>(hold_total_), otg_.lastError(), target_[3], cmd_[3]);
 			}
 		}
 	}
@@ -466,15 +446,13 @@ void JointStreamController::publishApplied()
 	rt_applied_->tryPublish(applied_msg_);   // trylock 非阻塞; 拿不到跳本拍
 }
 
-controller_interface::CallbackReturn JointStreamController::on_deactivate(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn JointStreamController::on_deactivate(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	ULOG_INFO("%s: 停用 (接口释放, 硬件保持)", kPluginName);
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn JointStreamController::on_cleanup(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn JointStreamController::on_cleanup(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	cmd_sub_.reset();
 	rt_applied_.reset();   // 观测面随清理卸载 (CM status 同款收尾)
@@ -484,5 +462,4 @@ controller_interface::CallbackReturn JointStreamController::on_cleanup(
 }  // namespace unistackbot_controller
 
 // 插件注册 (缺失 = "no factory exists for it" —— 类加载器找不到工厂)
-PLUGINLIB_EXPORT_CLASS(unistackbot_controller::JointStreamController,
-	controller_interface::ControllerInterface)
+PLUGINLIB_EXPORT_CLASS(unistackbot_controller::JointStreamController, controller_interface::ControllerInterface)

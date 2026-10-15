@@ -45,8 +45,7 @@ void check(bool ok, const char *what)
 	}
 }
 
-NodeFeedback fbWith(NodeMode mode, double pos = 0.0, bool timeout = false,
-	unsigned err = 0u)
+NodeFeedback fbWith(NodeMode mode, double pos = 0.0, bool timeout = false, unsigned err = 0u)
 {
 	NodeFeedback fb;
 	fb.mode = mode;
@@ -61,8 +60,7 @@ NodeFeedback fbWith(NodeMode mode, double pos = 0.0, bool timeout = false,
 int main()
 {
 	// ── ⓪ 工厂 ──
-	check(unistackbot_statemachine::createNodeSafety("no_such") == nullptr,
-		"unknown name -> nullptr (fail-fast)");
+	check(unistackbot_statemachine::createNodeSafety("no_such") == nullptr, "unknown name -> nullptr (fail-fast)");
 	const auto names = unistackbot_statemachine::availableNodeSafetyMachines();
 	check(names.size() == 2, "registry has unitree_im + cia402");
 	std::unique_ptr<NodeSafety> ns = unistackbot_statemachine::createNodeSafety("unitree_im");
@@ -111,10 +109,8 @@ int main()
 	NodeCommand ec = ns2->enable_command();
 	check(ec.mode == NodeMode::kRun, "enable cmd mode=RUN");
 	check(std::fabs(ec.position - 1.5) < 1e-12, "enable cmd pos = measured (no jump)");
-	check(std::fabs(ec.kp - unistackbot_protocol::unitree_im::kPriorKp) < 1e-12,
-		"enable cmd kp = prior");
-	check(std::fabs(ec.kd - unistackbot_protocol::unitree_im::kPriorKd) < 1e-12,
-		"enable cmd kd = prior");
+	check(std::fabs(ec.kp - unistackbot_protocol::unitree_im::kPriorKp) < 1e-12, "enable cmd kp = prior");
+	check(std::fabs(ec.kd - unistackbot_protocol::unitree_im::kPriorKd) < 1e-12, "enable cmd kd = prior");
 	check(ec.watchdog_enable, "enable cmd watchdog on");
 
 	// OFFLINE 禁使能
@@ -177,8 +173,7 @@ int main()
 
 	// 使能命令应该用 1.3 (最新实测), 不是 1.0 (旧位置) 也不是 0 (零位)
 	NodeCommand ec2 = ns9->enable_command();
-	check(std::fabs(ec2.position - 1.3) < 1e-12,
-		"enable pos = latest measured (1.3), not old (1.0) or zero");
+	check(std::fabs(ec2.position - 1.3) < 1e-12, "enable pos = latest measured (1.3), not old (1.0) or zero");
 
 	// ── 请求清理 ──
 	ns9->clear_requests();

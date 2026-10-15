@@ -122,9 +122,7 @@ void stress_test()
 	uint64_t v = 0;
 	check(received.load() == kStressItems && ring.pop(v) == false, "stress: exact 1M received, ring empty");
 	check(lost.load() == 0, "stress: zero lost/dup/reorder");
-	std::printf("INFO: received=%llu empty_hits=%llu full_retries=%llu\n",
-		static_cast<unsigned long long>(received.load()),
-		static_cast<unsigned long long>(empty_hits.load()),
+	std::printf("INFO: received=%llu empty_hits=%llu full_retries=%llu\n", static_cast<unsigned long long>(received.load()), static_cast<unsigned long long>(empty_hits.load()),
 		static_cast<unsigned long long>(full_retries.load()));
 }
 

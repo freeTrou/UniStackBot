@@ -105,8 +105,7 @@ int main(int argc, char ** argv)
 				OracleEntry e;
 				e.reachable = (line[0] == 'P');
 				double qx = 0, qy = 0, qz = 0;
-				if (std::sscanf(line.c_str(), "%*c %lf %lf %lf %lf %lf %lf %lf",
-					&e.pose.x, &e.pose.y, &e.pose.z, &e.pose.qw, &qx, &qy, &qz) == 7)
+				if (std::sscanf(line.c_str(), "%*c %lf %lf %lf %lf %lf %lf %lf", &e.pose.x, &e.pose.y, &e.pose.z, &e.pose.qw, &qx, &qy, &qz) == 7)
 				{
 					e.pose.qx = qx; e.pose.qy = qy; e.pose.qz = qz;
 					// v2 格式: "P ... | n_sols | meta" — 解数是第一个 | 后字段
@@ -121,8 +120,7 @@ int main(int argc, char ** argv)
 							if (m0 != std::string::npos)
 							{
 								e.meta = line.substr(m0);
-								while (!e.meta.empty() &&
-								       (e.meta.back() == '\n' || e.meta.back() == '\r' || e.meta.back() == ' '))
+								while (!e.meta.empty() && (e.meta.back() == '\n' || e.meta.back() == '\r' || e.meta.back() == ' '))
 								{
 									e.meta.pop_back();
 								}
@@ -142,8 +140,7 @@ int main(int argc, char ** argv)
 			else if (line[0] == ' ' && !entries.empty() && entries.back().reachable)
 			{
 				std::vector<double> q(n);
-				if (std::sscanf(line.c_str(), " %lf %lf %lf %lf %lf %lf %lf",
-					&q[0], &q[1], &q[2], &q[3], &q[4], &q[5], &q[6]) == static_cast<int>(n))
+				if (std::sscanf(line.c_str(), " %lf %lf %lf %lf %lf %lf %lf", &q[0], &q[1], &q[2], &q[3], &q[4], &q[5], &q[6]) == static_cast<int>(n))
 				{
 					entries.back().sols.push_back(q);
 				}
@@ -167,8 +164,7 @@ int main(int argc, char ** argv)
 		std::vector<double> q(n);
 		for (unsigned k = 0; k < n; ++k) {q[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
 		DlsIkStats st;
-		const IkResult r = ik.solve(e.pose, q, preserve, q, &st,
-			unistackbot_algorithm::SolveMode::COLD_START);
+		const IkResult r = ik.solve(e.pose, q, preserve, q, &st, unistackbot_algorithm::SolveMode::COLD_START);
 		if (e.reachable)
 		{
 			++reach_total;
@@ -178,8 +174,7 @@ int main(int argc, char ** argv)
 				// FK 回代 (用测试独立 oracle FK)
 				CartesianPose back;
 				CHECK(fk.fk(q, back));
-				const double dp = std::max({std::fabs(back.x - e.pose.x),
-					std::fabs(back.y - e.pose.y), std::fabs(back.z - e.pose.z)});
+				const double dp = std::max({std::fabs(back.x - e.pose.x), std::fabs(back.y - e.pose.y), std::fabs(back.z - e.pose.z)});
 				if (dp < 1e-6) {++reach_ok;}
 				// 限位闭区间 (安全断言)
 				bool in_lim = true;
@@ -226,21 +221,18 @@ int main(int argc, char ** argv)
 			}
 		}
 	}
-	std::printf("  可达冷启动求解 %d/%d (COLD_START: 分支代表种子+无粘性)\n",
-		reach_ok, reach_total);
-	std::printf("  不可达非OK %d/%d (几何预检拦截远距; 姿态级失败按 σ_min 分类, NEAR_SINGULAR %d)\n",
-		unreach_ok, unreach_total, n_near_singular);
+	std::printf("  可达冷启动求解 %d/%d (COLD_START: 分支代表种子+无粘性)\n", reach_ok, reach_total);
+	std::printf("  不可达非OK %d/%d (几何预检拦截远距; 姿态级失败按 σ_min 分类, NEAR_SINGULAR %d)\n", unreach_ok, unreach_total, n_near_singular);
 	if (!branch_dists.empty())
 	{
 		std::sort(branch_dists.begin(), branch_dists.end());
-		std::printf("  分支距离: min=%.3f p50=%.3f max=%.3f (rad; 报告制——欧氏距离在缠绕流形上无分支语义, 构型签名待做)\n",
-			branch_dists.front(), branch_dists[branch_dists.size() / 2], branch_dists.back());
+		std::printf("  分支距离: min=%.3f p50=%.3f max=%.3f (rad; 报告制——欧氏距离在缠绕流形上无分支语义, 构型签名待做)\n", branch_dists.front(), branch_dists[branch_dists.size() / 2], branch_dists.back());
 	}
 	// 达标线: 成功的解必须全部 FK 闭合 (reach_ok 的统计口径已含 <1e-6) + 不可达必须不出解
 	CHECK(reach_total == 0 || reach_ok * 100 / reach_total >= 95);   // 冷启动达标线 (2026-09-17 90/90 后转正式验收)
 	CHECK(unreach_total == 0 || unreach_ok * 100 / unreach_total >= 95);
 	// 真正的达标线在层3 (流式 = 主场景): 101/101 + 增量阈值
-	
+
 
 		// 圆弧锚 (层3/层6-3 共用, 2026-09-29 机型自适应): 锚 = oracle 中径带
 		// (0.35~0.7 rmax) 首个可达样本真解构型 —— xarm7 硬编码几何对 R1 超工作域、
@@ -257,8 +249,7 @@ int main(int argc, char ** argv)
 			CartesianPose pp;
 			if (fk.fk(qs, pp))
 			{
-				arc_rmax = std::max(arc_rmax,
-					std::sqrt(pp.x * pp.x + pp.y * pp.y + pp.z * pp.z));
+				arc_rmax = std::max(arc_rmax, std::sqrt(pp.x * pp.x + pp.y * pp.y + pp.z * pp.z));
 			}
 		}
 		CartesianPose arc_anchor;
@@ -268,8 +259,7 @@ int main(int argc, char ** argv)
 		for (const auto & e : entries)
 		{
 			if (!e.reachable || e.sols.empty()) {continue;}
-			const double rr = std::sqrt(e.pose.x * e.pose.x + e.pose.y * e.pose.y +
-				e.pose.z * e.pose.z);
+			const double rr = std::sqrt(e.pose.x * e.pose.x + e.pose.y * e.pose.y + e.pose.z * e.pose.z);
 			if (rr < 0.35 * arc_rmax || rr > 0.7 * arc_rmax) {continue;}
 			CartesianPose ap;
 			if (!fk.fk(e.sols[0], ap)) {continue;}
@@ -292,8 +282,7 @@ int main(int argc, char ** argv)
 				cp.z += arc_r * (std::cos(cth) * u0[2] + std::sin(cth) * v0[2]);
 				std::vector<double> qc = e.sols[0], qo = qc;
 				DlsIkStats cst;
-				if (ik.solve(cp, qc, {}, qo, &cst,
-					unistackbot_algorithm::SolveMode::COLD_START) != IkResult::OK)
+				if (ik.solve(cp, qc, {}, qo, &cst, unistackbot_algorithm::SolveMode::COLD_START) != IkResult::OK)
 				{
 					circle_ok = false;
 				}
@@ -344,8 +333,7 @@ int main(int argc, char ** argv)
 			{
 				q = prev_q;
 			}
-			const IkResult r = ik.solve(p, q, preserve, q, nullptr,
-				unistackbot_algorithm::SolveMode::STREAMING);
+			const IkResult r = ik.solve(p, q, preserve, q, nullptr, unistackbot_algorithm::SolveMode::STREAMING);
 			if (r != IkResult::OK)
 			{
 				++consec_fail;
@@ -428,8 +416,7 @@ int main(int argc, char ** argv)
 			if (!e.reachable) {continue;}
 			++total;
 			const auto t0 = std::chrono::steady_clock::now();
-			const IkResult r = ik.solve(e.pose, q, preserve, q, nullptr,
-				unistackbot_algorithm::SolveMode::COLD_START);
+			const IkResult r = ik.solve(e.pose, q, preserve, q, nullptr, unistackbot_algorithm::SolveMode::COLD_START);
 			const auto t1 = std::chrono::steady_clock::now();
 			if (r == IkResult::OK) {++ok;}
 			times.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
@@ -440,8 +427,7 @@ int main(int argc, char ** argv)
 			const double p50 = times[times.size() / 2];
 			const double p95 = times[times.size() * 95 / 100];
 			const double p99 = times[times.size() * 99 / 100];
-			std::printf("  %zu 位姿: p50=%.2fms p95=%.2fms p99=%.2fms 收敛率 %.1f%% (参考 p99<5ms, ≥95%%)\n",
-				times.size(), p50, p95, p99, 100.0 * ok / std::max(total, 1));
+			std::printf("  %zu 位姿: p50=%.2fms p95=%.2fms p99=%.2fms 收敛率 %.1f%% (参考 p99<5ms, ≥95%%)\n", times.size(), p50, p95, p99, 100.0 * ok / std::max(total, 1));
 		}
 	}
 
@@ -461,8 +447,7 @@ int main(int argc, char ** argv)
 			for (unsigned k = 0; k < n; ++k) {seed[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
 			std::vector<double> sentinel(n, -7.0), out = sentinel;
 			DlsIkStats st;
-			const IkResult r = ik.solve(p, seed, preserve, out, &st,
-				unistackbot_algorithm::SolveMode::COLD_START);
+			const IkResult r = ik.solve(p, seed, preserve, out, &st, unistackbot_algorithm::SolveMode::COLD_START);
 			CHECK(r != IkResult::OK);
 			CHECK(st.timed_out);
 			bool unchanged = true;
@@ -510,8 +495,7 @@ int main(int argc, char ** argv)
 				for (unsigned k = 0; k < n; ++k) {seed[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
 				std::vector<double> q = seed;
 				DlsIkStats st;
-				const IkResult r = ik.solve(e.pose, seed, preserve, q, &st,
-					unistackbot_algorithm::SolveMode::COLD_START);
+				const IkResult r = ik.solve(e.pose, seed, preserve, q, &st, unistackbot_algorithm::SolveMode::COLD_START);
 				times.push_back(st.solve_us);
 				max_us = std::max(max_us, st.solve_us);
 				if (st.timed_out) {++n_timeout;}
@@ -520,17 +504,14 @@ int main(int argc, char ** argv)
 					++ok;
 					CartesianPose back;   // 超时机制不得污染 OK 路径的解质量
 					CHECK(fk.fk(q, back));
-					const double dp = std::max({std::fabs(back.x - e.pose.x),
-						std::fabs(back.y - e.pose.y), std::fabs(back.z - e.pose.z)});
+					const double dp = std::max({std::fabs(back.x - e.pose.x), std::fabs(back.y - e.pose.y), std::fabs(back.z - e.pose.z)});
 					CHECK(dp < 1e-6);
 				}
 			}
 			std::sort(times.begin(), times.end());
 			const double p50 = times[times.size() / 2] / 1000.0;
 			const double p99 = times[times.size() * 99 / 100] / 1000.0;
-			std::printf("  %s: 成功 %d/%d (%.1f%%) 超时中断 %d  p50=%.2fms p99=%.2fms max=%.2fms\n",
-				bc.label, ok, total, 100.0 * ok / std::max(total, 1), n_timeout, p50, p99,
-				max_us / 1000.0);
+			std::printf("  %s: 成功 %d/%d (%.1f%%) 超时中断 %d  p50=%.2fms p99=%.2fms max=%.2fms\n", bc.label, ok, total, 100.0 * ok / std::max(total, 1), n_timeout, p50, p99, max_us / 1000.0);
 			if (ok * 100 / std::max(total, 1) < 90)
 			{
 				// 失败画像 (playbook §3 第 3 环) + 第 0 环主循环无辜性: 失败样本以
@@ -547,22 +528,17 @@ int main(int argc, char ** argv)
 					for (unsigned k = 0; k < n; ++k) {seed[k] = (fk.qMin()[k] + fk.qMax()[k]) / 2;}
 					std::vector<double> q = seed;
 					DlsIkStats st;
-					const IkResult r0 = ik.solve(e.pose, seed, preserve, q, &st,
-						unistackbot_algorithm::SolveMode::COLD_START);
+					const IkResult r0 = ik.solve(e.pose, seed, preserve, q, &st, unistackbot_algorithm::SolveMode::COLD_START);
 					if (r0 == IkResult::OK) {continue;}
 					++shown;
 					// 第 0 环: 真解种子
 					std::vector<double> q2 = e.sols[0];
 					DlsIkStats st2;
-					const IkResult r1 = ik.solve(e.pose, e.sols[0], preserve, q2, &st2,
-						unistackbot_algorithm::SolveMode::COLD_START);
+					const IkResult r1 = ik.solve(e.pose, e.sols[0], preserve, q2, &st2, unistackbot_algorithm::SolveMode::COLD_START);
 					++ring0_n; ring0_ok += (r1 == IkResult::OK);
-					std::printf("    %s | 真解J6=%.3f (限±0.52) J2=%.2f J4=%.2f | 真解种子:%s\n",
-						e.meta.c_str(), e.sols[0][5], e.sols[0][1], e.sols[0][3],
-						r1 == IkResult::OK ? "OK" : "仍失败");
+					std::printf("    %s | 真解J6=%.3f (限±0.52) J2=%.2f J4=%.2f | 真解种子:%s\n", e.meta.c_str(), e.sols[0][5], e.sols[0][1], e.sols[0][3], r1 == IkResult::OK ? "OK" : "仍失败");
 				}
-				std::printf("  [第0环] 失败样本真解种子复解: %d/%d OK (全 OK = 主循环无辜, 失败=种子远)\n",
-					ring0_ok, ring0_n);
+				std::printf("  [第0环] 失败样本真解种子复解: %d/%d OK (全 OK = 主循环无辜, 失败=种子远)\n", ring0_ok, ring0_n);
 			}
 			// 恪守边界: 实际耗时 ≤ 预算 + 单次迭代粒度 (~40µs) + 调度抖动余量
 			CHECK(max_us <= static_cast<double>(budget_ns) / 1000.0 + 300.0);
@@ -601,8 +577,7 @@ int main(int argc, char ** argv)
 					q = prev_q;
 				}
 				DlsIkStats st;
-				const IkResult r = ik.solve(p, q, preserve, q, &st,
-					unistackbot_algorithm::SolveMode::STREAMING);
+				const IkResult r = ik.solve(p, q, preserve, q, &st, unistackbot_algorithm::SolveMode::STREAMING);
 				max_us = std::max(max_us, st.solve_us);
 				if (r != IkResult::OK) {continue;}
 				if (!prev_q.empty())
@@ -614,8 +589,7 @@ int main(int argc, char ** argv)
 				prev_q = q;
 				++ok_pts;
 			}
-			std::printf("  流式预算 500µs: 圆弧 101 点成功 %d 最差增量 %.3frad max=%.0fµs\n",
-				ok_pts, worst_step, max_us);
+			std::printf("  流式预算 500µs: 圆弧 101 点成功 %d 最差增量 %.3frad max=%.0fµs\n", ok_pts, worst_step, max_us);
 			CHECK(ok_pts >= 95);
 			CHECK(worst_step < 0.15);
 			CHECK(max_us <= 500.0 + 300.0);

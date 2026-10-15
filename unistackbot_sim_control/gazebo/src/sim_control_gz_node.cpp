@@ -83,8 +83,7 @@ int main(int argc, char ** argv)
 			return false;
 		}
 		// 异步发出请求; 应答只代表"已接受" (契约语义), 结果经回调告警
-		world_control->async_send_request(request,
-			[logger](rclcpp::Client<ControlWorld>::SharedFuture future)
+		world_control->async_send_request(request, [logger](rclcpp::Client<ControlWorld>::SharedFuture future)
 			{
 				const auto & response = future.get();
 				if (!response->success)
@@ -110,17 +109,12 @@ int main(int argc, char ** argv)
 	// 句柄必须持有 —— create_* 返回的共享指针不存则立即析构 (2026-10-15 实锤:
 	// 话题在但 publisher 无数据/订阅数为 0)
 	bool paused_now = false;
-	auto paused_pub = node->create_publisher<std_msgs::msg::Bool>(
-		unistackbot_sim_control::kPausedTopic, 10);
-	auto paused_sub = node->create_subscription<ros_gz_interfaces::msg::WorldStatistics>(
-		"/stats", 10,
-		[&paused_now](const ros_gz_interfaces::msg::WorldStatistics::SharedPtr m)
+	auto paused_pub = node->create_publisher<std_msgs::msg::Bool>(unistackbot_sim_control::kPausedTopic, 10);
+	auto paused_sub = node->create_subscription<ros_gz_interfaces::msg::WorldStatistics>("/stats", 10, [&paused_now](const ros_gz_interfaces::msg::WorldStatistics::SharedPtr m)
 		{
 			paused_now = m->paused;
 		});
-	auto paused_timer = node->create_wall_timer(
-		std::chrono::duration<double>(1.0 / unistackbot_sim_control::kPausedTopicHz),
-		[&paused_now, &paused_pub]()
+	auto paused_timer = node->create_wall_timer(std::chrono::duration<double>(1.0 / unistackbot_sim_control::kPausedTopicHz), [&paused_now, &paused_pub]()
 		{
 			std_msgs::msg::Bool b;
 			b.data = paused_now;

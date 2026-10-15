@@ -23,8 +23,7 @@ void Framer::compact()
 	}
 }
 
-std::size_t Framer::push(const std::uint8_t *data, std::size_t n,
-	ExtractedFrame *out, std::size_t max_out)
+std::size_t Framer::push(const std::uint8_t *data, std::size_t n, ExtractedFrame *out, std::size_t max_out)
 {
 	std::size_t produced = 0;
 	// 追加输入 (超过容量截断——防呆, 正常水位远低于界)

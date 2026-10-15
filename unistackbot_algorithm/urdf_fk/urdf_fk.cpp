@@ -53,9 +53,7 @@ void rotationToQuat(const KDL::Rotation & R, CartesianPose & p)
 
 }  // namespace
 
-bool UrdfFk::init(
-	const std::string & urdf_string, const std::string & base,
-	const std::string & tip, std::string & message)
+bool UrdfFk::init(const std::string & urdf_string, const std::string & base, const std::string & tip, std::string & message)
 {
 	ready_ = false;
 	joint_names_.clear();
@@ -147,14 +145,10 @@ bool UrdfFk::init(
 		for (auto rit = up.rbegin(); rit != up.rend(); ++rit)
 		{
 			const auto & t = (*rit)->parent_to_joint_origin_transform;
-			w = w * KDL::Frame(
-				KDL::Rotation::Quaternion(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w),
-				KDL::Vector(t.position.x, t.position.y, t.position.z));
+			w = w * KDL::Frame(KDL::Rotation::Quaternion(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w), KDL::Vector(t.position.x, t.position.y, t.position.z));
 		}
 		const auto & t = j->parent_to_joint_origin_transform;
-		const KDL::Frame jf = w * KDL::Frame(
-			KDL::Rotation::Quaternion(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w),
-			KDL::Vector(t.position.x, t.position.y, t.position.z));
+		const KDL::Frame jf = w * KDL::Frame(KDL::Rotation::Quaternion(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w), KDL::Vector(t.position.x, t.position.y, t.position.z));
 		const KDL::Vector d = jf.M * KDL::Vector(j->axis.x, j->axis.y, j->axis.z);
 		axes_.push_back(JointAxis{jf.p.x(), jf.p.y(), jf.p.z(), d.x(), d.y(), d.z()});
 	}
@@ -220,8 +214,7 @@ bool UrdfFk::jacobian(const std::vector<double> & q, std::vector<double> & jac_r
 	return jacobian(q, jac_rowmajor, scratch);
 }
 
-bool UrdfFk::jacobian(
-	const std::vector<double> & q, std::vector<double> & jac_rowmajor, Scratch & scratch) const
+bool UrdfFk::jacobian(const std::vector<double> & q, std::vector<double> & jac_rowmajor, Scratch & scratch) const
 {
 	if (!ready_ || q.size() != jointCount())
 	{

@@ -105,14 +105,10 @@ void testEncodeOracle()
 					cmd.kd = v.kd;
 
 					std::uint8_t mine[20] = {};
-					std::vector<std::uint8_t> ref = oracle.buildControlPacket(
-						static_cast<std::uint8_t>(id), static_cast<std::uint8_t>(mode),
-						tmo == 1, static_cast<float>(v.tau), static_cast<float>(v.spd),
-						static_cast<float>(v.pos), static_cast<float>(v.kp),
-						static_cast<float>(v.kd));
+					std::vector<std::uint8_t> ref = oracle.buildControlPacket(static_cast<std::uint8_t>(id), static_cast<std::uint8_t>(mode),
+						tmo == 1, static_cast<float>(v.tau), static_cast<float>(v.spd), static_cast<float>(v.pos), static_cast<float>(v.kp), static_cast<float>(v.kd));
 
-					const std::size_t n = encodeFrame(mine, sizeof(mine), cmd,
-						static_cast<std::uint8_t>(id), kOracleRatio);
+					const std::size_t n = encodeFrame(mine, sizeof(mine), cmd, static_cast<std::uint8_t>(id), kOracleRatio);
 					char what[96];
 					std::snprintf(what, sizeof(what), "encode id=%d mode=%d tmo=%d", id, mode, tmo);
 					check(n == 20 && ref.size() == 20, what);
@@ -171,8 +167,7 @@ void testDecodeOracle()
 		f[15] = static_cast<std::uint8_t>((s.err >> 8) & 0xFF);
 		f[16] = static_cast<std::uint8_t>((s.err >> 16) & 0xFF);
 		f[17] = static_cast<std::uint8_t>((s.err >> 24) & 0xFF);
-		const std::uint16_t res_warn = static_cast<std::uint16_t>(
-			(static_cast<std::uint16_t>(s.warn & 0x07u) << 13));
+		const std::uint16_t res_warn = static_cast<std::uint16_t>((static_cast<std::uint16_t>(s.warn & 0x07u) << 13));
 		f[18] = static_cast<std::uint8_t>(res_warn & 0xFF);
 		f[19] = static_cast<std::uint8_t>((res_warn >> 8) & 0xFF);
 		f[20] = 0;
@@ -261,12 +256,8 @@ void testRatios()
 		const double kd_raw = cmd.kd / (rr * rr) * 51200.0;
 		const std::int16_t e_kp = expect_i16(kp_raw);
 		const std::int16_t e_kd = expect_i16(kd_raw);
-		check(f[4] == static_cast<std::uint8_t>(e_tau & 0xFF) &&
-			f[5] == static_cast<std::uint8_t>((static_cast<std::uint16_t>(e_tau) >> 8) & 0xFF),
-			"ratio tau bytes");
-		check(f[6] == static_cast<std::uint8_t>(e_spd & 0xFF) &&
-			f[7] == static_cast<std::uint8_t>((static_cast<std::uint16_t>(e_spd) >> 8) & 0xFF),
-			"ratio spd bytes");
+		check(f[4] == static_cast<std::uint8_t>(e_tau & 0xFF) && f[5] == static_cast<std::uint8_t>((static_cast<std::uint16_t>(e_tau) >> 8) & 0xFF), "ratio tau bytes");
+		check(f[6] == static_cast<std::uint8_t>(e_spd & 0xFF) && f[7] == static_cast<std::uint8_t>((static_cast<std::uint16_t>(e_spd) >> 8) & 0xFF), "ratio spd bytes");
 		check(f[12] == static_cast<std::uint8_t>(e_kp & 0xFF), "ratio kp bytes");
 		check(f[14] == static_cast<std::uint8_t>(e_kd & 0xFF), "ratio kd bytes");
 	}
@@ -350,8 +341,7 @@ void testGainClampAndPrior()
 		cmd.kp = -3.0;
 		cmd.kd = -0.1;
 		check(encodeFrame(f, sizeof(f), cmd, 1, 32.0) == 20, "negative gains encode");
-		check(f[12] == 0x00 && f[13] == 0x00 && f[14] == 0x00 && f[15] == 0x00,
-			"negative kp/kd clamp to 0");
+		check(f[12] == 0x00 && f[13] == 0x00 && f[14] == 0x00 && f[15] == 0x00, "negative kp/kd clamp to 0");
 	}
 	// 增益上界=定点 int 界: tau 超界 @r=32 顶格 32767 (raw 界, 非厂商常量值)
 	{
@@ -362,8 +352,7 @@ void testGainClampAndPrior()
 		check(f[4] == 0xFF && f[5] == 0x7F, "tau clamp to int16 max @r=32");
 	}
 	// 先验常量本身 (消费=机型资产 yaml 装配引用, 内芯不自动填充)
-	check(unistackbot_protocol::unitree_im::kPriorKp == 60.0 &&
-		unistackbot_protocol::unitree_im::kPriorKd == 0.5, "prior constants 60/0.5");
+	check(unistackbot_protocol::unitree_im::kPriorKp == 60.0 && unistackbot_protocol::unitree_im::kPriorKd == 0.5, "prior constants 60/0.5");
 }
 
 // ⑦清故障帧 (2026-10-10 解除 special() 延后): mode 6 + tor_raw=-256 魔数,
@@ -384,9 +373,7 @@ void testClearFrame()
 	check(f[2] == 0x63, "clear mode bits=6 (高半字节) + id=3");
 	check(f[4] == 0x00 && f[5] == 0xFF, "tor_raw forced -256 (LE)");
 	const std::uint32_t crc = unistackbot_protocol::unitree_im::crc32(f, 16);
-	check(f[16] == static_cast<std::uint8_t>(crc & 0xFF) &&
-		f[17] == static_cast<std::uint8_t>((crc >> 8) & 0xFF) &&
-		f[18] == static_cast<std::uint8_t>((crc >> 16) & 0xFF) &&
+	check(f[16] == static_cast<std::uint8_t>(crc & 0xFF) && f[17] == static_cast<std::uint8_t>((crc >> 8) & 0xFF) && f[18] == static_cast<std::uint8_t>((crc >> 16) & 0xFF) &&
 		f[19] == static_cast<std::uint8_t>((crc >> 24) & 0xFF), "clear frame CRC field");
 	// 看门狗位组合: 默认 true → 0xB6
 	cmd.watchdog_enable = true;
@@ -414,9 +401,7 @@ void testFactoryAndInterface()
 
 	// framespec 经接口
 	const auto spec = p.framespec();
-	check(spec.header0 == 0xFC && spec.header1 == 0xEE && spec.frame_len == 26 &&
-		spec.crc_offset == 22 && spec.crc_cover_offset == 2 && spec.crc_cover_len == 20,
-		"poly framespec");
+	check(spec.header0 == 0xFC && spec.header1 == 0xEE && spec.frame_len == 26 && spec.crc_offset == 22 && spec.crc_cover_offset == 2 && spec.crc_cover_len == 20, "poly framespec");
 
 	// encode 经接口, 与甲骨文再对一拍
 	MotorProtocol oracle;
@@ -430,8 +415,7 @@ void testFactoryAndInterface()
 	cmd.kd = 2.0;
 	std::uint8_t mine[20] = {};
 	check(p.encode(mine, sizeof(mine), cmd, 5, kOracleRatio) == 20, "poly encode");
-	const std::vector<std::uint8_t> ref = oracle.buildControlPacket(5, 1, true, 2.5f,
-		-3.25f, 1.75f, 15.0f, 2.0f);
+	const std::vector<std::uint8_t> ref = oracle.buildControlPacket(5, 1, true, 2.5f, -3.25f, 1.75f, 15.0f, 2.0f);
 	check(ref.size() == 20 && std::memcmp(mine, ref.data(), 20) == 0, "poly encode == oracle");
 
 	// decode 经接口 (复用②的手造帧)

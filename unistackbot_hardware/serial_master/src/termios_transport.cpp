@@ -88,8 +88,7 @@ struct LocalTermios2
 
 }  // namespace
 
-std::unique_ptr<TermiosTransport> TermiosTransport::open(const std::string &device,
-	int baudrate, std::string &err)
+std::unique_ptr<TermiosTransport> TermiosTransport::open(const std::string &device, int baudrate, std::string &err)
 {
 	if (device.empty() || baudrate <= 0)
 	{

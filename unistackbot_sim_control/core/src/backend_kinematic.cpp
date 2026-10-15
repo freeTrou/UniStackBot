@@ -19,11 +19,7 @@ const std::string & BackendKinematic::name() const
 	return kName;
 }
 
-void BackendKinematic::step(
-	const std::vector<double> & cmd_position,
-	std::vector<double> & state_position,
-	std::vector<double> & state_velocity,
-	double dt, bool integrate)
+void BackendKinematic::step(const std::vector<double> & cmd_position, std::vector<double> & state_position, std::vector<double> & state_velocity, double dt, bool integrate)
 {
 	const size_t n = state_position.size();
 	for (size_t i = 0; i < n; ++i)

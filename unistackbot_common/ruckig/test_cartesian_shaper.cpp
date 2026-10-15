@@ -195,8 +195,7 @@ static int test_redirect()
 		const double sx = std::fabs(out.x - prev.x);
 		const double sy = std::fabs(out.y - prev.y);
 		const double sz = std::fabs(out.z - prev.z);
-		CHECK(sx <= 0.5 * 0.002 + 1e-6 && sy <= 0.5 * 0.002 + 1e-6 && sz <= 0.5 * 0.002 + 1e-6,
-			"重定向拍逐轴无跳变");
+		CHECK(sx <= 0.5 * 0.002 + 1e-6 && sy <= 0.5 * 0.002 + 1e-6 && sz <= 0.5 * 0.002 + 1e-6, "重定向拍逐轴无跳变");
 		max_step = std::max(max_step, std::hypot(sx, sy, sz));
 		prev = out;
 	}

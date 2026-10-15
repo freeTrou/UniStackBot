@@ -88,8 +88,7 @@ void Cia402Safety::update(const unistackbot_protocol::NodeFeedback & fb)
 	{
 		disable_req_ = false;                // 已到安全怠速
 	}
-	if (fault_clear_req_ && native_ != Cia402State::kFault &&
-		native_ != Cia402State::kFaultReactionActive)
+	if (fault_clear_req_ && native_ != Cia402State::kFault && native_ != Cia402State::kFaultReactionActive)
 	{
 		fault_clear_req_ = false;            // 设备已离开故障 (statusword 为证)
 	}

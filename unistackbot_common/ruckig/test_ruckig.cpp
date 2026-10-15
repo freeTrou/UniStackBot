@@ -33,8 +33,7 @@ void operator delete(void * p) noexcept {std::free(p);}
 void operator delete(void * p, std::size_t) noexcept {std::free(p);}
 
 template <std::size_t N>
-bool limitsHeld(const ruckig::OutputParameter<N> & o,
-	const std::array<double, N> & vmax, const std::array<double, N> & amax)
+bool limitsHeld(const ruckig::OutputParameter<N> & o, const std::array<double, N> & vmax, const std::array<double, N> & amax)
 {
 	for (std::size_t i = 0; i < N; ++i)
 	{
@@ -172,8 +171,7 @@ int main()
 		check(ok_vel_cont, "T3 率失配: 速度逐拍连续 (加速度受限)");
 		check(ok_limits, "T3 率失配: 限内");
 		check(reached_final, "T3 率失配: 最终目标到达");
-		std::printf("  (最差逐拍 Δpos=%.4f rad [限 %.4f]  Δvel=%.4f [限 %.4f])\n",
-			worst_dpos, 3.0 * DT, worst_dvel, 5.0 * DT);
+		std::printf("  (最差逐拍 Δpos=%.4f rad [限 %.4f]  Δvel=%.4f [限 %.4f])\n", worst_dpos, 3.0 * DT, worst_dvel, 5.0 * DT);
 	}
 
 	// ===== T4 RT 零分配 + T5 计时 =====
@@ -204,8 +202,7 @@ int main()
 			}
 			const auto t0 = std::chrono::steady_clock::now();
 			otg.update(in, out);
-			times.push_back(std::chrono::duration<double, std::micro>(
-				std::chrono::steady_clock::now() - t0).count());
+			times.push_back(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count());
 			in.current_position = out.new_position;
 			in.current_velocity = out.new_velocity;
 			in.current_acceleration = out.new_acceleration;
@@ -214,8 +211,7 @@ int main()
 		std::printf("  (稳态 1000 拍 malloc 总数: %zu, 每拍 %.2f 次)\n", g_allocs, g_allocs / 1000.0);
 		check(g_allocs == 0, "T4 稳态 update 零 malloc");
 		std::sort(times.begin(), times.end());
-		std::printf("  (update 计时: p50=%.2fµs p99=%.2fµs max=%.2fµs)\n",
-			times[times.size() / 2], times[times.size() * 99 / 100], times.back());
+		std::printf("  (update 计时: p50=%.2fµs p99=%.2fµs max=%.2fµs)\n", times[times.size() / 2], times[times.size() * 99 / 100], times.back());
 		check(times[times.size() * 99 / 100] < 50.0, "T5 update p99 <50µs (RT 预算证据)");
 	}
 

@@ -20,8 +20,7 @@ class FakeTransport final : public IoTransport
 {
 public:
 	// responder: 输入本批写入字节, 向 out 缓冲产出应答字节, 返回应答字节数
-	using Responder = std::function<std::size_t(const std::uint8_t *, std::size_t,
-		std::uint8_t *)>;
+	using Responder = std::function<std::size_t(const std::uint8_t *, std::size_t, std::uint8_t *)>;
 
 	explicit FakeTransport(Responder responder) : responder_(std::move(responder)) {}
 

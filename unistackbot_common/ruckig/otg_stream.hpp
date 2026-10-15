@@ -59,11 +59,8 @@ public:
 	{
 		for (std::size_t i = 0; i < DOFs; ++i)
 		{
-			if (!std::isfinite(limits.max_velocity[i]) || limits.max_velocity[i] <= 0.0 ||
-				!std::isfinite(limits.max_acceleration[i]) || limits.max_acceleration[i] <= 0.0 ||
-				!std::isfinite(limits.max_jerk[i]) || limits.max_jerk[i] <= 0.0 ||
-				limits.max_velocity[i] > 1e9 || limits.max_acceleration[i] > 1e9 ||
-				limits.max_jerk[i] > 1e9)
+			if (!std::isfinite(limits.max_velocity[i]) || limits.max_velocity[i] <= 0.0 || !std::isfinite(limits.max_acceleration[i]) || limits.max_acceleration[i] <= 0.0 ||
+				!std::isfinite(limits.max_jerk[i]) || limits.max_jerk[i] <= 0.0 || limits.max_velocity[i] > 1e9 || limits.max_acceleration[i] > 1e9 || limits.max_jerk[i] > 1e9)
 			{
 				return false;   // 限值必须为正、有限、低于 Ruckig 数值范围假设 (1e9)
 			}
@@ -90,15 +87,12 @@ public:
 		std::array<double, DOFs> zero{};
 		reset(current_position, zero);
 	}
-	void reset(const std::array<double, DOFs> & current_position,
-		const std::array<double, DOFs> & current_velocity)
+	void reset(const std::array<double, DOFs> & current_position, const std::array<double, DOFs> & current_velocity)
 	{
 		std::array<double, DOFs> zero{};
 		reset(current_position, current_velocity, zero);
 	}
-	void reset(const std::array<double, DOFs> & current_position,
-		const std::array<double, DOFs> & current_velocity,
-		const std::array<double, DOFs> & current_acceleration)
+	void reset(const std::array<double, DOFs> & current_position, const std::array<double, DOFs> & current_velocity, const std::array<double, DOFs> & current_acceleration)
 	{
 		for (std::size_t i = 0; i < DOFs; ++i)
 		{
@@ -118,8 +112,7 @@ public:
 
 	// 每拍: target = 上层最新目标点 (点流语义); out_pos = 本拍输出 (恒有效, 见契约)。
 	// [[nodiscard]]: 忽略 Ok/Hold 的分流在控制语境几乎必错 —— 编译期强制
-	[[nodiscard]] UpdateResult update(std::array<double, DOFs> target,
-		std::array<double, DOFs> & out_pos)
+	[[nodiscard]] UpdateResult update(std::array<double, DOFs> target, std::array<double, DOFs> & out_pos)
 	{
 		++update_count_;
 		if (!initialized_)
@@ -215,8 +208,7 @@ private:
 	// advance_target: 仅 Ruckig 内部错误为 true (目标已消毒合法, 推进防卡死);
 	//                 输入拒绝为 false (等上层改正)。
 	// out_pos: 恒写入 last_out_pos_ (安全保持位) —— "调用方不可能用错"契约。
-	void hold(int code, const std::array<double, DOFs> & attempted_target,
-		std::array<double, DOFs> & out_pos, bool advance_target)
+	void hold(int code, const std::array<double, DOFs> & attempted_target, std::array<double, DOFs> & out_pos, bool advance_target)
 	{
 		++error_count_;
 		last_error_ = code;

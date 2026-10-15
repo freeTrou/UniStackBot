@@ -56,9 +56,7 @@ public:
 	 * base / tip:  链的起止 link 名 (如 link_base -> link7)
 	 * 失败原因写入 message (URDF 非法 / link 不存在 / 链含固定根异常等)。
 	 */
-	[[nodiscard]] bool init(
-		const std::string & urdf_string, const std::string & base,
-		const std::string & tip, std::string & message);
+	[[nodiscard]] bool init(const std::string & urdf_string, const std::string & base, const std::string & tip, std::string & message);
 
 	// 链上活动关节数 (init 成功后有效)
 	[[nodiscard]] unsigned int jointCount() const {return static_cast<unsigned int>(q_min_.size());}
@@ -81,9 +79,7 @@ public:
 		KDL::Jacobian jac;
 	};
 	[[nodiscard]] bool fk(const std::vector<double> & q, CartesianPose & out, Scratch & scratch) const;
-	[[nodiscard]] bool jacobian(
-		const std::vector<double> & q, std::vector<double> & jac_rowmajor,
-		Scratch & scratch) const;
+	[[nodiscard]] bool jacobian(const std::vector<double> & q, std::vector<double> & jac_rowmajor, Scratch & scratch) const;
 
 	// 关节限位 (init 时自 URDF 提取; 长度 = jointCount)
 	[[nodiscard]] const std::vector<double> & qMin() const {return q_min_;}

@@ -99,7 +99,7 @@ void benchMain(ThreadArg *a)
 
 	const double period_ns = static_cast<double>(a->period_us) * 1.0e3;
 	double target = clockNowNs() + period_ns;
-	
+
 	for (long long i = 0; i < kWarmupIters + a->iters; ++i)
 	{
 		const timespec ts = toTimespec(target);
@@ -188,11 +188,8 @@ int main(int argc, char **argv)
 	{
 		const Stats &s = a->st;
 		std::vector<double> v = s.all_us;
-		std::printf(
-			"cpu%d: n=%lld min=%.1f avg=%.1f p50=%.1f p99=%.1f max=%.1f | >10µs=%lld >50µs=%lld >100µs=%lld\n",
-			a->cpu, s.n, s.min_us, s.sum_us / static_cast<double>(s.n),
-			percentileUs(v, 0.50), percentileUs(v, 0.99), s.max_us,
-			s.over_10, s.over_50, s.over_100);
+		std::printf("cpu%d: n=%lld min=%.1f avg=%.1f p50=%.1f p99=%.1f max=%.1f | >10µs=%lld >50µs=%lld >100µs=%lld\n", a->cpu, s.n, s.min_us, s.sum_us / static_cast<double>(s.n),
+			percentileUs(v, 0.50), percentileUs(v, 0.99), s.max_us, s.over_10, s.over_50, s.over_100);
 		if (a->tune_rc != unistackbot_common::rt_tune::kOk)
 		{
 			std::printf("FAIL: cpu%d rt_tune::apply rc=%d (期望 0 = 绑核+FIFO 双成功)\n", a->cpu, a->tune_rc);

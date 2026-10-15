@@ -97,7 +97,7 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 
-	// 提前分配内存 
+	// 提前分配内存
 	joints_.resize(joint_count);
 	cmd_position_.assign(joint_count, 0.0);
 	state_position_.assign(joint_count, 0.0);
@@ -187,9 +187,7 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 			ULOG_ERROR("Joint '%s': invalid double '%s' for mimic param 'offset'", joints_[i].name.c_str(), params.at("offset").c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
-		ULOG_INFO("Joint '%s' mimics '%s' (multiplier %.3f, offset %.3f)",
-			joints_[i].name.c_str(), mimic_it->second.c_str(),
-			joints_[i].mimic_multiplier, joints_[i].mimic_offset);
+		ULOG_INFO("Joint '%s' mimics '%s' (multiplier %.3f, offset %.3f)", joints_[i].name.c_str(), mimic_it->second.c_str(), joints_[i].mimic_multiplier, joints_[i].mimic_offset);
 	}
 
 	// 后端分类 (对内): "backend" 为 <hardware> 级参数, 工厂按名实例化
@@ -255,17 +253,11 @@ hardware_interface::CallbackReturn SimControlHardware::on_configure(const rclcpp
 {
 	// /sim_control 服务: 独立节点 + 独立 executor 线程 (非实时)
 	service_node_ = rclcpp::Node::make_shared("sim_control");
-	server_ = std::make_unique<SimControlServer>(
-		service_node_,
-		[this](const SimCommand & cmd, std::string & message)
+	server_ = std::make_unique<SimControlServer>(service_node_, [this](const SimCommand & cmd, std::string & message)
 		{
 			return enqueueSink(cmd, message);
 		},
-		[this](const std::vector<std::string> & names,
-			const std::vector<double> & positions,
-			const std::vector<double> & velocities,
-			SimCommand & command,
-			std::string & message)
+		[this](const std::vector<std::string> & names, const std::vector<double> & positions, const std::vector<double> & velocities, SimCommand & command, std::string & message)
 		{
 			return validateSetState(names, positions, velocities, command, message);
 		});
@@ -479,8 +471,7 @@ hardware_interface::return_type SimControlHardware::read(const rclcpp::Time & /*
 		}
 		if (bad && (++guard_cycles_ % 500) == 0)
 		{
-			ULOG_WARN("read 防线: 状态非有限, 已保持上一拍 (nonfinite=%lu)",
-				static_cast<unsigned long>(fault_state_nonfinite_));
+			ULOG_WARN("read 防线: 状态非有限, 已保持上一拍 (nonfinite=%lu)", static_cast<unsigned long>(fault_state_nonfinite_));
 		}
 	}
 	return hardware_interface::return_type::OK;
@@ -540,9 +531,7 @@ hardware_interface::return_type SimControlHardware::write(const rclcpp::Time & /
 			if (guard_cycles_ == 0 || fault_cmd_nonfinite_ + fault_cmd_clamped_ - last_fault_log_ >= 100)
 			{
 				last_fault_log_ = fault_cmd_nonfinite_ + fault_cmd_clamped_;
-				ULOG_WARN("write 防线命中: nonfinite=%lu clamped=%lu (累计)",
-					static_cast<unsigned long>(fault_cmd_nonfinite_),
-					static_cast<unsigned long>(fault_cmd_clamped_));
+				ULOG_WARN("write 防线命中: nonfinite=%lu clamped=%lu (累计)", static_cast<unsigned long>(fault_cmd_nonfinite_), static_cast<unsigned long>(fault_cmd_clamped_));
 			}
 			++guard_cycles_;
 		}

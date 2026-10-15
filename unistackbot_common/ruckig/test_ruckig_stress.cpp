@@ -76,8 +76,7 @@ int main()
 		}
 		check(finite, "S1 零目标轰炸: 输出恒有限");
 		check(ok + hold == 2000, "S1 全程受控");
-		std::printf("  (Ok=%llu Hold=%llu lastError=%d)\n",
-			static_cast<unsigned long long>(ok), static_cast<unsigned long long>(hold), otg.lastError());
+		std::printf("  (Ok=%llu Hold=%llu lastError=%d)\n", static_cast<unsigned long long>(ok), static_cast<unsigned long long>(hold), otg.lastError());
 	}
 
 	// ===== S2 极端跳变 (-101 时长超限 territory) =====
@@ -97,8 +96,7 @@ int main()
 			(void)r;
 		}
 		check(finite, "S2 极端跳变: 输出恒有限");
-		std::printf("  (Ruckig 原生错误码出现: %s, lastError=%d)\n",
-			saw_native_err ? "是 (防御捕获真错误)" : "否 (内部未触界)", otg.lastError());
+		std::printf("  (Ruckig 原生错误码出现: %s, lastError=%d)\n", saw_native_err ? "是 (防御捕获真错误)" : "否 (内部未触界)", otg.lastError());
 		// 自愈: 正常目标恢复跟踪
 		std::array<double, 7> tgt{};
 		for (std::size_t i = 0; i < 7; ++i) {tgt[i] = 0.2;}
@@ -159,9 +157,7 @@ int main()
 		check(finite, "S4 RL 野流 60s: 输出恒有限");
 		check(ok + hold == cycles, "S4 全程受控");
 		const double err_rate = 100.0 * static_cast<double>(hold) / static_cast<double>(cycles);
-		std::printf("  (60s: Ok=%llu Hold=%llu 错误率=%.3f%% 输出最大幅值=%.2f rad)\n",
-			static_cast<unsigned long long>(ok), static_cast<unsigned long long>(hold),
-			err_rate, max_abs);
+		std::printf("  (60s: Ok=%llu Hold=%llu 错误率=%.3f%% 输出最大幅值=%.2f rad)\n", static_cast<unsigned long long>(ok), static_cast<unsigned long long>(hold), err_rate, max_abs);
 		check(err_rate < 5.0, "S4 错误率 <5% (防御层不干扰常态服务)");
 	}
 

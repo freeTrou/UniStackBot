@@ -80,8 +80,7 @@ static std::string loadFile(const char * path)
 	// 这里用"笛卡尔预言"替代: 零位姿态 = 单位四元数 (各轴 rpy 互抵, xarm7 标称构型直立)
 	CartesianPose p0;
 	CHECK(fk.fk(std::vector<double>(n, 0.0), p0));
-	std::printf("[零位] p=(%.6f, %.6f, %.6f) q=(%.6f, %.6f, %.6f, %.6f)\n",
-		p0.x, p0.y, p0.z, p0.qw, p0.qx, p0.qy, p0.qz);
+	std::printf("[零位] p=(%.6f, %.6f, %.6f) q=(%.6f, %.6f, %.6f, %.6f)\n", p0.x, p0.y, p0.z, p0.qw, p0.qx, p0.qy, p0.qz);
 	if (!strict)
 	{
 		// 非严格模式: 零位真值未手算, 只验单位化 (数学性质), 其余交 TF 对拍

@@ -85,8 +85,7 @@ void BackendThreaded::requestState(const std::vector<double> & state_position, c
 	override_latest_.publish(s);
 }
 
-void BackendThreaded::step(const std::vector<double> & cmd_position, std::vector<double> & state_position,
-	std::vector<double> & state_velocity, double dt, bool integrate)
+void BackendThreaded::step(const std::vector<double> & cmd_position, std::vector<double> & state_position, std::vector<double> & state_velocity, double dt, bool integrate)
 {
 	(void)cmd_position;   // 命令经 transmit() 发布
 	(void)dt;             // 节拍归 plant 自带时钟

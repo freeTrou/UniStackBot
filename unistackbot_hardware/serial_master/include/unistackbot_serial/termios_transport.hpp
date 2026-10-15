@@ -21,8 +21,7 @@ class TermiosTransport final : public IoTransport
 {
 public:
 	// 打开并配置串口; 失败置 err 并返回 nullptr (显式错误流, 零异常)
-	[[nodiscard]] static std::unique_ptr<TermiosTransport> open(const std::string &device,
-		int baudrate, std::string &err);
+	[[nodiscard]] static std::unique_ptr<TermiosTransport> open(const std::string &device, int baudrate, std::string &err);
 
 	~TermiosTransport() override;
 

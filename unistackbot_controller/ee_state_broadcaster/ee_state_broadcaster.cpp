@@ -21,8 +21,7 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_init()
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn EeStateBroadcaster::on_configure(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn EeStateBroadcaster::on_configure(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	unistackbot_common::ulog_config log_cfg;
 	log_cfg.console = true;
@@ -61,13 +60,11 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_configure(
 	}
 	fk_ = std::move(fk);
 
-	pub_ = std::make_shared<realtime_tools::RealtimePublisher<geometry_msgs::msg::PoseStamped>>(
-		get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
+	pub_ = std::make_shared<realtime_tools::RealtimePublisher<geometry_msgs::msg::PoseStamped>>(get_node()->create_publisher<geometry_msgs::msg::PoseStamped>(
 			"/ee_state", rclcpp::QoS(10)));   // 顶层标准位 (2026-10-12 接口定名, 与 /joint_states
 	// 对仗; JSB 先例: 框架认定的标准位优先于节点命名空间。多实例 (双臂各一 EEB) 时
 	// 需加 use_local_topics 类参数 —— 单实例期从简。状态流: 默认 reliable 即可 (50Hz 小包)
-	ULOG_INFO("%s: 配置完成 (%s -> %s @%.0fHz)", kPluginName,
-		base_link_.c_str(), tip_link_.c_str(), publish_hz_);
+	ULOG_INFO("%s: 配置完成 (%s -> %s @%.0fHz)", kPluginName, base_link_.c_str(), tip_link_.c_str(), publish_hz_);
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -96,14 +93,12 @@ const
 	return conf;
 }
 
-controller_interface::CallbackReturn EeStateBroadcaster::on_activate(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn EeStateBroadcaster::on_activate(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	const std::size_t n = fk_ ? fk_->jointCount() : 0u;
 	if (state_interfaces_.size() != n)
 	{
-		ULOG_ERROR("%s: 接口数不匹配 (state=%zu 链=%zu)",
-			kPluginName, state_interfaces_.size(), n);
+		ULOG_ERROR("%s: 接口数不匹配 (state=%zu 链=%zu)", kPluginName, state_interfaces_.size(), n);
 		return controller_interface::CallbackReturn::ERROR;
 	}
 	// 按名映射: 接口声明序 != FK 链序 (真雷, 与 CM 同款处理)
@@ -125,8 +120,7 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_activate(
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type EeStateBroadcaster::update(
-	const rclcpp::Time & time, const rclcpp::Duration & /*period*/)
+controller_interface::return_type EeStateBroadcaster::update(const rclcpp::Time & time, const rclcpp::Duration & /*period*/)
 {
 	// 50Hz 时间节流 (RT trylock 非阻塞; 拿不到锁跳过本拍 —— 下一拍再来)
 	if ((time - last_pub_).seconds() < 1.0 / publish_hz_ || !pub_)
@@ -163,15 +157,13 @@ controller_interface::return_type EeStateBroadcaster::update(
 	return controller_interface::return_type::OK;
 }
 
-controller_interface::CallbackReturn EeStateBroadcaster::on_deactivate(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn EeStateBroadcaster::on_deactivate(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	ULOG_INFO("%s: 停用", kPluginName);
 	return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn EeStateBroadcaster::on_cleanup(
-	const rclcpp_lifecycle::State & /*previous_state*/)
+controller_interface::CallbackReturn EeStateBroadcaster::on_cleanup(const rclcpp_lifecycle::State & /*previous_state*/)
 {
 	pub_.reset();
 	fk_.reset();
@@ -181,5 +173,4 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_cleanup(
 }  // namespace unistackbot_controller
 
 #include "pluginlib/class_list_macros.hpp"
-PLUGINLIB_EXPORT_CLASS(unistackbot_controller::EeStateBroadcaster,
-	controller_interface::ControllerInterface)
+PLUGINLIB_EXPORT_CLASS(unistackbot_controller::EeStateBroadcaster, controller_interface::ControllerInterface)

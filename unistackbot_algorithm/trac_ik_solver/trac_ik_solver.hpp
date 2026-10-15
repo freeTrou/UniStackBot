@@ -51,12 +51,7 @@ public:
 
 	[[nodiscard]] bool init(const UrdfFk * fk, std::string & message) override;
 
-	[[nodiscard]] IkResult solve(
-		const CartesianPose & target,
-		const std::vector<double> & seed,
-		const RedundancyPreference & red,
-		std::vector<double> & out_q,
-		DlsIkStats * stats = nullptr,
+	[[nodiscard]] IkResult solve(const CartesianPose & target, const std::vector<double> & seed, const RedundancyPreference & red, std::vector<double> & out_q, DlsIkStats * stats = nullptr,
 		SolveMode mode = SolveMode::STREAMING) const override;
 
 	[[nodiscard]] bool ready() const override {return static_cast<bool>(solver_);}

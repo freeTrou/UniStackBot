@@ -29,9 +29,7 @@ void run_rate(int rate_khz, int seconds)
 		std::this_thread::sleep_for(period);
 	}
 	ulog_shutdown();
-	std::printf("  %4d 千行/s × %ds: dropped=%-6llu %s\n", rate_khz, seconds,
-		static_cast<unsigned long long>(ulog_dropped()),
-		ulog_dropped() == 0 ? "跟得上" : "饱和(丢旧)");
+	std::printf("  %4d 千行/s × %ds: dropped=%-6llu %s\n", rate_khz, seconds, static_cast<unsigned long long>(ulog_dropped()), ulog_dropped() == 0 ? "跟得上" : "饱和(丢旧)");
 }
 
 // 全速洪泛: 4 线程无间隔, 观察过载形态 (业务不阻塞 + 丢旧 + 账目守恒)
@@ -68,9 +66,7 @@ void run_flood()
 	}
 	ulog_shutdown();
 	(void)t0;
-	std::printf("  洪泛 4×25000: max_emit=%lluus dropped=%llu 账目=%s\n",
-		static_cast<unsigned long long>(max_emit_ns / 1000),
-		static_cast<unsigned long long>(ulog_dropped()),
+	std::printf("  洪泛 4×25000: max_emit=%lluus dropped=%llu 账目=%s\n", static_cast<unsigned long long>(max_emit_ns / 1000), static_cast<unsigned long long>(ulog_dropped()),
 		ulog_written() + ulog_dropped() == 4 * kPer ? "守恒" : "破缺!");
 }
 

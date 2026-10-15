@@ -59,8 +59,7 @@ struct MimicInfo
 };
 
 // URDF <ros2_control> 解析: position 命令关节 + 限位 + mimic (与 JS 消费口径一致)
-bool parseUrdf(const std::string & urdf, std::vector<JointInfo> & joints,
-	std::vector<MimicInfo> & mimics, std::string & err)
+bool parseUrdf(const std::string & urdf, std::vector<JointInfo> & joints, std::vector<MimicInfo> & mimics, std::string & err)
 {
 	tinyxml2::XMLDocument doc;
 	if (doc.Parse(urdf.c_str(), urdf.size()) != tinyxml2::XML_SUCCESS)
@@ -156,8 +155,7 @@ int main(int argc, char ** argv)
 	std::vector<JointInfo> joints;
 	std::vector<MimicInfo> mimics;
 	{
-		auto cli = node->create_client<rcl_interfaces::srv::GetParameters>(
-			"/robot_state_publisher/get_parameters");
+		auto cli = node->create_client<rcl_interfaces::srv::GetParameters>("/robot_state_publisher/get_parameters");
 		if (!cli->wait_for_service(std::chrono::seconds(5)))
 		{
 			std::printf("FAIL: robot_state_publisher 参数服务 5s 未出现 (链路未起?)\n");
@@ -166,8 +164,7 @@ int main(int argc, char ** argv)
 		auto req = std::make_shared<rcl_interfaces::srv::GetParameters::Request>();
 		req->names = {"robot_description"};
 		auto fut = cli->async_send_request(req);
-		if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(5)) !=
-			rclcpp::FutureReturnCode::SUCCESS)
+		if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(5)) != rclcpp::FutureReturnCode::SUCCESS)
 		{
 			std::printf("FAIL: 读 robot_description 超时\n");
 			return 1;
@@ -210,9 +207,7 @@ int main(int argc, char ** argv)
 	bool have_last_stamp = false;
 	rclcpp::Time last_stamp(0, 0);
 	{
-		auto sub = node->create_subscription<sensor_msgs::msg::JointState>(
-			"/joint_states", rclcpp::QoS(50),
-			[&](const sensor_msgs::msg::JointState::SharedPtr msg)
+		auto sub = node->create_subscription<sensor_msgs::msg::JointState>("/joint_states", rclcpp::QoS(50), [&](const sensor_msgs::msg::JointState::SharedPtr msg)
 			{
 				if (msg->header.stamp.sec != 0 || msg->header.stamp.nanosec != 0)
 				{
@@ -295,8 +290,7 @@ int main(int argc, char ** argv)
 				}
 				if (!robot.empty() && cands.empty())
 				{
-					std::printf("FAIL: 机型 '%s' 无配置 %s/%s_controllers.yaml\n",
-						robot.c_str(), cfg_dir.c_str(), robot.c_str());
+					std::printf("FAIL: 机型 '%s' 无配置 %s/%s_controllers.yaml\n", robot.c_str(), cfg_dir.c_str(), robot.c_str());
 					return 1;
 				}
 				if (cands.size() > 1)
@@ -314,8 +308,7 @@ int main(int argc, char ** argv)
 					while (std::getline(f, line))
 					{
 						const auto first = line.find_first_not_of(" \t");
-						if (first == std::string::npos ||
-							line.compare(first, 12, "update_rate:") != 0)
+						if (first == std::string::npos || line.compare(first, 12, "update_rate:") != 0)
 						{
 							continue;
 						}
@@ -448,8 +441,7 @@ int main(int argc, char ** argv)
 
 	// ④ 满速发布 (rclcpp wall 定时器下发, 2026-09-23 用户裁决: 不手写调度环;
 	//    消息骨架一次构建, 每拍只改 position —— 回调内零分配)
-	auto pub = node->create_publisher<unistackbot_interface::msg::JointCommand>(
-		"/joint_stream_controller/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable());
+	auto pub = node->create_publisher<unistackbot_interface::msg::JointCommand>("/joint_stream_controller/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable());
 	unistackbot_interface::msg::JointCommand cmd;
 	cmd.mode = unistackbot_interface::msg::JointCommand::MODE_CSP;
 	for (const auto & j : joints)
@@ -478,8 +470,7 @@ int main(int argc, char ** argv)
 		}
 		if (mimic_master_idx[m] < 0)
 		{
-			std::printf("FAIL: mimic 关节 %s 的主关节 %s 不在直控关节表\n",
-				mimics[m].name.c_str(), mimics[m].master.c_str());
+			std::printf("FAIL: mimic 关节 %s 的主关节 %s 不在直控关节表\n", mimics[m].name.c_str(), mimics[m].master.c_str());
 			return 1;
 		}
 	}
@@ -487,12 +478,9 @@ int main(int argc, char ** argv)
 	const double period = 1.0 / hz;
 	const auto t0 = std::chrono::steady_clock::now();
 	uint64_t count = 0;
-	std::printf("发送满速流 @%.1fHz, 时长 %.1fs (pattern=%s, %zu 段, 正弦过渡)...\n",
-		hz, duration, pattern.c_str(), legs.size());
+	std::printf("发送满速流 @%.1fHz, 时长 %.1fs (pattern=%s, %zu 段, 正弦过渡)...\n", hz, duration, pattern.c_str(), legs.size());
 	rclcpp::TimerBase::SharedPtr timer;
-	timer = node->create_wall_timer(
-		std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(period)),
-		[&]()
+	timer = node->create_wall_timer(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(period)), [&]()
 		{
 			const double t =
 				std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -502,9 +490,7 @@ int main(int argc, char ** argv)
 				const double elapsed =
 					std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 				std::printf("结束: %lu 条 / %.2fs = 实际 %.1f Hz (名义 %.1f Hz, 达成率 %.1f%%)。\n"
-					"收尾: 停流, JS 收敛到最后目标保持 (断流语义统一 2026-10-10)\n",
-					static_cast<unsigned long>(count), elapsed, count / std::max(elapsed, 1e-9),
-					hz, 100.0 * count / std::max(hz * elapsed, 1e-9));
+					"收尾: 停流, JS 收敛到最后目标保持 (断流语义统一 2026-10-10)\n", static_cast<unsigned long>(count), elapsed, count / std::max(elapsed, 1e-9), hz, 100.0 * count / std::max(hz * elapsed, 1e-9));
 				rclcpp::shutdown();
 				return;
 			}
@@ -520,9 +506,7 @@ int main(int argc, char ** argv)
 			}
 			for (std::size_t m = 0; m < mimics.size(); ++m)
 			{
-				cmd.position[joints.size() + m] =
-					cmd.position[static_cast<std::size_t>(mimic_master_idx[m])] * mimics[m].k +
-					mimics[m].off;
+				cmd.position[joints.size() + m] = cmd.position[static_cast<std::size_t>(mimic_master_idx[m])] * mimics[m].k + mimics[m].off;
 			}
 			pub->publish(cmd);
 			++count;

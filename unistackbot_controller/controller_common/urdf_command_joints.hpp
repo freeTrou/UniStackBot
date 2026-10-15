@@ -24,10 +24,7 @@ namespace unistackbot_controller
  * 控制器编组 (js_arms/js_torso 等) 归 yaml joints 显式列表, 不在块层过滤 ——
  * mujoco 插件按组件加载, 双块=双仿真实例 (进程单例被打破, 实证 2026-10-14)。
  */
-inline bool parseJointsFromUrdf(
-	const std::string & urdf, std::vector<std::string> & names,
-	std::vector<double> & qmin, std::vector<double> & qmax,
-	std::vector<double> & vmax, std::string & err)
+inline bool parseJointsFromUrdf(const std::string & urdf, std::vector<std::string> & names, std::vector<double> & qmin, std::vector<double> & qmax, std::vector<double> & vmax, std::string & err)
 {
 	tinyxml2::XMLDocument doc;
 	if (doc.Parse(urdf.c_str(), urdf.size()) != tinyxml2::XML_SUCCESS)

@@ -21,8 +21,7 @@ public:
 
 	const std::string & name() const override;
 
-	void step(const std::vector<double> & cmd_position, std::vector<double> & state_position,
-		std::vector<double> & state_velocity, double dt, bool integrate) override;
+	void step(const std::vector<double> & cmd_position, std::vector<double> & state_position, std::vector<double> & state_velocity, double dt, bool integrate) override;
 
 	void transmit(const std::vector<double> & cmd_position) override;
 

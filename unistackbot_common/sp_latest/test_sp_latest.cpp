@@ -128,10 +128,7 @@ void stress_test()
 	const bool final_ok = buf.read(out, s) && out.stamp == kWriterOps;
 	check(final_ok, "stress: final snapshot is last publish");
 	check(dirty.load() == 0, "stress: zero dirty data");
-	std::printf("INFO: reads=%llu misses=%llu tears=%u (写 %llu 拍)\n",
-		static_cast<unsigned long long>(reads.load()),
-		static_cast<unsigned long long>(misses.load()),
-		buf.tears(),
+	std::printf("INFO: reads=%llu misses=%llu tears=%u (写 %llu 拍)\n", static_cast<unsigned long long>(reads.load()), static_cast<unsigned long long>(misses.load()), buf.tears(),
 		static_cast<unsigned long long>(kWriterOps));
 }
 
@@ -198,10 +195,7 @@ void readlast_test()
 		&& out.stamp == 200000;
 	check(final_ok, "readLastFrame: final frame reachable");
 	check(dirty.load() == 0, "readLastFrame: zero dirty (tear/identity/kind)");
-	std::printf("INFO: readLastFrame reads=%llu none=%llu tears=%u (写 200000 拍, 节流5µs)\n",
-		static_cast<unsigned long long>(reads.load()),
-		static_cast<unsigned long long>(nones.load()),
-		buf.tears());
+	std::printf("INFO: readLastFrame reads=%llu none=%llu tears=%u (写 200000 拍, 节流5µs)\n", static_cast<unsigned long long>(reads.load()), static_cast<unsigned long long>(nones.load()), buf.tears());
 }
 
 // ---- readLastFrame 极限工况: 全速背靠背写者 + 4KB 大载荷 (用户验收要求, 2026-09-20) ----
@@ -296,10 +290,7 @@ void readlast_fat_throttled()
 		&& out.stamp == 10000;
 	check(final_ok, "fat-1kHz: final frame reachable");
 	check(dirty.load() == 0, "fat-1kHz: zero dirty @4096B 双向1kHz真实频率");
-	std::printf("INFO: fat-1kHz reads=%llu none=%llu tears=%u (双向 10000 拍 @1kHz, 载荷 %zuB)\n",
-		static_cast<unsigned long long>(reads.load()),
-		static_cast<unsigned long long>(nones.load()),
-		buf.tears(),
+	std::printf("INFO: fat-1kHz reads=%llu none=%llu tears=%u (双向 10000 拍 @1kHz, 载荷 %zuB)\n", static_cast<unsigned long long>(reads.load()), static_cast<unsigned long long>(nones.load()), buf.tears(),
 		sizeof(FatPayload));
 }
 
@@ -399,10 +390,8 @@ void readlast_fat_collide()
 		&& out.stamp == 10000;
 	check(final_ok, "collide: final frame reachable");
 	check(dirty.load() == 0, "collide: zero dirty @必撞工况 (每拍撞写窗)");
-	std::printf("INFO: collide reads=%llu none=%llu | readLastFrame 耗时 µs: p50=%.2f p99=%.2f max=%.2f (n=%zu)\n",
-		static_cast<unsigned long long>(reads.load()),
-		static_cast<unsigned long long>(nones.load()),
-		pct(0.50), pct(0.99), lat_us.empty() ? 0.0 : lat_us.back(), lat_us.size());
+	std::printf("INFO: collide reads=%llu none=%llu | readLastFrame 耗时 µs: p50=%.2f p99=%.2f max=%.2f (n=%zu)\n", static_cast<unsigned long long>(reads.load()),
+		static_cast<unsigned long long>(nones.load()), pct(0.50), pct(0.99), lat_us.empty() ? 0.0 : lat_us.back(), lat_us.size());
 }
 
 void readlast_stress_fat()
@@ -470,12 +459,8 @@ void readlast_stress_fat()
 		&& out.stamp == kFatStressOps;
 	check(final_ok, "fat-stress: final frame reachable after writer stops");
 	check(dirty.load() == 0, "fat-stress: zero dirty @4KB full-speed writer (必撞场景)");
-	std::printf("INFO: fat-stress reads=%llu none=%llu tears=%u (写 %llu 拍全速, 载荷 %zuB)\n",
-		static_cast<unsigned long long>(reads.load()),
-		static_cast<unsigned long long>(nones.load()),
-		buf.tears(),
-		static_cast<unsigned long long>(kFatStressOps),
-		sizeof(FatPayload));
+	std::printf("INFO: fat-stress reads=%llu none=%llu tears=%u (写 %llu 拍全速, 载荷 %zuB)\n", static_cast<unsigned long long>(reads.load()), static_cast<unsigned long long>(nones.load()), buf.tears(),
+		static_cast<unsigned long long>(kFatStressOps), sizeof(FatPayload));
 }
 
 // ---- 双通道全双工测试: 模拟真实工况 (主站 ↔ CM, 两侧等速 1kHz, 各持一个 buf) ----
@@ -601,11 +586,8 @@ void duplex_test()
 	const bool rt = state_ex.read(fin, fs) && fin.echo_cmd + kRoundTripTolerance >= kDuplexCycles;
 	check(rt, "duplex: cmd round-trip intact (echo ~= N)");
 	check(dirty.load() == 0, "duplex: zero dirty data @1kHz equal-rate x100k");
-	std::printf("INFO: cm_reads=%llu master_reads=%llu tears(cmd/state)=%u/%u\n",
-		static_cast<unsigned long long>(cm_reads.load()),
-		static_cast<unsigned long long>(master_reads.load()),
-		cmd_ex.tears(),
-		state_ex.tears());
+	std::printf("INFO: cm_reads=%llu master_reads=%llu tears(cmd/state)=%u/%u\n", static_cast<unsigned long long>(cm_reads.load()), static_cast<unsigned long long>(master_reads.load()),
+		cmd_ex.tears(), state_ex.tears());
 }
 
 // ---- 64 关节大载荷 soak: 1M 拍对称全双工 (64 = 框架契约上界 kMaxJoints, 载荷 ~528B) ----
@@ -725,12 +707,8 @@ void duplex_test_big()
 	const bool rt = state_ex.read(fin, fs) && fin.echo_cmd == kBigCycles;
 	check(rt, "big: cmd round-trip complete (echo == N, 64 joints x1M)");
 	check(dirty.load() == 0, "big: zero dirty data (528B payload)");
-	std::printf("INFO: payload=%zuB cm_reads=%llu master_reads=%llu tears(cmd/state)=%u/%u\n",
-		sizeof(BusStateBig),
-		static_cast<unsigned long long>(cm_reads.load()),
-		static_cast<unsigned long long>(master_reads.load()),
-		cmd_ex.tears(),
-		state_ex.tears());
+	std::printf("INFO: payload=%zuB cm_reads=%llu master_reads=%llu tears(cmd/state)=%u/%u\n", sizeof(BusStateBig), static_cast<unsigned long long>(cm_reads.load()),
+		static_cast<unsigned long long>(master_reads.load()), cmd_ex.tears(), state_ex.tears());
 }
 
 // ---- 电机域结构测试: 32 电机真实契约 (控制 MIT 五元组 / 反馈含温度与故障域) ----
@@ -856,8 +834,7 @@ bool consistent(const BusCmd32 & c)
 	for (size_t i = 0; i < c.motors.size(); ++i)
 	{
 		const MotorCmd & m = c.motors[i];
-		if (m.pos != gen_pos(c.stamp, i) || m.vel != gen_vel(c.stamp, i) || m.tff != gen_tff(c.stamp, i) ||
-			m.kp != gen_kp(c.stamp) || m.kd != gen_kd(c.stamp))
+		if (m.pos != gen_pos(c.stamp, i) || m.vel != gen_vel(c.stamp, i) || m.tff != gen_tff(c.stamp, i) || m.kp != gen_kp(c.stamp) || m.kd != gen_kd(c.stamp))
 		{
 			return false;
 		}
@@ -870,8 +847,7 @@ bool consistent(const BusState32 & st)
 	for (size_t i = 0; i < st.motors.size(); ++i)
 	{
 		const MotorState & m = st.motors[i];
-		if (m.pos != gen_pos(st.stamp, i) || m.vel != gen_vel(st.stamp, i) || m.tff != gen_tff(st.stamp, i) ||
-			m.mos_temp != gen_mos(st.stamp, i) || m.rin_temp != gen_rin(st.stamp, i) ||
+		if (m.pos != gen_pos(st.stamp, i) || m.vel != gen_vel(st.stamp, i) || m.tff != gen_tff(st.stamp, i) || m.mos_temp != gen_mos(st.stamp, i) || m.rin_temp != gen_rin(st.stamp, i) ||
 			m.error_code != gen_err(st.stamp, i) || m.status != gen_status(st.stamp))
 		{
 			return false;
@@ -965,15 +941,8 @@ void duplex_test_motors()
 	check(dirty.load() == 0, "motors: zero dirty data (MIT cmd + temp/err state)");
 	std::printf("INFO: payload cmd=%zuB state=%zuB cm_reads=%llu master_reads=%llu tears=%u/%u | "
 		"域数据抽检: max_mos=%.1f℃ max_rin=%.1f℃ motor0: err=%u status=0x%X\n",
-		sizeof(BusCmd32), sizeof(BusState32),
-		static_cast<unsigned long long>(cm_reads.load()),
-		static_cast<unsigned long long>(master_reads.load()),
-		cmd_ex.tears(),
-		state_ex.tears(),
-		static_cast<double>(max_mos.load()),
-		static_cast<double>(max_rin.load()),
-		fin.motors[0].error_code,
-		fin.motors[0].status);
+		sizeof(BusCmd32), sizeof(BusState32), static_cast<unsigned long long>(cm_reads.load()), static_cast<unsigned long long>(master_reads.load()), cmd_ex.tears(), state_ex.tears(),
+		static_cast<double>(max_mos.load()), static_cast<double>(max_rin.load()), fin.motors[0].error_code, fin.motors[0].status);
 }
 
 }  // namespace

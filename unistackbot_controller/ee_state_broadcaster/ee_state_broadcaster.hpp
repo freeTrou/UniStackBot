@@ -37,22 +37,17 @@ class EeStateBroadcaster : public controller_interface::ControllerInterface
 {
 public:
 	[[nodiscard]] controller_interface::CallbackReturn on_init() override;
-	[[nodiscard]] controller_interface::CallbackReturn on_configure(
-		const rclcpp_lifecycle::State & previous_state) override;
-	[[nodiscard]] controller_interface::CallbackReturn on_activate(
-		const rclcpp_lifecycle::State & previous_state) override;
-	[[nodiscard]] controller_interface::CallbackReturn on_deactivate(
-		const rclcpp_lifecycle::State & previous_state) override;
-	[[nodiscard]] controller_interface::CallbackReturn on_cleanup(
-		const rclcpp_lifecycle::State & previous_state) override;
+	[[nodiscard]] controller_interface::CallbackReturn on_configure(const rclcpp_lifecycle::State & previous_state) override;
+	[[nodiscard]] controller_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State & previous_state) override;
+	[[nodiscard]] controller_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
+	[[nodiscard]] controller_interface::CallbackReturn on_cleanup(const rclcpp_lifecycle::State & previous_state) override;
 
 	[[nodiscard]] controller_interface::InterfaceConfiguration command_interface_configuration()
 	const override;
 	[[nodiscard]] controller_interface::InterfaceConfiguration state_interface_configuration()
 	const override;
 
-	controller_interface::return_type update(
-		const rclcpp::Time & time, const rclcpp::Duration & period) override;
+	controller_interface::return_type update(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
 	// 参数 (on_init 声明)

@@ -85,12 +85,7 @@ public:
 	 * stats:  可选出参 (nullptr 忽略) —— 契约 5
 	 * mode:   见契约 3; 调用方显式声明意图, 不从种子隐式推断
 	 */
-	[[nodiscard]] virtual IkResult solve(
-		const CartesianPose & target,
-		const std::vector<double> & seed,
-		const RedundancyPreference & red,
-		std::vector<double> & out_q,
-		DlsIkStats * stats = nullptr,
+	[[nodiscard]] virtual IkResult solve(const CartesianPose & target, const std::vector<double> & seed, const RedundancyPreference & red, std::vector<double> & out_q, DlsIkStats * stats = nullptr,
 		SolveMode mode = SolveMode::STREAMING) const = 0;
 
 	[[nodiscard]] virtual bool ready() const = 0;

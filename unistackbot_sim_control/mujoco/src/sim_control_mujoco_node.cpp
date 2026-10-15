@@ -112,14 +112,12 @@ int main(int argc, char ** argv)
 					message = "mujoco reset_world 服务未就绪 (链未起?)";
 					return false;
 				}
-				reset_cli->async_send_request(req,
-					[logger](rclcpp::Client<ResetWorld>::SharedFuture future)
+				reset_cli->async_send_request(req, [logger](rclcpp::Client<ResetWorld>::SharedFuture future)
 					{
 						const auto & response = future.get();
 						if (!response->success)
 						{
-							ULOG_WARN("reset_world 应答 success=false: %s",
-								response->message.c_str());
+							ULOG_WARN("reset_world 应答 success=false: %s", response->message.c_str());
 						}
 					});
 				message = "已发送 " + ns + "/reset_world (世界级复位含时间回卷; "
@@ -134,9 +132,7 @@ int main(int argc, char ** argv)
 		}
 	};
 
-	auto reject_all = [](const std::vector<std::string> &,
-		const std::vector<double> &, const std::vector<double> &,
-		SimCommand &, std::string & message)
+	auto reject_all = [](const std::vector<std::string> &, const std::vector<double> &, const std::vector<double> &, SimCommand &, std::string & message)
 	{
 		message = "mujoco adapter: 不支持 set_joint_state 运行期瞬移 "
 			"(原生无等价; ResetWorld 的 state_overrides 是世界级复位+时间回卷, "
@@ -149,11 +145,8 @@ int main(int argc, char ** argv)
 	// 操作态通道: 命令镜像 → kPausedTopic 心跳 (默认回调组, 单线程执行器,
 	// paused_now 与 sink 串行, 无需原子)。句柄必须持有 (裸 create_* 立即析构,
 	// 2026-10-15 gz 适配器同日实锤)
-	auto paused_pub = node->create_publisher<std_msgs::msg::Bool>(
-		unistackbot_sim_control::kPausedTopic, 10);
-	auto paused_timer = node->create_wall_timer(
-		std::chrono::duration<double>(1.0 / unistackbot_sim_control::kPausedTopicHz),
-		[&paused_now, &paused_pub]()
+	auto paused_pub = node->create_publisher<std_msgs::msg::Bool>(unistackbot_sim_control::kPausedTopic, 10);
+	auto paused_timer = node->create_wall_timer(std::chrono::duration<double>(1.0 / unistackbot_sim_control::kPausedTopicHz), [&paused_now, &paused_pub]()
 		{
 			std_msgs::msg::Bool b;
 			b.data = paused_now;
@@ -168,8 +161,7 @@ int main(int argc, char ** argv)
 	}
 	else
 	{
-		ULOG_WARN("mujoco 原生服务 10s 未出现 (%s/*); 链路继续, 调用时将再检",
-			ns.c_str());
+		ULOG_WARN("mujoco 原生服务 10s 未出现 (%s/*); 链路继续, 调用时将再检", ns.c_str());
 	}
 	rclcpp::spin(node);
 	rclcpp::shutdown();

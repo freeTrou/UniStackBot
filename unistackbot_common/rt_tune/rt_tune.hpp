@@ -62,8 +62,7 @@ inline int apply(int cpu, int fifo_prio, int nice_val, const char * name)
 		if (aff_rc != 0)
 		{
 			rc |= rt_tune::kAffinityFailed;
-			std::fprintf(stderr, "rt_tune[%s]: 绑核 %d 失败 (%s) — 继续未绑定\n",
-				name ? name : "?", cpu, std::strerror(aff_rc));
+			std::fprintf(stderr, "rt_tune[%s]: 绑核 %d 失败 (%s) — 继续未绑定\n", name ? name : "?", cpu, std::strerror(aff_rc));
 		}
 	}
 
@@ -76,9 +75,7 @@ inline int apply(int cpu, int fifo_prio, int nice_val, const char * name)
 		{
 			rc |= rt_tune::kFifoFailed;
 			// 降级: SCHED_OTHER + 可配 nice (开发机无 root 的常态路径)
-			std::fprintf(stderr,
-				"rt_tune[%s]: SCHED_FIFO(%d) 失败 (%s) — 降级 SCHED_OTHER (生产需 root/cap_sys_nice)\n",
-				name ? name : "?", fifo_prio, std::strerror(errno));
+			std::fprintf(stderr, "rt_tune[%s]: SCHED_FIFO(%d) 失败 (%s) — 降级 SCHED_OTHER (生产需 root/cap_sys_nice)\n", name ? name : "?", fifo_prio, std::strerror(errno));
 			if (nice_val != 0)
 			{
 				if (setpriority(PRIO_PROCESS, static_cast<id_t>(tid), nice_val) != 0)
@@ -117,9 +114,7 @@ inline int apply(int cpu, int fifo_prio, int nice_val, const char * name)
 			std::strcat(cores, one);
 		}
 	}
-	std::fprintf(stderr, "rt_tune[%s]: tid=%ld policy=%s prio=%d cores=[%s]\n",
-		name ? name : "?", tid,
-		(policy == SCHED_FIFO) ? "FIFO" : (policy == SCHED_RR ? "RR" : "OTHER"),
+	std::fprintf(stderr, "rt_tune[%s]: tid=%ld policy=%s prio=%d cores=[%s]\n", name ? name : "?", tid, (policy == SCHED_FIFO) ? "FIFO" : (policy == SCHED_RR ? "RR" : "OTHER"),
 		cur.sched_priority, cores);
 	return rc;
 }

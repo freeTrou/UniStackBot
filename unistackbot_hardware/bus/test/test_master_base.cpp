@@ -52,14 +52,10 @@ int main()
 	check(true, "MasterBase is abstract");
 
 	// ①b 交互类别完整性 (2026-09-24 用户纠偏后): 周期交换 + 慢通道事务两类都必须在父类
-	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::publish_cmd)>,
-		"PDO-form cyclic exchange present");
-	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::read_param)>,
-		"SDO-form slow-channel read present");
-	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::write_param)>,
-		"SDO-form slow-channel write present");
-	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::quick_stop)>,
-		"immediate command present");
+	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::publish_cmd)>, "PDO-form cyclic exchange present");
+	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::read_param)>, "SDO-form slow-channel read present");
+	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::write_param)>, "SDO-form slow-channel write present");
+	static_assert(std::is_member_function_pointer_v<decltype(&MasterBase::quick_stop)>, "immediate command present");
 	check(true, "interaction categories complete (cyclic + transactional + immediate)");
 
 	// ② 工厂契约: 未知名字拒绝 + 跨包注册机制 (组合根调用)

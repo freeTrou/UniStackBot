@@ -35,8 +35,7 @@ double rotationError(const CartesianPose & a, const CartesianPose & b)
 // 单一事实源: 与 BackendKinematic 同参数同缺省 (5 rad/s); 控制器拿不到
 // HardwareInfo (那是硬件插件的), 只能自行解 XML。
 // 用途 (§16.6 改版): OtgStream Limits 的 max_velocity 源 + 安全钳位步长基准。
-bool parseStepLimits(const std::string & urdf, const std::vector<std::string> & chain_names,
-	std::vector<double> & vmax_out, std::string & err)
+bool parseStepLimits(const std::string & urdf, const std::vector<std::string> & chain_names, std::vector<double> & vmax_out, std::string & err)
 {
 	vmax_out.assign(chain_names.size(), 5.0);
 	tinyxml2::XMLDocument doc;
@@ -65,8 +64,7 @@ bool parseStepLimits(const std::string & urdf, const std::vector<std::string> & 
 				prm = prm->NextSiblingElement("param"))
 			{
 				const char * pn = prm->Attribute("name");
-				if (pn == nullptr || std::strcmp(pn, "max_velocity") != 0 ||
-					prm->GetText() == nullptr)
+				if (pn == nullptr || std::strcmp(pn, "max_velocity") != 0 || prm->GetText() == nullptr)
 				{
 					continue;
 				}
@@ -221,8 +219,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 		std::string lib;
 		try
 		{
-			lib = ament_index_cpp::get_package_share_directory(seed_lib_package_) +
-				"/" + seed_lib_relpath_;
+			lib = ament_index_cpp::get_package_share_directory(seed_lib_package_) + "/" + seed_lib_relpath_;
 		}
 		catch (const std::exception &)
 		{
@@ -268,8 +265,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	const std::uint32_t chain_n = fk_->jointCount();
 	cb_seed_.assign(chain_n, 0.0);
 	cb_q_.assign(chain_n, 0.0);
-	command_sub_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
-		"~/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
+	command_sub_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>("~/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
 		[this, chain_n](const geometry_msgs::msg::PoseStamped::SharedPtr m)
 		{
 			// v1 只收 base 系; 跨系变换是上层职责 (RViz/规划器)。非本帧丢弃,
@@ -280,8 +276,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 				if (frame != warned_frame_)
 				{
 					warned_frame_ = frame;
-					ULOG_WARN("cm: 目标帧 %s != %s, 该帧消息将被丢弃 (v1 仅 base 系)",
-						frame.c_str(), base_link_.c_str());
+					ULOG_WARN("cm: 目标帧 %s != %s, 该帧消息将被丢弃 (v1 仅 base 系)", frame.c_str(), base_link_.c_str());
 				}
 				return;
 			}
@@ -352,8 +347,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 			cb_q_ = cb_seed_;
 			DlsIkStats st;
 			const RedundancyPreference preserve;
-			const auto result = ik_->solve(p, cb_seed_, preserve, cb_q_, &st,
-				unistackbot_algorithm::SolveMode::COLD_START);
+			const auto result = ik_->solve(p, cb_seed_, preserve, cb_q_, &st, unistackbot_algorithm::SolveMode::COLD_START);
 			sol.ok = (result == unistackbot_algorithm::IkResult::OK);
 			sol.result = static_cast<uint8_t>(result);
 			sol.timed_out = st.timed_out;
@@ -370,27 +364,22 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 				// 与控制器脱钩 (2026-09-23 开案, 2026-10-08 收口)
 				if (rej_n_++ % 50 == 0)
 				{
-					ULOG_WARN("cm: IK 未解出 (result=%u, 第 %lu 条不可达类目标; 保持上一目标)",
-						sol.result, static_cast<unsigned long>(rej_n_));
+					ULOG_WARN("cm: IK 未解出 (result=%u, 第 %lu 条不可达类目标; 保持上一目标)", sol.result, static_cast<unsigned long>(rej_n_));
 				}
 			}
 		});
-	pause_sub_ = get_node()->create_subscription<unistackbot_interface::msg::CartesianControl>(
-		"~/pause", rclcpp::QoS(1).transient_local(),
+	pause_sub_ = get_node()->create_subscription<unistackbot_interface::msg::CartesianControl>("~/pause", rclcpp::QoS(1).transient_local(),
 		[this](const unistackbot_interface::msg::CartesianControl::SharedPtr m)
 		{
 			control_mode_.store(m->mode, std::memory_order_release);
 		});
-	status_pub_ = get_node()->create_publisher<unistackbot_interface::msg::CartesianMotionStatus>(
-		"~/status", rclcpp::QoS(1).transient_local());
+	status_pub_ = get_node()->create_publisher<unistackbot_interface::msg::CartesianMotionStatus>("~/status", rclcpp::QoS(1).transient_local());
 	rt_status_ = std::make_shared<realtime_tools::RealtimePublisher<
 		unistackbot_interface::msg::CartesianMotionStatus>>(status_pub_);
 
 	ULOG_INFO("cartesian_motion_controller: 链 %s -> %s (%u 关节, 回调 IK 预算 %.0fms [%s], "
 		"OTG a=%.1f j=%.1f)",
-		base_link_.c_str(), tip_link_.c_str(), fk_->jointCount(),
-		ik_timeout_ms_, ik_adaptive_ ? "message_rate" : "explicit",
-		max_acceleration_, max_jerk_);
+		base_link_.c_str(), tip_link_.c_str(), fk_->jointCount(), ik_timeout_ms_, ik_adaptive_ ? "message_rate" : "explicit", max_acceleration_, max_jerk_);
 	return CallbackReturn::SUCCESS;
 }
 
@@ -437,8 +426,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	// 缺失时 qd 保持 0 = vel_ok 恒真, SETTLED 退化 POSITION —— 不硬拒。
 	if (state_interfaces_.size() < n || command_interfaces_.size() != n)
 	{
-		ULOG_ERROR("cartesian_motion_controller: 接口数不匹配 (state=%zu 需≥%zu cmd=%zu 链=%zu)",
-			state_interfaces_.size(), n, command_interfaces_.size(), n);
+		ULOG_ERROR("cartesian_motion_controller: 接口数不匹配 (state=%zu 需≥%zu cmd=%zu 链=%zu)", state_interfaces_.size(), n, command_interfaces_.size(), n);
 		return CallbackReturn::ERROR;
 	}
 	const std::size_t pos_count = std::min(state_interfaces_.size(), n);   // 前 n 个 = position
@@ -492,8 +480,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	return CallbackReturn::SUCCESS;
 }
 
-controller_interface::return_type CartesianMotionController::update(
-	const rclcpp::Time & time, const rclcpp::Duration & period)
+controller_interface::return_type CartesianMotionController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
 {
 	const auto wcet_t0 = std::chrono::steady_clock::now();
 	const std::size_t n = cmd_.size();
@@ -575,8 +562,7 @@ controller_interface::return_type CartesianMotionController::update(
 			otg_ready_ = true;
 			if (hz_auth > 0)
 			{
-				ULOG_INFO("cm: update_rate %.0f Hz (权威参数; OTG 就绪, 步长 %.4f rad/拍)",
-					hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
+				ULOG_INFO("cm: update_rate %.0f Hz (权威参数; OTG 就绪, 步长 %.4f rad/拍)", hz, step_limits_.empty() ? 0.0 : step_limits_[0]);
 			}
 			else
 			{
@@ -595,8 +581,7 @@ controller_interface::return_type CartesianMotionController::update(
 	//     门控 (2026-10-12 裁决, 词典 ~/pause 条目): 期间新目标照常求解采纳
 	//     (goal_ 更新), 仅停止推进 (OTG 自目标 C2 停); 解除后追最新 goal_。
 	//     失败载荷保持上一关节终点 (连续性根)
-	const bool hold = control_mode_.load(std::memory_order_acquire) ==
-		unistackbot_interface::msg::CartesianControl::HOLD;
+	const bool hold = control_mode_.load(std::memory_order_acquire) == unistackbot_interface::msg::CartesianControl::HOLD;
 	{
 		SolvedTarget sol;
 		uint64_t seq = 0;
@@ -677,8 +662,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_deactivate(co
 		std::sort(srt.begin(), srt.end());
 		const double p50 = srt[srt.size() / 2];
 		const double p99 = srt[srt.size() * 99 / 100];
-		ULOG_INFO("cm: WCET 终报 %lu 拍: p50=%.1fµs p99=%.1fµs max=%.1fµs (OTG 输出级)",
-			static_cast<unsigned long>(update_count_), p50, p99, wcet_max_us_);
+		ULOG_INFO("cm: WCET 终报 %lu 拍: p50=%.1fµs p99=%.1fµs max=%.1fµs (OTG 输出级)", static_cast<unsigned long>(update_count_), p50, p99, wcet_max_us_);
 	}
 	wcet_samples_.clear();
 	update_count_ = 0;   // 拍数随样本同清 (跨激活累计曾把 538+510 报成"1048 拍")
@@ -702,11 +686,9 @@ controller_interface::CallbackReturn CartesianMotionController::on_cleanup(const
 }
 
 // WCET 记账: 每拍两次 steady_clock + 会话样本 (停用时算分位, 验收工具)
-void CartesianMotionController::recordWcet(
-	const std::chrono::steady_clock::time_point & t0)
+void CartesianMotionController::recordWcet(const std::chrono::steady_clock::time_point & t0)
 {
-	const double us = std::chrono::duration<double, std::micro>(
-		std::chrono::steady_clock::now() - t0).count();
+	const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
 	wcet_sum_us_ += us;
 	if (us > wcet_max_us_)
 	{
@@ -717,8 +699,7 @@ void CartesianMotionController::recordWcet(
 }
 
 // RT 周期状态发布: ~20Hz 节流, 消息锁外本地构建, tryPublish 单次拷贝 (零阻塞)
-void CartesianMotionController::publishStatusRt(
-	const rclcpp::Time & time, uint8_t mode, const CartesianPose & meas, bool meas_ok)
+void CartesianMotionController::publishStatusRt(const rclcpp::Time & time, uint8_t mode, const CartesianPose & meas, bool meas_ok)
 {
 	if ((time - last_status_time_).seconds() < 0.05 || !rt_status_)
 	{
@@ -837,8 +818,7 @@ void CartesianMotionController::warmup()
 		{
 			std::vector<double> q_out = cmd_;
 			const RedundancyPreference preserve;
-			(void)ik_->solve(t, cmd_, preserve, q_out, nullptr,
-				unistackbot_algorithm::SolveMode::COLD_START);
+			(void)ik_->solve(t, cmd_, preserve, q_out, nullptr, unistackbot_algorithm::SolveMode::COLD_START);
 		}
 	}
 	// 3) 不可达假目标: 几何预检路径 (结果丢弃)
@@ -848,8 +828,7 @@ void CartesianMotionController::warmup()
 		far.qw = 1.0;
 		std::vector<double> q_out = cmd_;
 		const RedundancyPreference preserve;
-		(void)ik_->solve(far, cmd_, preserve, q_out, nullptr,
-			unistackbot_algorithm::SolveMode::COLD_START);
+		(void)ik_->solve(far, cmd_, preserve, q_out, nullptr, unistackbot_algorithm::SolveMode::COLD_START);
 	}
 	// 4) RealtimePublisher 首拍 (内部互斥与发布路径)
 	{

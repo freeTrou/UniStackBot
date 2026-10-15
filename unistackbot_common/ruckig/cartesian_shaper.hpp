@@ -154,8 +154,7 @@ public:
 		}
 		// ---- 输入消毒: 四元数有限 + 非零范数 ----
 		Eigen::Quaterniond qt = toQuat(target);
-		if (!std::isfinite(qt.w()) || !std::isfinite(qt.x()) ||
-			!std::isfinite(qt.y()) || !std::isfinite(qt.z()) || qt.norm() < 1e-9)
+		if (!std::isfinite(qt.w()) || !std::isfinite(qt.x()) || !std::isfinite(qt.y()) || !std::isfinite(qt.z()) || qt.norm() < 1e-9)
 		{
 			++error_count_;
 			last_error_ = InvalidQuaternion;
@@ -185,8 +184,7 @@ public:
 		out.y = p_out[1];
 		out.z = p_out[2];
 		poseToQuat(q_out_, out);
-		const bool out_finite = std::isfinite(out.x) && std::isfinite(out.y) &&
-			std::isfinite(out.z) && std::isfinite(out.qw) && std::isfinite(out.qx) &&
+		const bool out_finite = std::isfinite(out.x) && std::isfinite(out.y) && std::isfinite(out.z) && std::isfinite(out.qw) && std::isfinite(out.qx) &&
 			std::isfinite(out.qy) && std::isfinite(out.qz);
 		if (!out_finite)
 		{

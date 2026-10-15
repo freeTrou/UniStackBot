@@ -69,8 +69,7 @@ int main(int argc, char ** argv)
 		auto req = std::make_shared<rcl_interfaces::srv::GetParameters::Request>();
 		req->names = {name};
 		auto fut = cli->async_send_request(req);
-		if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(5)) !=
-			rclcpp::FutureReturnCode::SUCCESS)
+		if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(5)) != rclcpp::FutureReturnCode::SUCCESS)
 		{
 			std::fprintf(stderr, "读参数超时\n");
 			std::exit(1);
@@ -126,8 +125,7 @@ int main(int argc, char ** argv)
 		std::fprintf(stderr, "解回代 FK 失败\n");
 		return 1;
 	}
-	const double err = std::sqrt(std::pow(back.x - target.x, 2) + std::pow(back.y - target.y, 2) +
-		std::pow(back.z - target.z, 2));
+	const double err = std::sqrt(std::pow(back.x - target.x, 2) + std::pow(back.y - target.y, 2) + std::pow(back.z - target.z, 2));
 
 	std::printf("joints [");
 	for (unsigned i = 0; i < n; ++i)

@@ -55,20 +55,6 @@ constexpr double kJsDropS = 1.0;      // /joint_states 断流阈值 (核心反�
 constexpr double kEeDropS = 1.0;      // /ee_state 断流阈值
 constexpr double kPausedStaleS = 1.0;   // 暂停心跳静默阈值 (@10Hz 流, 10 拍余量)
 
-// 状态码翻译 (CartesianMotionStatus 常量 → 人话; 仅本节点日志用)
-const char * cmModeName(uint8_t mode)
-{
-	switch (mode)
-	{
-		case CartesianMotionStatus::INACTIVE: {return "INACTIVE";}
-		case CartesianMotionStatus::IDLE: {return "IDLE";}
-		case CartesianMotionStatus::TRACKING: {return "TRACKING";}
-		case CartesianMotionStatus::HOLD: {return "HOLD";}
-		case CartesianMotionStatus::DEGRADED: {return "DEGRADED";}
-		default: {return "?";}
-	}
-}
-
 }  // namespace
 
 int main(int argc, char ** argv)
@@ -100,25 +86,19 @@ int main(int argc, char ** argv)
 	// 异常累计拍数 (按源; 正常拍不清零 —— 语义 = 上电以来异常总量, 趋势可差分)
 	uint64_t cm_count = 0, js_count = 0, ee_count = 0;
 
-	auto sub_cm = node->create_subscription<CartesianMotionStatus>(
-		"/cartesian_motion_controller/status", 10,
-		[&](const CartesianMotionStatus::SharedPtr m)
+	auto sub_cm = node->create_subscription<CartesianMotionStatus>("/cartesian_motion_controller/status", 10, [&](const CartesianMotionStatus::SharedPtr m)
 		{
 			cm_last = *m;
 			cm_seen = true;
 			cm_was_active = m->mode != CartesianMotionStatus::INACTIVE;   // 随帧翻转, 见声明处注释
 			cm_last_stamp = node->now();
 		});
-	auto sub_js = node->create_subscription<sensor_msgs::msg::JointState>(
-		"/joint_states", 10,
-		[&](const sensor_msgs::msg::JointState::SharedPtr)
+	auto sub_js = node->create_subscription<sensor_msgs::msg::JointState>("/joint_states", 10, [&](const sensor_msgs::msg::JointState::SharedPtr)
 		{
 			js_last_time = node->now();
 			js_seen = true;
 		});
-	auto sub_ee = node->create_subscription<geometry_msgs::msg::PoseStamped>(
-		"/ee_state", 10,
-		[&](const geometry_msgs::msg::PoseStamped::SharedPtr)
+	auto sub_ee = node->create_subscription<geometry_msgs::msg::PoseStamped>("/ee_state", 10, [&](const geometry_msgs::msg::PoseStamped::SharedPtr)
 		{
 			ee_last_time = node->now();
 			ee_seen = true;
@@ -131,9 +111,7 @@ int main(int argc, char ** argv)
 	bool paused_seen = false;
 	rclcpp::Time paused_last_time = node->now();
 	// 句柄必须持有 (裸 create_* 立即析构 → 订阅静默, 2026-10-15 实锤)
-	auto paused_sub = node->create_subscription<std_msgs::msg::Bool>(
-		unistackbot_sim_control::kPausedTopic, 10,
-		[&](const std_msgs::msg::Bool::SharedPtr m)
+	auto paused_sub = node->create_subscription<std_msgs::msg::Bool>(unistackbot_sim_control::kPausedTopic, 10, [&](const std_msgs::msg::Bool::SharedPtr m)
 		{
 			paused_value = m->data;
 			paused_seen = true;
@@ -151,8 +129,7 @@ int main(int argc, char ** argv)
 		// 操作态挂起: 暂停心跳有效 (值=true 且未超 kPausedStaleS) = 故意停 ——
 		// 静默类裁决整体挂起 (codes 全 0 保持板形), state=PAUSED。心跳断 (适配器
 		// 死) 即失效回落正常裁决 —— 宁误报不漏报
-		const bool paused = paused_seen && paused_value
-			&& (now - paused_last_time).seconds() <= kPausedStaleS;
+		const bool paused = paused_seen && paused_value && (now - paused_last_time).seconds() <= kPausedStaleS;
 		if (paused)
 		{
 			was_paused = true;

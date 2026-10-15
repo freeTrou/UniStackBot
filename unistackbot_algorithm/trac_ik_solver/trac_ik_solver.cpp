@@ -37,8 +37,7 @@ bool TracIk::init(const UrdfFk * fk, std::string & message)
 	// 远一点 → 构型渐移 (r1_7a mujoco 实测: 纯 +z 平移 2.5s 关节构型漂 3.24 rad,
 	// EE 横向 118mm, "歪歪扭扭"; 对照 dls 粘性 0.84 rad/横向 0mm)。代价 = 每 solve
 	// 烧满预算 (Speed 典型 1-5ms 早退), 30Hz 流配 message_rate 自适应预算消化。
-	solver_ = std::make_unique<TRAC_IK::TRAC_IK>(fk->chain(), lo, hi, timeout_s_,
-		1e-5, TRAC_IK::Distance);
+	solver_ = std::make_unique<TRAC_IK::TRAC_IK>(fk->chain(), lo, hi, timeout_s_, 1e-5, TRAC_IK::Distance);
 	if (solver_ == nullptr)
 	{
 		message = "trac_ik: TRAC_IK 构造失败";
@@ -65,17 +64,10 @@ void TracIk::setBudgetMs(double timeout_ms)
 		lo(i) = qmin_[i];
 		hi(i) = qmax_[i];
 	}
-	solver_ = std::make_unique<TRAC_IK::TRAC_IK>(fk_->chain(), lo, hi, timeout_s_,
-		1e-5, TRAC_IK::Distance);   // maxtime 构造常量 → 重建 (~µs 级); Distance 见 init 注
+	solver_ = std::make_unique<TRAC_IK::TRAC_IK>(fk_->chain(), lo, hi, timeout_s_, 1e-5, TRAC_IK::Distance);   // maxtime 构造常量 → 重建 (~µs 级); Distance 见 init 注
 }
 
-IkResult TracIk::solve(
-	const CartesianPose & target,
-	const std::vector<double> & seed,
-	const RedundancyPreference & red,
-	std::vector<double> & out_q,
-	DlsIkStats * stats,
-	SolveMode mode) const
+IkResult TracIk::solve(const CartesianPose & target, const std::vector<double> & seed, const RedundancyPreference & red, std::vector<double> & out_q, DlsIkStats * stats, SolveMode mode) const
 {
 	if (stats != nullptr)
 	{
@@ -98,13 +90,10 @@ IkResult TracIk::solve(
 		kdl_seed(i) = (mode == SolveMode::STREAMING) ? seed[i]
 			: (qmin_[i] + qmax_[i]) / 2.0;
 	}
-	const KDL::Frame frame(
-		KDL::Rotation::Quaternion(target.qx, target.qy, target.qz, target.qw),
-		KDL::Vector(target.x, target.y, target.z));
+	const KDL::Frame frame(KDL::Rotation::Quaternion(target.qx, target.qy, target.qz, target.qw), KDL::Vector(target.x, target.y, target.z));
 	const auto t0 = std::chrono::steady_clock::now();
 	const int rc = solver_->CartToJnt(kdl_seed, frame, kdl_out);
-	const double us = std::chrono::duration<double, std::micro>(
-		std::chrono::steady_clock::now() - t0).count();
+	const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
 	if (stats != nullptr)
 	{
 		stats->solve_us = us;

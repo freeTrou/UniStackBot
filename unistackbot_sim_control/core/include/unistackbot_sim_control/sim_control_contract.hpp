@@ -104,11 +104,7 @@ public:
 	 * 校验通过后由实现方把请求展开成命令 (mask/positions/velocities 按关节索引填充)。
 	 * 返回 false + 原因时命令不会入队。
 	 */
-	using SetStateValidator = std::function<bool(
-		const std::vector<std::string> & names,
-		const std::vector<double> & positions,
-		const std::vector<double> & velocities,
-		SimCommand & command,
+	using SetStateValidator = std::function<bool(const std::vector<std::string> & names, const std::vector<double> & positions, const std::vector<double> & velocities, SimCommand & command,
 		std::string & message)>;
 
 	//创建五个 /sim_control/* 服务 (同一互斥组, 回调串行)
@@ -118,9 +114,7 @@ public:
 
 		auto make_trigger_service = [&](const std::string & name, SimCmdType type)
 		{
-			auto cb = [this, sink, type](
-				const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
-				std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+			auto cb = [this, sink, type](const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/, std::shared_ptr<std_srvs::srv::Trigger::Response> response)
 			{
 				SimCommand cmd;
 				cmd.type = type;
@@ -134,9 +128,7 @@ public:
 		make_trigger_service("/sim_control/resume", SimCmdType::RESUME);
 		make_trigger_service("/sim_control/step", SimCmdType::STEP);
 
-		auto set_state_cb = [this, sink, validate_set_state](
-			const std::shared_ptr<srv::SetJointState::Request> request,
-			std::shared_ptr<srv::SetJointState::Response> response)
+		auto set_state_cb = [this, sink, validate_set_state](const std::shared_ptr<srv::SetJointState::Request> request, std::shared_ptr<srv::SetJointState::Response> response)
 		{
 			SimCommand cmd;
 			cmd.type = SimCmdType::SET_STATE;
@@ -150,9 +142,7 @@ public:
 			}
 			response->success = sink(cmd, response->message);
 		};
-		services_.push_back(node->create_service<srv::SetJointState>(
-			"/sim_control/set_joint_state", set_state_cb,
-			rmw_qos_profile_services_default, callback_group_));
+		services_.push_back(node->create_service<srv::SetJointState>("/sim_control/set_joint_state", set_state_cb, rmw_qos_profile_services_default, callback_group_));
 	}
 
 private:

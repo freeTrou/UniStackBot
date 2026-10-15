@@ -54,7 +54,7 @@ struct ulog_config
 {
 	bool console = true;             // 终端 sink 开关
 	const char * file_path = nullptr;   // 文件 sink 路径; nullptr = 不写文件
-	ulog_level level = ulog_level::info; // 默认日志等级 
+	ulog_level level = ulog_level::info; // 默认日志等级
 	size_t max_bytes = 10 * 1024 * 1024;   // 单文件上限 (轮转触发) 10MB
 	int backups = 5;                     // 轮转保留份数 (log.1 .. log.N)
 };
@@ -186,15 +186,13 @@ private:
 			{
 				// ENOENT = 首次轮转时 log.N 尚不存在, 常态; 其余失败 (权限/磁盘)
 				// 直写 stderr 诊断 (不得用 ULOG 自身 —— 递归), 轮转尽力继续
-				std::fprintf(stderr, "ulog: 轮转 rename 失败 %s -> %s: %s\n",
-					old_path, new_path, std::strerror(errno));
+				std::fprintf(stderr, "ulog: 轮转 rename 失败 %s -> %s: %s\n", old_path, new_path, std::strerror(errno));
 			}
 		}
 		std::snprintf(new_path, sizeof(new_path), "%s.1", path.c_str());
 		if (::rename(path.c_str(), new_path) != 0 && errno != ENOENT)
 		{
-			std::fprintf(stderr, "ulog: 轮转 rename 失败 %s: %s\n",
-				path.c_str(), std::strerror(errno));
+			std::fprintf(stderr, "ulog: 轮转 rename 失败 %s: %s\n", path.c_str(), std::strerror(errno));
 		}
 		file = std::fopen(path.c_str(), "a");
 		if (file == nullptr)
@@ -226,9 +224,7 @@ private:
 			last_sec = sec;
 		}
 		const size_t sl = last_sl;
-		const int len = std::snprintf(line, sizeof(line), "[%.*s.%03u] [%s] %.*s\n",
-			static_cast<int>(sl), last_stamp, msec,
-			lvname,   // 越界显式判 "UNKNOWN" (加新级别时同步扩表)
+		const int len = std::snprintf(line, sizeof(line), "[%.*s.%03u] [%s] %.*s\n", static_cast<int>(sl), last_stamp, msec, lvname,   // 越界显式判 "UNKNOWN" (加新级别时同步扩表)
 			static_cast<int>(rec.msg_len), rec.msg);
 		if (len <= 0)
 		{
@@ -274,8 +270,7 @@ public:
 		// 无害化让路 (职责边界: ulog 保证不干扰采集等 IO 业务 —— 本线程是日志唯一的
 		// 落盘执行者, 主动在 CPU/IO 调度上降级; 失败静默, 非特权环境无碍)
 		setpriority(PRIO_PROCESS, 0, 10);   // CPU: nice +10, 永远让路
-		::syscall(SYS_ioprio_set, 1 /*IOPRIO_WHO_PROCESS*/, 0,
-			(2 /*IOPRIO_CLASS_BE*/ << 13) | 7 /*最低档*/);   // IO: best-effort 最低优先
+		::syscall(SYS_ioprio_set, 1 /*IOPRIO_WHO_PROCESS*/, 0, (2 /*IOPRIO_CLASS_BE*/ << 13) | 7 /*最低档*/);   // IO: best-effort 最低优先
 		auto last_flush = std::chrono::steady_clock::now();
 		while (running.load(std::memory_order_relaxed))
 		{

@@ -81,8 +81,7 @@ private:
 	// 发布一次状态 (生命周期回调内调用; update 内的周期发布走 RealtimePublisher)
 	void publishStatus(uint8_t mode);
 	// RT 周期状态发布 (update 内, ~20Hz, tryPublish)
-	void publishStatusRt(const rclcpp::Time & time, uint8_t mode,
-		const CartesianPose & meas, bool meas_ok);
+	void publishStatusRt(const rclcpp::Time & time, uint8_t mode, const CartesianPose & meas, bool meas_ok);
 	// 激活末尾预热: 触达全部首触路径 (缺页/惰性绑定/线程私有 syscall), 见设计 §3
 	void warmup();
 	// WCET 记账 (每拍; 停用时终报 p50/p99/max)

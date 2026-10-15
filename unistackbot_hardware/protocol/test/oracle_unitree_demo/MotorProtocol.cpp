@@ -70,10 +70,7 @@ MotorProtocol::MotorProtocol() {
  * - Kp:   k_pos = round(Kp / (RATIO^2) * 12800)
  * - Kd:   k_spd = round(Kd / (RATIO^2) * 51200)
  */
-std::vector<uint8_t> MotorProtocol::buildControlPacket(
-    uint8_t motor_id, uint8_t mode, bool timeout,
-    float torque, float speed, float position,
-    float kp, float kd) {
+std::vector<uint8_t> MotorProtocol::buildControlPacket(uint8_t motor_id, uint8_t mode, bool timeout, float torque, float speed, float position, float kp, float kd) {
 
     // ===== 第1步：参数范围限制 =====
     // 确保所有参数在协议允许的范围内
@@ -152,8 +149,7 @@ std::vector<uint8_t> MotorProtocol::buildControlPacket(
  * @brief 构建清除指令（20字节）
  *
  */
-std::vector<uint8_t> MotorProtocol::buildClearPacket(
-    uint8_t motor_id) {
+std::vector<uint8_t> MotorProtocol::buildClearPacket(uint8_t motor_id) {
 
     // ===== 第1步：参数范围限制 =====
     // 确保所有参数在协议允许的范围内
@@ -206,8 +202,7 @@ std::vector<uint8_t> MotorProtocol::buildClearPacket(
  * @brief 构建复位指令（20字节）
  *
  */
-std::vector<uint8_t> MotorProtocol::buildResetPacket(
-    uint8_t motor_id) {
+std::vector<uint8_t> MotorProtocol::buildResetPacket(uint8_t motor_id) {
 
     // ===== 第1步：参数范围限制 =====
     // 确保所有参数在协议允许的范围内
@@ -402,13 +397,12 @@ int16_t MotorProtocol::clampToInt16(int32_t value) {
 }
 
 int32_t MotorProtocol::clampToInt32(int64_t value) {
-    return static_cast<int32_t>(std::max(INT64_C(-2147483648),
-        std::min(INT64_C(2147483647), value)));
+    return static_cast<int32_t>(std::max(INT64_C(-2147483648), std::min(INT64_C(2147483647), value)));
 }
 
 /**
  * @brief 错误码描述（故障码）
- * 
+ *
  * 根据故障码表按位判断：
  * bit0: 过流
  * bit1: 瞬态过压
@@ -457,7 +451,7 @@ std::string MotorProtocol::getErrorDescription(uint32_t error_code) {
 
 /**
  * @brief 警告码描述
- * 
+ *
  * 根据警告码表按位判断：
  * bit0: 低压电源异常
  */

@@ -41,8 +41,7 @@ int main(int argc, char ** argv)
 	}
 	if (joints_arg.empty() || tip.empty() || base.empty())
 	{
-		std::fprintf(stderr,
-			"用法: fk_tool --joints j1=0.5,... --base <基座link名> --tip <末端link名>\n"
+		std::fprintf(stderr, "用法: fk_tool --joints j1=0.5,... --base <基座link名> --tip <末端link名>\n"
 			"  拓扑无默认值, 必须显式指定 (例 piper: --base base_link --tip link6;"
 			" xarm7: --base link_base --tip link7)\n");
 		return 2;
@@ -83,8 +82,7 @@ int main(int argc, char ** argv)
 		auto req = std::make_shared<rcl_interfaces::srv::GetParameters::Request>();
 		req->names = {name};
 		auto fut = cli->async_send_request(req);
-		if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(5)) !=
-			rclcpp::FutureReturnCode::SUCCESS)
+		if (rclcpp::spin_until_future_complete(node, fut, std::chrono::seconds(5)) != rclcpp::FutureReturnCode::SUCCESS)
 		{
 			std::fprintf(stderr, "读参数超时: %s.%s\n", node_name.c_str(), name.c_str());
 			std::exit(1);

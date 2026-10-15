@@ -43,8 +43,7 @@ public:
 	void deactivate() override;
 	void transmit(const std::vector<double> & cmd_position) override;
 	void requestState(const std::vector<double> & state_position, const std::vector<double> & state_velocity) override;
-	void step(const std::vector<double> & cmd_position, std::vector<double> & state_position,
-		std::vector<double> & state_velocity, double dt, bool integrate) override;
+	void step(const std::vector<double> & cmd_position, std::vector<double> & state_position, std::vector<double> & state_velocity, double dt, bool integrate) override;
 
 private:
 	//plant 线程主循环 (绝对时间节拍; 退出由 running_ 门控, join 至多 1 拍)

@@ -101,17 +101,14 @@ std::uint32_t crc32(const std::uint8_t *data, std::size_t len)
 	return crc;
 }
 
-std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap,
-	const NodeCommand &cmd, std::uint8_t node_id, double ratio)
+std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap, const NodeCommand &cmd, std::uint8_t node_id, double ratio)
 {
-	if (buf == nullptr || cap < kCmdFrameLen || ratio <= 0.0 ||
-		node_id > 14)   // 15=广播, special() 延后项 —— 周期命令路径只允许单播 0..14
+	if (buf == nullptr || cap < kCmdFrameLen || ratio <= 0.0 || node_id > 14)   // 15=广播, special() 延后项 —— 周期命令路径只允许单播 0..14
 	{
 		return 0;
 	}
 	// 非有限输入一票拒绝 (codec 级第一道诚实性; write 层防线在后)
-	if (!std::isfinite(cmd.tau) || !std::isfinite(cmd.speed) ||
-		!std::isfinite(cmd.position) || !std::isfinite(cmd.kp) || !std::isfinite(cmd.kd))
+	if (!std::isfinite(cmd.tau) || !std::isfinite(cmd.speed) || !std::isfinite(cmd.position) || !std::isfinite(cmd.kp) || !std::isfinite(cmd.kd))
 	{
 		return 0;
 	}
@@ -119,8 +116,7 @@ std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap,
 	const double r2 = ratio * ratio;
 	const std::uint8_t mode_bits = cmd.mode == NodeMode::kRun ? 1u
 		: (cmd.mode == NodeMode::kClear ? 6u : 0u);
-	const std::uint8_t mode_byte = static_cast<std::uint8_t>(
-		(node_id & 0x0Fu) |
+	const std::uint8_t mode_byte = static_cast<std::uint8_t>((node_id & 0x0Fu) |
 		(mode_bits << 4) |
 		(cmd.watchdog_enable ? 0x80u : 0x00u));
 
@@ -199,14 +195,12 @@ FrameSpec UnitreeImCore::framespec() const
 	return spec;
 }
 
-std::size_t UnitreeImCore::encode(std::uint8_t *buf, std::size_t cap,
-	const NodeCommand &cmd, std::uint8_t node_id, double ratio) const
+std::size_t UnitreeImCore::encode(std::uint8_t *buf, std::size_t cap, const NodeCommand &cmd, std::uint8_t node_id, double ratio) const
 {
 	return unitree_im::encodeFrame(buf, cap, cmd, node_id, ratio);
 }
 
-bool UnitreeImCore::decode(const std::uint8_t *frame, std::size_t len,
-	NodeFeedback &fb, double ratio) const
+bool UnitreeImCore::decode(const std::uint8_t *frame, std::size_t len, NodeFeedback &fb, double ratio) const
 {
 	return unitree_im::decodeFrame(frame, len, fb, ratio);
 }

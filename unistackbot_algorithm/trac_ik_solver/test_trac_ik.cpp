@@ -50,14 +50,12 @@ static double pct(std::vector<double> & v, double p)
 {
 	if (v.empty()) {return 0.0;}
 	std::sort(v.begin(), v.end());
-	return v[std::min(static_cast<std::size_t>(p * static_cast<double>(v.size() - 1)),
-		v.size() - 1)];
+	return v[std::min(static_cast<std::size_t>(p * static_cast<double>(v.size() - 1)), v.size() - 1)];
 }
 
 static double posErr(const CartesianPose & a, const CartesianPose & b)
 {
-	return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) +
-		(a.z - b.z) * (a.z - b.z));
+	return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z));
 }
 
 static double rotErr(const CartesianPose & a, const CartesianPose & b)
@@ -105,8 +103,7 @@ int main(int argc, char ** argv)
 			if (line.empty() || (line[0] != 'P' && line[0] != 'U')) {continue;}
 			OraclePoint e;
 			double qx = 0, qy = 0, qz = 0;
-			if (std::sscanf(line.c_str(), "%*c %lf %lf %lf %lf %lf %lf %lf",
-				&e.pose.x, &e.pose.y, &e.pose.z, &e.pose.qw, &qx, &qy, &qz) == 7)
+			if (std::sscanf(line.c_str(), "%*c %lf %lf %lf %lf %lf %lf %lf", &e.pose.x, &e.pose.y, &e.pose.z, &e.pose.qw, &qx, &qy, &qz) == 7)
 			{
 				e.pose.qx = qx; e.pose.qy = qy; e.pose.qz = qz;
 				(line[0] == 'P' ? pts : upts).push_back(e);
@@ -138,8 +135,7 @@ int main(int argc, char ** argv)
 			std::vector<double> out(n, -12345.0);
 			const auto t0 = std::chrono::steady_clock::now();
 			const IkResult r = ik.solve(e.pose, q, preserve, out, &st, SolveMode::COLD_START);
-			const double us = std::chrono::duration<double, std::micro>(
-				std::chrono::steady_clock::now() - t0).count();
+			const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
 			if (r != IkResult::OK) {continue;}
 			++ok_n;
 			times.push_back(st.solve_us > 0.0 ? st.solve_us : us);
@@ -152,9 +148,7 @@ int main(int argc, char ** argv)
 		}
 		const double rate = 100.0 * ok_n / static_cast<double>(pts.size());
 		std::printf("[层1 %5.0fms] 成功率 %5.1f%% (%d/%zu)  耗时 p50=%.2fms p95=%.2fms  "
-			"回代 worst pos=%.2e m rot=%.2e rad  (%s)\n",
-			b.ms, rate, ok_n, pts.size(), pct(times, 0.50) / 1000.0,
-			pct(times, 0.95) / 1000.0, pos_worst, rot_worst, b.speed_ref);
+			"回代 worst pos=%.2e m rot=%.2e rad  (%s)\n", b.ms, rate, ok_n, pts.size(), pct(times, 0.50) / 1000.0, pct(times, 0.95) / 1000.0, pos_worst, rot_worst, b.speed_ref);
 		// 阈值含随机重启方差 (±2% 实测): 50ms 生产档 98 / 短档 90
 		CHECK(rate >= (b.ms >= 50.0 ? 98.0 : 90.0));
 		CHECK(pos_worst < 1e-4);        // AB 实测 <1e-4 全过 (适配层 eps 口径)
@@ -174,15 +168,13 @@ int main(int argc, char ** argv)
 		for (const auto & e : upts)
 		{
 			std::vector<double> out(n, -12345.0);
-			if (ik.solve(e.pose, q, preserve, out, nullptr,
-				SolveMode::COLD_START) != IkResult::OK)
+			if (ik.solve(e.pose, q, preserve, out, nullptr, SolveMode::COLD_START) != IkResult::OK)
 			{
 				++rej_ok;
 				continue;
 			}
 			CartesianPose got;
-			if (fk.fk(out, got) &&
-				posErr(got, e.pose) < 1e-4 && rotErr(got, e.pose) < 1e-3)
+			if (fk.fk(out, got) && posErr(got, e.pose) < 1e-4 && rotErr(got, e.pose) < 1e-3)
 			{
 				++mislabel;
 			}
@@ -195,8 +187,7 @@ int main(int argc, char ** argv)
 				}
 			}
 		}
-		std::printf("[层1b 不可达] 拒绝 %d / %zu  误标(解出且闭合) %d  假解(解出不闭合) %d\n",
-			rej_ok, upts.size(), mislabel, fake);
+		std::printf("[层1b 不可达] 拒绝 %d / %zu  误标(解出且闭合) %d  假解(解出不闭合) %d\n", rej_ok, upts.size(), mislabel, fake);
 		CHECK(fake == 0);                       // 绝不出假解 (playbook §5 硬线)
 		CHECK(mislabel * 100 / static_cast<int>(upts.size()) <= 10);  // 误标=oracle 质量, 宽线防劣化
 	}
@@ -220,8 +211,7 @@ int main(int argc, char ** argv)
 				t.x += 0.02 * DX[d];
 				t.y += 0.02 * DY[d];
 				std::vector<double> out(n, 0.0);
-				if (ik.solve(t, mid, preserve, out, nullptr,
-					SolveMode::COLD_START) == IkResult::OK)
+				if (ik.solve(t, mid, preserve, out, nullptr, SolveMode::COLD_START) == IkResult::OK)
 				{
 					++ok8;
 				}
@@ -268,8 +258,7 @@ int main(int argc, char ** argv)
 			std::printf("[层2 流式] 锚 P%zu 圆弧 100 点: 失败 %d (诚实拒, 难区), "
 				"跳步>0.15rad %d, 步长 p50=%.3f p95=%.3f max=%.3f rad, "
 				"最大漂移 |q-q0|=%.2f rad\n",
-				anchor, fail_n, big_step_n, pct(steps, 0.50), pct(steps, 0.95),
-				max_step, max_drift);
+				anchor, fail_n, big_step_n, pct(steps, 0.50), pct(steps, 0.95), max_step, max_drift);
 			// 回归锚 = 2026-10-08 Speed 渐移签名: 构型单调跑飞 (修前 ||q-q0|| 单调
 			// 涨到 3.24 rad)。难区跳分支/诚实拒是几何事实, 不在此断言。
 			CHECK(max_drift < 3.0);
@@ -287,8 +276,7 @@ int main(int argc, char ** argv)
 		CHECK(out == q);   // 失败不改 out_q (契约 1)
 		RedundancyPreference lock{RedundancyType::LOCK_JOINT, {}};
 		std::vector<double> out2(n, 0.0);
-		CHECK(ik.solve(pts[0].pose, q, lock, out2, nullptr,
-			SolveMode::COLD_START) == IkResult::UNSUPPORTED);
+		CHECK(ik.solve(pts[0].pose, q, lock, out2, nullptr, SolveMode::COLD_START) == IkResult::UNSUPPORTED);
 	}
 
 	std::printf("\n结果: PASS=%d FAIL=%d\n", g_pass, g_fail);

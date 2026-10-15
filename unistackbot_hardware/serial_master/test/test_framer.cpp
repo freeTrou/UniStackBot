@@ -74,8 +74,7 @@ int main()
 	std::memset(noisy, 0xAB, sizeof(noisy));
 	std::memcpy(noisy + 6, fb, 26);
 	std::size_t n = fr.push(noisy, sizeof(noisy), out, 8);
-	check(n == 1 && out[0].len == 26 && std::memcmp(out[0].bytes, fb, 26) == 0,
-		"frame found in noise");
+	check(n == 1 && out[0].len == 26 && std::memcmp(out[0].bytes, fb, 26) == 0, "frame found in noise");
 
 	// ② 跨调用拼接: 帧劈两半
 	Framer fr2(spec());

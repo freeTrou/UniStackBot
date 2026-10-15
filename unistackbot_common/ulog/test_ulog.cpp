@@ -159,8 +159,7 @@ void functional_tests()
 	ULOG_ERROR("should-appear");
 	ulog_flush();
 	const size_t after = count_lines(log.c_str());
-	check(after == before + 1 && file_contains(log.c_str(), "should-appear") &&
-			!file_contains(log.c_str(), "should-not-appear"), "filter: level gate works");
+	check(after == before + 1 && file_contains(log.c_str(), "should-appear") && !file_contains(log.c_str(), "should-not-appear"), "filter: level gate works");
 
 	// RAW 快路径: 字面量 memcpy, 无 vsnprintf
 	ulog_set_level(ulog_level::info);
@@ -239,10 +238,8 @@ void level_tests()
 	ULOG_WARN("lv-warn-passes");
 	ULOG_ERROR("lv-error-passes-2");
 	ulog_flush();
-	check(file_contains(log.c_str(), "lv-should-not-2") == false &&
-			file_contains(log.c_str(), "lv-should-not-3") == false, "level: runtime upgrade filters lower");
-	check(file_contains(log.c_str(), "[WARN] lv-warn-passes") &&
-			file_contains(log.c_str(), "[ERROR] lv-error-passes-2"), "level: warn/error pass at warn");
+	check(file_contains(log.c_str(), "lv-should-not-2") == false && file_contains(log.c_str(), "lv-should-not-3") == false, "level: runtime upgrade filters lower");
+	check(file_contains(log.c_str(), "[WARN] lv-warn-passes") && file_contains(log.c_str(), "[ERROR] lv-error-passes-2"), "level: warn/error pass at warn");
 
 	// ④ 只留 error 档
 	ulog_set_level(ulog_level::error);
@@ -373,10 +370,7 @@ void storm_test()
 	std::fclose(f);
 	check(format_ok, "storm: every line well-formed (no torn lines)");
 	check(order_ok, "storm: per-thread subsequence strictly increasing");
-	std::printf("INFO: emitted=%llu written=%llu evicted=%llu\n",
-		static_cast<unsigned long long>(kTotal),
-		static_cast<unsigned long long>(written),
-		static_cast<unsigned long long>(evicted));
+	std::printf("INFO: emitted=%llu written=%llu evicted=%llu\n", static_cast<unsigned long long>(kTotal), static_cast<unsigned long long>(written), static_cast<unsigned long long>(evicted));
 }
 
 // ---- 4. RT-safety: WCET + 零 malloc (线程局部窗口钩子) ----
@@ -415,10 +409,7 @@ void rt_safety_test()
 #else
 	check(max_ns < 50000, "rt: WCET < 50us (x86 实测通常 <5us, 上限留弱平台裕度)");
 #endif
-	std::printf("INFO: emit WCET max=%lluus avg=%lluns mallocs=%d\n",
-		static_cast<unsigned long long>(max_ns / 1000),
-		static_cast<unsigned long long>(total_ns / kOps),
-		g_emit_mallocs);
+	std::printf("INFO: emit WCET max=%lluus avg=%lluns mallocs=%d\n", static_cast<unsigned long long>(max_ns / 1000), static_cast<unsigned long long>(total_ns / kOps), g_emit_mallocs);
 }
 
 // ---- 5. 过载: 8 线程全速 40 万条打 8192 环 → 调用者时延有界 + 账目守恒 ----
@@ -470,11 +461,8 @@ void overload_test()
 	// 5ms = 防死锁哨兵 (8192 环竞争逐出实测 ~100us 量级, 仍是"有界不阻塞", 弱平台留裕度)
 	check(max_emit_ns.load() < 5000000, "overload: caller bounded (<5ms, deadlock sentinel)");
 	check(count_lines(log.c_str()) == written, "overload: file consistent");
-	std::printf("INFO: emitted=%llu written=%llu dropped=%llu max_emit=%lluus\n",
-		static_cast<unsigned long long>(emitted),
-		static_cast<unsigned long long>(written),
-		static_cast<unsigned long long>(dropped),
-		static_cast<unsigned long long>(max_emit_ns.load() / 1000));
+	std::printf("INFO: emitted=%llu written=%llu dropped=%llu max_emit=%lluus\n", static_cast<unsigned long long>(emitted), static_cast<unsigned long long>(written),
+		static_cast<unsigned long long>(dropped), static_cast<unsigned long long>(max_emit_ns.load() / 1000));
 }
 
 }  // namespace
@@ -536,8 +524,7 @@ void refcount_tests()
 		// 首配置 file_path 保持: B 的日志进了 A 的文件 (f0), f1 从未创建
 		std::ifstream in(f0);
 		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-		check(all.find("B line after A shutdown") != std::string::npos,
-			"refcount: 首配置 file_path 保持 (B 日志落 f0)");
+		check(all.find("B line after A shutdown") != std::string::npos, "refcount: 首配置 file_path 保持 (B 日志落 f0)");
 	}
 	check(!std::ifstream(f1.c_str()).good(), "refcount: f1 未被创建 (幂等 init 未重定向)");
 	const uint64_t before_noop = ulog_dropped();
@@ -581,8 +568,7 @@ void raw_flush_tests()
 	{
 		std::ifstream in(f0);
 		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-		check(all.find("raw line while active") != std::string::npos,
-			"raw/flush: flush 返回后文件已可读");
+		check(all.find("raw line while active") != std::string::npos, "raw/flush: flush 返回后文件已可读");
 	}
 
 	// RAW 级别过滤对齐 (评审第二轮): min_level=warn 时 RAW(INFO) 被级别过滤,
@@ -594,8 +580,7 @@ void raw_flush_tests()
 	{
 		std::ifstream in(f0);
 		std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-		check(all.find("raw filtered by level") == std::string::npos,
-			"raw/flush: min_level=warn 时 RAW 被级别过滤");
+		check(all.find("raw filtered by level") == std::string::npos, "raw/flush: min_level=warn 时 RAW 被级别过滤");
 	}
 	ulog_set_level(ulog_level::info);
 

@@ -146,8 +146,7 @@ bool SerialMaster::start(const MasterConfig &cfg)
 			return false;
 		}
 	}
-	if (cfg.baudrate <= 0 || cfg.thread_priority < 0 || cfg.thread_priority > 99 ||
-		cfg.cpu_affinity < -1 || cfg.stale_cycles == 0)
+	if (cfg.baudrate <= 0 || cfg.thread_priority < 0 || cfg.thread_priority > 99 || cfg.cpu_affinity < -1 || cfg.stale_cycles == 0)
 	{
 		return false;
 	}
@@ -175,8 +174,7 @@ bool SerialMaster::start(const MasterConfig &cfg)
 		impl_->io = TermiosTransport::open(cfg.endpoint, cfg.baudrate, err);
 		if (impl_->io == nullptr)
 		{
-			std::fprintf(stderr, "SerialMaster: 打开 %s 失败: %s\n",
-				cfg.endpoint.c_str(), err.c_str());
+			std::fprintf(stderr, "SerialMaster: 打开 %s 失败: %s\n", cfg.endpoint.c_str(), err.c_str());
 			return false;
 		}
 	}
@@ -188,8 +186,7 @@ bool SerialMaster::start(const MasterConfig &cfg)
 			unistackbot_statemachine::createNodeSafety(cfg.statemachine);
 		if (impl_->cycle_.safety[i] == nullptr)
 		{
-			std::fprintf(stderr, "SerialMaster: 未知安全状态机 '%s' (可选: ",
-				cfg.statemachine.c_str());
+			std::fprintf(stderr, "SerialMaster: 未知安全状态机 '%s' (可选: ", cfg.statemachine.c_str());
 			for (const auto &n :
 				unistackbot_statemachine::availableNodeSafetyMachines())
 			{
@@ -219,13 +216,10 @@ bool SerialMaster::start(const MasterConfig &cfg)
 
 void SerialMaster::busLoopMain()
 {
-	unistackbot_common::rt_tune::apply(impl_->cfg.cpu_affinity,
-		impl_->cfg.thread_priority, 0, "serial_bus");
+	unistackbot_common::rt_tune::apply(impl_->cfg.cpu_affinity, impl_->cfg.thread_priority, 0, "serial_bus");
 
-	const std::int64_t period_ns =
-		static_cast<std::int64_t>(kNsPerSec / impl_->cfg.rate_hz);
-	const std::int64_t slot_ns =
-		period_ns / static_cast<std::int64_t>(impl_->cfg.node_count);
+	const std::int64_t period_ns = static_cast<std::int64_t>(kNsPerSec / impl_->cfg.rate_hz);
+	const std::int64_t slot_ns = period_ns / static_cast<std::int64_t>(impl_->cfg.node_count);
 	const std::size_t n = impl_->cfg.node_count;
 	std::int64_t base = clockNowNs() + period_ns;
 
@@ -252,8 +246,7 @@ void SerialMaster::busLoopMain()
 
 		for (std::size_t k = 0; k < n && !impl_->stop_flag.load(); ++k)
 		{
-			std::int64_t target = base +
-				static_cast<std::int64_t>(k) * period_ns / static_cast<std::int64_t>(n);
+			std::int64_t target = base + static_cast<std::int64_t>(k) * period_ns / static_cast<std::int64_t>(n);
 			// ── 追帧跳过纪律: 逾期超一个时隙即跳未来, 绝不补发 ──
 			const std::int64_t behind = clockNowNs() - target;
 			if (behind > slot_ns)
@@ -275,9 +268,7 @@ void SerialMaster::runSlot(std::size_t k)
 {
 	resolveSlotCmd(k);
 
-	const std::size_t fn = impl_->proto->encode(impl_->work_.tx_frame,
-		sizeof(impl_->work_.tx_frame), impl_->work_.slot_cmd,
-		impl_->cfg.node_id[k], impl_->cfg.ratio[k]);
+	const std::size_t fn = impl_->proto->encode(impl_->work_.tx_frame, sizeof(impl_->work_.tx_frame), impl_->work_.slot_cmd, impl_->cfg.node_id[k], impl_->cfg.ratio[k]);
 	if (fn == 0)
 	{
 		++telemetry_.tx_failed;
@@ -359,15 +350,12 @@ void SerialMaster::drainAndDecode()
 		{
 			break;
 		}
-		const ssize_t r = impl_->io->read(impl_->work_.rx_chunk,
-			sizeof(impl_->work_.rx_chunk));
+		const ssize_t r = impl_->io->read(impl_->work_.rx_chunk, sizeof(impl_->work_.rx_chunk));
 		if (r <= 0)
 		{
 			break;
 		}
-		const std::size_t produced = impl_->cycle_.framer.push(
-			impl_->work_.rx_chunk, static_cast<std::size_t>(r),
-			impl_->work_.rx_frames, kRxBurst);
+		const std::size_t produced = impl_->cycle_.framer.push(impl_->work_.rx_chunk, static_cast<std::size_t>(r), impl_->work_.rx_frames, kRxBurst);
 		for (std::size_t f = 0; f < produced; ++f)
 		{
 			classifyFrame(impl_->work_.rx_frames[f]);
@@ -381,8 +369,7 @@ void SerialMaster::drainAndDecode()
 
 void SerialMaster::classifyFrame(const ExtractedFrame &frame)
 {
-	if (!impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb,
-			impl_->cfg.ratio[0]))
+	if (!impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb, impl_->cfg.ratio[0]))
 	{
 		++telemetry_.rx_rejected;
 		return;
@@ -393,8 +380,7 @@ void SerialMaster::classifyFrame(const ExtractedFrame &frame)
 		++telemetry_.rx_nofit;
 		return;
 	}
-	(void)impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb,
-		impl_->cfg.ratio[i]);
+	(void)impl_->proto->decode(frame.bytes, frame.len, impl_->work_.rx_fb, impl_->cfg.ratio[i]);
 	impl_->cycle_.fb[i] = impl_->work_.rx_fb;
 	impl_->cycle_.last_seen_cycle[i] = impl_->cycle_.cycle;
 	++telemetry_.rx_frames;
@@ -459,8 +445,7 @@ void SerialMaster::publish_cmd(const BusCommand &cmd)
 bool SerialMaster::take_state(BusState &out)
 {
 	uint64_t seq = 0;
-	return impl_->state_ch.readLastFrame(out, seq) ==
-		unistackbot_common::SpLatest<BusState>::FrameKind::kLive;
+	return impl_->state_ch.readLastFrame(out, seq) == unistackbot_common::SpLatest<BusState>::FrameKind::kLive;
 }
 
 void SerialMaster::quick_stop()
@@ -489,9 +474,7 @@ NeutralState SerialMaster::state() const
 			any = true;
 			continue;
 		}
-		if (s == NeutralState::kFault ||
-			(s == NeutralState::kQuickStop && agg != NeutralState::kFault) ||
-			(s == NeutralState::kUnknown && agg != NeutralState::kFault &&
+		if (s == NeutralState::kFault || (s == NeutralState::kQuickStop && agg != NeutralState::kFault) || (s == NeutralState::kUnknown && agg != NeutralState::kFault &&
 				agg != NeutralState::kQuickStop))
 		{
 			agg = s;

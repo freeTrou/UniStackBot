@@ -30,8 +30,7 @@ public:
 
 	// 喂字节流, 吐完整帧到 out (至多 max_out 帧), 返回吐出帧数。
 	// 残缺帧留内部缓冲等下批; 纯噪声只保留可能是帧头首字节的 1 字节。
-	std::size_t push(const std::uint8_t *data, std::size_t n,
-		ExtractedFrame *out, std::size_t max_out);
+	std::size_t push(const std::uint8_t *data, std::size_t n, ExtractedFrame *out, std::size_t max_out);
 
 	// 丢弃内部缓冲 (段复位用)
 	void reset();

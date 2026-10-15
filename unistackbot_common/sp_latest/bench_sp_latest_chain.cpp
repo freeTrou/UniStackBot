@@ -238,8 +238,7 @@ struct BusArg
 	int32_t tune_rc = -1;
 };
 
-void busMain(BusArg *a, unistackbot_common::SpLatest<Feedback> *ch_fb,
-	unistackbot_common::SpLatest<Command> *ch_cmd)
+void busMain(BusArg *a, unistackbot_common::SpLatest<Feedback> *ch_fb, unistackbot_common::SpLatest<Command> *ch_cmd)
 {
 	stackPad();
 	a->tune_rc = unistackbot_common::rt_tune::apply(kCpuBus, kPrioBus, 0, "chain_bus");
@@ -356,8 +355,7 @@ struct CmArg
 	int32_t tune_rc = -1;
 };
 
-void cmMain(CmArg *a, unistackbot_common::SpLatest<Feedback> *ch_fb,
-	unistackbot_common::SpLatest<Command> *ch_cmd)
+void cmMain(CmArg *a, unistackbot_common::SpLatest<Feedback> *ch_fb, unistackbot_common::SpLatest<Command> *ch_cmd)
 {
 	stackPad();
 	a->tune_rc = unistackbot_common::rt_tune::apply(kCpuCm, kPrioCm, 0, "chain_cm");
@@ -449,15 +447,12 @@ void printLine(const char *tag, const WinArg &c)
 	w.resize(static_cast<size_t>(cs.wake.n));
 	std::vector<double> e = cs.e2e.all_us;
 	e.resize(static_cast<size_t>(cs.e2e.n));
-	std::printf(
-		"%s wake: p50=%.1f p99=%.1f max=%.1fµs (>100: %" PRId64 "/%" PRId64 ") | "
+	std::printf("%s wake: p50=%.1f p99=%.1f max=%.1fµs (>100: %" PRId64 "/%" PRId64 ") | "
 		"e2e: p50=%.0f p99=%.0f max=%.0fµs | miss=%" PRId64 " 旧帧=%" PRId64 " init帧=%" PRId64 " 尾窗=%" PRId64 "/%" PRId32 " | "
 		"跟踪 errRMS=%.4f max=%.4f | seq 0/1/2/>2: %" PRId64 "/%" PRId64 "/%" PRId64 "/%" PRId64 "\n",
-		tag, percentileUs(w, 0.50), percentileUs(w, 0.99), cs.wake.max_us, cs.wake.over_100, cs.wake.n,
-		percentileUs(e, 0.50), percentileUs(e, 0.99), percentileUs(e, 1.0),
+		tag, percentileUs(w, 0.50), percentileUs(w, 0.99), cs.wake.max_us, cs.wake.over_100, cs.wake.n, percentileUs(e, 0.50), percentileUs(e, 0.99), percentileUs(e, 1.0),
 		cs.miss, cs.stale_frames, cs.init_frames, cs.miss_ring_sum, kMissRingN,
-		(cs.err_n > 0) ? std::sqrt(cs.err_sum_sq / static_cast<double>(cs.err_n)) : 0.0, cs.err_max,
-		cs.seq_d0, cs.seq_d1, cs.seq_d2, cs.seq_dgt2);
+		(cs.err_n > 0) ? std::sqrt(cs.err_sum_sq / static_cast<double>(cs.err_n)) : 0.0, cs.err_max, cs.seq_d0, cs.seq_d1, cs.seq_d2, cs.seq_dgt2);
 }
 
 }  // namespace
@@ -495,8 +490,7 @@ int main(int argc, char **argv)
 		? phase_arg * 1000LL
 		: [&]()
 		{
-			std::mt19937_64 rng(static_cast<uint64_t>(
-				std::chrono::steady_clock::now().time_since_epoch().count()));
+			std::mt19937_64 rng(static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count()));
 			return static_cast<int64_t>(rng() % static_cast<uint64_t>(cm_period)) * 1000LL;
 		}();
 
@@ -531,8 +525,7 @@ int main(int argc, char **argv)
 
 	const uint32_t t_fb = ch_fb.tears();
 	const uint32_t t_cmd = ch_cmd.tears();
-	std::printf("总线 核%d FIFO%" PRId32 " @%.0fHz | CM 核%d FIFO%" PRId32 " @%.0fHz 相位=%" PRId64 "µs | 撕裂 fb/cmd=%u/%u\n",
-		kCpuBus, kPrioBus, 1.0e6 / static_cast<double>(bus_period),
+	std::printf("总线 核%d FIFO%" PRId32 " @%.0fHz | CM 核%d FIFO%" PRId32 " @%.0fHz 相位=%" PRId64 "µs | 撕裂 fb/cmd=%u/%u\n", kCpuBus, kPrioBus, 1.0e6 / static_cast<double>(bus_period),
 		kCpuCm, kPrioCm, 1.0e6 / static_cast<double>(cm_period), cm_phase_ns / 1000, t_fb, t_cmd);
 	printLine("[bus]", ba.common);
 	printLine("[cm ]", ca.common);

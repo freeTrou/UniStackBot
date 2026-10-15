@@ -74,18 +74,13 @@ bool DlsIk::loadSeedLibrary(const std::string & path, std::string & message)
 		SeedEntry e;
 		e.q.resize(n);
 		double j[16] = {0};
-		if (std::sscanf(ln.substr(0, bar).c_str(), "%lf %lf %lf %lf %lf %lf %lf",
-			&e.pose.qw, &e.pose.qx, &e.pose.qy, &e.pose.qz,
-			&e.pose.x, &e.pose.y, &e.pose.z) != 7)
+		if (std::sscanf(ln.substr(0, bar).c_str(), "%lf %lf %lf %lf %lf %lf %lf", &e.pose.qw, &e.pose.qx, &e.pose.qy, &e.pose.qz, &e.pose.x, &e.pose.y, &e.pose.z) != 7)
 		{
 			std::fclose(f);
 			message = "种子库位姿段解析失败: " + ln.substr(0, 40);
 			return false;
 		}
-		if (std::sscanf(ln.substr(bar + 1).c_str(),
-			"%lf %lf %lf %lf %lf %lf %lf %d",
-			&j[0], &j[1], &j[2], &j[3], &j[4], &j[5], &j[6], &e.branch) !=
-			static_cast<int>(n) + 1)
+		if (std::sscanf(ln.substr(bar + 1).c_str(), "%lf %lf %lf %lf %lf %lf %lf %d", &j[0], &j[1], &j[2], &j[3], &j[4], &j[5], &j[6], &e.branch) != static_cast<int>(n) + 1)
 		{
 			std::fclose(f);
 			message = "种子库关节段解析失败 (列数应 = 关节数 + 分支标签): " + ln.substr(0, 40);
@@ -113,12 +108,8 @@ bool DlsIk::loadSeedLibrary(const std::string & path, std::string & message)
 		}
 		// FK 一致性 (关节序错配/文件损坏当场暴露; 装载期一次性成本)
 		CartesianPose back;
-		if (!fk_->fk(e.q, back) ||
-			std::sqrt((back.x - e.pose.x) * (back.x - e.pose.x) +
-				(back.y - e.pose.y) * (back.y - e.pose.y) +
-				(back.z - e.pose.z) * (back.z - e.pose.z)) > 1e-3 ||
-			std::fabs(back.qw * e.pose.qw + back.qx * e.pose.qx +
-				back.qy * e.pose.qy + back.qz * e.pose.qz) < 0.99999)
+		if (!fk_->fk(e.q, back) || std::sqrt((back.x - e.pose.x) * (back.x - e.pose.x) + (back.y - e.pose.y) * (back.y - e.pose.y) + (back.z - e.pose.z) * (back.z - e.pose.z)) > 1e-3 ||
+			std::fabs(back.qw * e.pose.qw + back.qx * e.pose.qx + back.qy * e.pose.qy + back.qz * e.pose.qz) < 0.99999)
 		{
 			std::fclose(f);
 			message = "种子库 FK 一致性失败 (第 " + std::to_string(seed_lib_.size()) + " 条)";
@@ -160,9 +151,7 @@ Eigen::Matrix<double, 6, 1> DlsIk::poseError(const CartesianPose & a, const Cart
 	return e;
 }
 
-void DlsIk::nullspaceGradient(
-	const std::vector<double> & q, const RedundancyPreference & /*red*/,
-	std::vector<double> & grad, UrdfFk::Scratch & fk_scratch) const
+void DlsIk::nullspaceGradient(const std::vector<double> & q, const RedundancyPreference & /*red*/, std::vector<double> & grad, UrdfFk::Scratch & fk_scratch) const
 {
 	const auto & lo = fk_->qMin();
 	const auto & hi = fk_->qMax();
@@ -229,9 +218,7 @@ void DlsIk::nullspaceGradient(
 	}
 }
 
-IkResult DlsIk::solveOnce(
-	const CartesianPose & target, const std::vector<double> & seed,
-	const RedundancyPreference & red, std::vector<double> & out_q,
+IkResult DlsIk::solveOnce(const CartesianPose & target, const std::vector<double> & seed, const RedundancyPreference & red, std::vector<double> & out_q,
 	const std::chrono::steady_clock::time_point & deadline,
 	int iter_cap,
 	int * iterations_used,
@@ -249,30 +236,25 @@ IkResult DlsIk::solveOnce(
 	const auto & hi = fk_->qMax();
 	// LOCK_JOINT: 锁定值取自种子表达 (锁值越限在调用入口已查)
 	std::vector<double> q = seed;
-	const int locked = (red.type == RedundancyType::LOCK_JOINT &&
-		red.joint_index < n) ? static_cast<int>(red.joint_index) : -1;
+	const int locked = (red.type == RedundancyType::LOCK_JOINT && red.joint_index < n) ? static_cast<int>(red.joint_index) : -1;
 
 	// ---- 稳态零分配 (RT 纪律 + 迭代成本): 全部暂存一次定容, 迭代内只复用。
 	// SVD 对象循环外构造、compute() 复用其存储 (同尺寸 resize 为空操作) ----
 	std::vector<double> grad, jac_row(6 * n, 0.0);
 	std::vector<double> q_prev_iter(n), q_try(n);
 	Eigen::MatrixXd J(6, static_cast<Eigen::Index>(n));
-	Eigen::JacobiSVD<Eigen::MatrixXd> svd(6, static_cast<Eigen::Index>(n),
-		Eigen::ComputeThinU | Eigen::ComputeThinV);
+	Eigen::JacobiSVD<Eigen::MatrixXd> svd(6, static_cast<Eigen::Index>(n), Eigen::ComputeThinU | Eigen::ComputeThinV);
 	const Eigen::Index m = std::min<Eigen::Index>(6, static_cast<Eigen::Index>(n));
 	Eigen::VectorXd sv_inv(m), Ute(m), scaled(m);
-	Eigen::VectorXd dq(static_cast<Eigen::Index>(n)), dq_main(static_cast<Eigen::Index>(n)),
-		dq_null(static_cast<Eigen::Index>(n)), grad_e(static_cast<Eigen::Index>(n)),
+	Eigen::VectorXd dq(static_cast<Eigen::Index>(n)), dq_main(static_cast<Eigen::Index>(n)), dq_null(static_cast<Eigen::Index>(n)), grad_e(static_cast<Eigen::Index>(n)),
 		grad_scaled(static_cast<Eigen::Index>(n));
-	Eigen::MatrixXd Jpinv(static_cast<Eigen::Index>(n), 6), N(static_cast<Eigen::Index>(n),
-		static_cast<Eigen::Index>(n));
+	Eigen::MatrixXd Jpinv(static_cast<Eigen::Index>(n), 6), N(static_cast<Eigen::Index>(n), static_cast<Eigen::Index>(n));
 	UrdfFk::Scratch fk_scratch;
 	int ls_fail_streak = 0;
 
 	// 加权误差向量: e = [e_p; w_rot·e_r] —— 米与弧度量纲平衡 (w_rot=1 时姿态
 	// 主导步长, 位置收敛慢且易震荡, 2026-09-17 实测; 0.5 拖动场景显著更稳)
-	auto weightedError = [&](const CartesianPose & cur, Eigen::Matrix<double, 6, 1> & e_out,
-		double & pos_err, double & rot_err)
+	auto weightedError = [&](const CartesianPose & cur, Eigen::Matrix<double, 6, 1> & e_out, double & pos_err, double & rot_err)
 	{
 		e_out = poseError(cur, target);
 		pos_err = e_out.head<3>().norm();
@@ -349,8 +331,7 @@ IkResult DlsIk::solveOnce(
 		// λ² = λ₀²(1−σ/σ_thr)², 否则 λ=λ₀ —— 阻尼随奇异接近度平滑增长
 		const double sigma_thr = 0.1;
 		const double ratio = std::min(smin / sigma_thr, 1.0);
-		const double lam = std::clamp(cfg_.lambda_base * (1.0 + 3.0 * (1.0 - ratio)),
-			cfg_.lambda_base, cfg_.lambda_max);
+		const double lam = std::clamp(cfg_.lambda_base * (1.0 + 3.0 * (1.0 - ratio)), cfg_.lambda_base, cfg_.lambda_max);
 		for (Eigen::Index i = 0; i < sv.size(); ++i)
 		{
 			sv_inv(i) = sv(i) / (sv(i) * sv(i) + lam * lam);
@@ -450,13 +431,7 @@ IkResult DlsIk::solveOnce(
 	return finish_once(IkResult::ITERATION_LIMIT);
 }
 
-IkResult DlsIk::solve(
-	const CartesianPose & target,
-	const std::vector<double> & seed,
-	const RedundancyPreference & red,
-	std::vector<double> & out_q,
-	DlsIkStats * stats,
-	SolveMode mode) const
+IkResult DlsIk::solve(const CartesianPose & target, const std::vector<double> & seed, const RedundancyPreference & red, std::vector<double> & out_q, DlsIkStats * stats, SolveMode mode) const
 {
 	const auto t0 = std::chrono::steady_clock::now();
 	// 墙钟预算: timeout_ns≠0 → deadline = t0+预算 (覆盖级0种子+全部重启);
@@ -470,8 +445,7 @@ IkResult DlsIk::solve(
 		if (stats)
 		{
 			stats->ok = (r == IkResult::OK);
-			stats->solve_us = std::chrono::duration<double, std::micro>(
-				std::chrono::steady_clock::now() - t0).count();
+			stats->solve_us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
 			stats->timed_out = timed_out;
 			if (!stats->ok) {stats->iterations = 0;}
 		}
@@ -510,8 +484,7 @@ IkResult DlsIk::solve(
 	// 几何预检: 目标距离超链长上界 -> UNREACHABLE (诚实失败, 不烧迭代;
 	// 粗上界只拦"显然不可达", 姿态级不可达仍走迭代 -> ITERATION_LIMIT)
 	{
-		const double dist = std::sqrt(target.x * target.x + target.y * target.y +
-			target.z * target.z);
+		const double dist = std::sqrt(target.x * target.x + target.y * target.y + target.z * target.z);
 		if (dist > fk_->maxReach())
 		{
 			return finish(IkResult::UNREACHABLE);
@@ -536,8 +509,7 @@ IkResult DlsIk::solve(
 	// 失败尝试; sticky_* = 粘性拒绝的收敛解 (有解被拒 ≠ 不可解, 分类语义分开)
 	double att_sigma = -1.0, att_err = -1.0;
 	double best_fail_err = 1e9, best_fail_sigma = -1.0, sticky_sigma = -1.0;
-	IkResult r = solveOnce(target, seed, red, sol, deadline, cfg_.max_iterations, &iters,
-		&att_sigma, &att_err);
+	IkResult r = solveOnce(target, seed, red, sol, deadline, cfg_.max_iterations, &iters, &att_sigma, &att_err);
 	if (r == IkResult::OK)
 	{
 		if (stats) {stats->iterations = iters; stats->restarts_used = 0; stats->min_sigma = att_sigma;}
@@ -560,17 +532,12 @@ IkResult DlsIk::solve(
 		for (std::size_t i = 0; i < seed_lib_.size(); ++i)
 		{
 			const SeedEntry & e = seed_lib_[i];
-			const double dp = std::sqrt(
-				(e.pose.x - target.x) * (e.pose.x - target.x) +
-				(e.pose.y - target.y) * (e.pose.y - target.y) +
-				(e.pose.z - target.z) * (e.pose.z - target.z));
-			const double qd = std::fabs(target.qw * e.pose.qw + target.qx * e.pose.qx +
-				target.qy * e.pose.qy + target.qz * e.pose.qz);
+			const double dp = std::sqrt((e.pose.x - target.x) * (e.pose.x - target.x) + (e.pose.y - target.y) * (e.pose.y - target.y) + (e.pose.z - target.z) * (e.pose.z - target.z));
+			const double qd = std::fabs(target.qw * e.pose.qw + target.qx * e.pose.qx + target.qy * e.pose.qy + target.qz * e.pose.qz);
 			lib_scratch_.emplace_back(dp + kLibRankRotWeight * (1.0 - qd), i);
 		}
 		const std::size_t pool = std::min(lib_scratch_.size(), kLibPool);
-		std::partial_sort(lib_scratch_.begin(),
-			lib_scratch_.begin() + static_cast<std::ptrdiff_t>(pool), lib_scratch_.end());
+		std::partial_sort(lib_scratch_.begin(), lib_scratch_.begin() + static_cast<std::ptrdiff_t>(pool), lib_scratch_.end());
 		int branch_cnt[kLibBranchCount] = {0, 0, 0, 0};
 		std::size_t picked = 0;
 		for (std::size_t pi = 0; pi < pool && picked < kLibTopK; ++pi)
@@ -581,8 +548,7 @@ IkResult DlsIk::solve(
 			branch_cnt[e.branch] += 1;
 			const int restart_cap_eff = (cfg_.restart_max_iterations > 0)
 				? cfg_.restart_max_iterations : cfg_.max_iterations;
-			r = solveOnce(target, e.q, red, sol, deadline, restart_cap_eff, &iters,
-				&att_sigma, &att_err);
+			r = solveOnce(target, e.q, red, sol, deadline, restart_cap_eff, &iters, &att_sigma, &att_err);
 			if (stats) {stats->restarts_used = static_cast<int>(picked) + 1;}
 			++picked;
 			if (r == IkResult::OK)
@@ -637,8 +603,7 @@ IkResult DlsIk::solve(
 			else if (attempt <= 4)
 			{
 				// 分支代表 + 小扰动 (跳出精确中心的局部性)
-				std::uniform_real_distribution<double> dist(kBranch[attempt - 1][i] - 0.25,
-					kBranch[attempt - 1][i] + 0.25);
+				std::uniform_real_distribution<double> dist(kBranch[attempt - 1][i] - 0.25, kBranch[attempt - 1][i] + 0.25);
 				s[i] = std::clamp(dist(gen), lo[i], hi[i]);
 			}
 			else if (narrow_slots > 0 && attempt <= 4 + narrow_slots)
@@ -722,9 +687,7 @@ IkResult DlsIk::solve(
 			}
 			stats->min_sigma = sticky_sigma;
 		}
-		ULOG_WARN("dls_ik 失败(粘性拒绝): 目标(%.3f,%.3f,%.3f) 重启%d次 最近解距种子%.2frad 位置残差%.4fm",
-			target.x, target.y, target.z,
-			stats ? stats->restarts_used : cfg_.restart_count,
+		ULOG_WARN("dls_ik 失败(粘性拒绝): 目标(%.3f,%.3f,%.3f) 重启%d次 最近解距种子%.2frad 位置残差%.4fm", target.x, target.y, target.z, stats ? stats->restarts_used : cfg_.restart_count,
 			best_dist < 1e8 ? best_dist : -1.0, best_final_err);
 		return finish(IkResult::ITERATION_LIMIT);
 	}
@@ -733,15 +696,10 @@ IkResult DlsIk::solve(
 		stats->final_err = best_fail_err;
 		stats->min_sigma = best_fail_sigma;
 	}
-	ULOG_WARN("dls_ik 失败%s%s: 目标(%.3f,%.3f,%.3f) 重启%d次 σ_min=%.3f 加权残差%.4f",
-		timed_out ? "(超时)" : "",
-		(cfg_.near_singular_sigma > 0.0 && best_fail_sigma >= 0.0 &&
-			best_fail_sigma < cfg_.near_singular_sigma) ? "(近奇异)" : "",
-		target.x, target.y, target.z,
-		stats ? stats->restarts_used : cfg_.restart_count,
+	ULOG_WARN("dls_ik 失败%s%s: 目标(%.3f,%.3f,%.3f) 重启%d次 σ_min=%.3f 加权残差%.4f", timed_out ? "(超时)" : "", (cfg_.near_singular_sigma > 0.0 && best_fail_sigma >= 0.0 &&
+			best_fail_sigma < cfg_.near_singular_sigma) ? "(近奇异)" : "", target.x, target.y, target.z, stats ? stats->restarts_used : cfg_.restart_count,
 		best_fail_sigma, best_fail_err < 1e8 ? best_fail_err : -1.0);
-	if (cfg_.near_singular_sigma > 0.0 && best_fail_sigma >= 0.0 &&
-		best_fail_sigma < cfg_.near_singular_sigma)
+	if (cfg_.near_singular_sigma > 0.0 && best_fail_sigma >= 0.0 && best_fail_sigma < cfg_.near_singular_sigma)
 	{
 		return finish(IkResult::NEAR_SINGULAR);
 	}

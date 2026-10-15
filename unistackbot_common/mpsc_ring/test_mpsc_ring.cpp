@@ -174,11 +174,8 @@ void stress_test()
 	// 账目守恒: 收到 + 逐出 + 残留 == 推入 (无幽灵/无凭空)
 	check(received.load() + ring.evicted() + remain == pushed, "stress: accounting (recv+evict+remain == pushed)");
 	check(bad.load() == 0, "stress: per-pid monotonic, no dup/tear");
-	std::printf("INFO: pushed=%llu received=%llu evicted=%llu remain=%llu\n",
-		static_cast<unsigned long long>(pushed),
-		static_cast<unsigned long long>(received.load()),
-		static_cast<unsigned long long>(ring.evicted()),
-		static_cast<unsigned long long>(remain));
+	std::printf("INFO: pushed=%llu received=%llu evicted=%llu remain=%llu\n", static_cast<unsigned long long>(pushed), static_cast<unsigned long long>(received.load()),
+		static_cast<unsigned long long>(ring.evicted()), static_cast<unsigned long long>(remain));
 }
 
 // 消费者停摆自援: 消费者睡 200ms, 生产者照常推 5 万条 (小环) → 生产者有界完成, 不挂死
@@ -252,9 +249,7 @@ void stall_selfaid_test()
 	check(bad.load() == 0, "stall: concurrent resume consumption consistent (mono + no tear)");
 	check(last_seen.load() == 50000, "stall: newest record arrives after resume");
 	check(received.load() + ring.evicted() == 50000, "stall: accounting (recv+evict == pushed)");
-	std::printf("INFO: 50k pushes during 200ms stall took %lldms, received=%llu evicted=%llu\n",
-		static_cast<long long>(elapsed.count()),
-		static_cast<unsigned long long>(received.load()),
+	std::printf("INFO: 50k pushes during 200ms stall took %lldms, received=%llu evicted=%llu\n", static_cast<long long>(elapsed.count()), static_cast<unsigned long long>(received.load()),
 		static_cast<unsigned long long>(ring.evicted()));
 }
 
@@ -278,8 +273,7 @@ void cap1_stress_test()
 			{
 				const uint64_t pid = v.stamp / kPidStride;
 				const uint64_t local = v.stamp % kPidStride;
-				if (!consistent(v) || pid >= static_cast<uint64_t>(kP1Producers) ||
-					local <= per_pid_prev[pid])   // 单读者: 数组无竞争, 裸访问
+				if (!consistent(v) || pid >= static_cast<uint64_t>(kP1Producers) || local <= per_pid_prev[pid])   // 单读者: 数组无竞争, 裸访问
 				{
 					bad.fetch_add(1, std::memory_order_relaxed);
 				}
@@ -333,11 +327,8 @@ void cap1_stress_test()
 	check(elapsed.count() < 30000, "cap1 stress: bounded (<30s, deadlock sentinel)");
 	check(bad.load() == 0, "cap1 stress: per-pid monotonic, no tear @N=1");
 	check(received.load() + ring.evicted() + ring.size() == pushed, "cap1 stress: accounting holds @N=1");
-	std::printf("INFO: N=1 pushed=%llu received=%llu evicted=%llu took %lldms\n",
-		static_cast<unsigned long long>(pushed),
-		static_cast<unsigned long long>(received.load()),
-		static_cast<unsigned long long>(ring.evicted()),
-		static_cast<long long>(elapsed.count()));
+	std::printf("INFO: N=1 pushed=%llu received=%llu evicted=%llu took %lldms\n", static_cast<unsigned long long>(pushed), static_cast<unsigned long long>(received.load()),
+		static_cast<unsigned long long>(ring.evicted()), static_cast<long long>(elapsed.count()));
 }
 
 }  // namespace

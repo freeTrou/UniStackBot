@@ -63,21 +63,18 @@ public:
 	void quick_stop() override;
 	void fault_clear() override;   // 清故障闩锁 (全节点; 全清后自熄, 见 cpp)
 	[[nodiscard]] unistackbot_statemachine::NeutralState state() const override;
-	[[nodiscard]] unistackbot_bus::ParamStatus read_param(std::uint8_t, std::uint32_t,
-		std::uint64_t &, int) override
+	[[nodiscard]] unistackbot_bus::ParamStatus read_param(std::uint8_t, std::uint32_t, std::uint64_t &, int) override
 	{
 		return unistackbot_bus::ParamStatus::kUnsupported;
 	}
-	[[nodiscard]] unistackbot_bus::ParamStatus write_param(std::uint8_t, std::uint32_t,
-		std::uint64_t, int) override
+	[[nodiscard]] unistackbot_bus::ParamStatus write_param(std::uint8_t, std::uint32_t, std::uint64_t, int) override
 	{
 		return unistackbot_bus::ParamStatus::kUnsupported;
 	}
 
 	// 单节点安全状态机 (外部只读访问; 使能/断使能/清故障经 request_* 方法触发,
 	// 总线线程在下一拍消费请求并生成安全命令)
-	[[nodiscard]] const unistackbot_statemachine::NodeSafety &node_safety(
-		std::size_t index) const;
+	[[nodiscard]] const unistackbot_statemachine::NodeSafety &node_safety(std::size_t index) const;
 
 	[[nodiscard]] Telemetry telemetry() const { return telemetry_; }
 	[[nodiscard]] bool running() const { return running_.load(); }

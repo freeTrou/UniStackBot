@@ -78,11 +78,7 @@ public:
 	 * 同步后端: 就地积分; 异步后端: 取回 plant 最新快照填入 state (命令经 transmit 发布)。
 	 * integrate=false 时只刷新派生量 (mimic 关节), 用于 pause 冻结与状态瞬移后的同步。
 	 */
-	virtual void step(
-		const std::vector<double> & cmd_position,
-		std::vector<double> & state_position,
-		std::vector<double> & state_velocity,
-		double dt, bool integrate) = 0;
+	virtual void step(const std::vector<double> & cmd_position, std::vector<double> & state_position, std::vector<double> & state_velocity, double dt, bool integrate) = 0;
 };
 
 }  // namespace unistackbot_sim_control

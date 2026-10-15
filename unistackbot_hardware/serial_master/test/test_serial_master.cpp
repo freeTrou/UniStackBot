@@ -137,8 +137,7 @@ private:
 		f[3] = 40;
 		f[4] = 50;
 		f[5] = 96;   // 48V
-		const std::int32_t q_raw = static_cast<std::int32_t>(std::lround(
-			q * kRatio * 32768.0 / (2.0 * 3.14159265358979323846)));
+		const std::int32_t q_raw = static_cast<std::int32_t>(std::lround(q * kRatio * 32768.0 / (2.0 * 3.14159265358979323846)));
 		store32(f + 10, static_cast<std::uint32_t>(q_raw));
 		store32(f + 14, error_bits);   // 注入位
 		const std::uint32_t c = crc32(f + 2, 20);
@@ -222,8 +221,7 @@ int main()
 	}
 
 	auto motor = std::make_shared<FakeMotor>();
-	auto fake = std::make_unique<FakeTransport>(
-		[motor](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+	auto fake = std::make_unique<FakeTransport>([motor](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
 			return motor->respond(in, n, out);
 		});
 	FakeTransport *fake_raw = fake.get();
@@ -238,8 +236,7 @@ int main()
 	// ① 安全怠速: 等 10 拍, 线上全是停机帧+看dog位
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
 	check(motor->cmd_frames > 5, "frames flowing");
-	check(motor->last_mode[kNodeA] == 0 && motor->last_watchdog[kNodeA],
-		"idle = stop mode + watchdog");
+	check(motor->last_mode[kNodeA] == 0 && motor->last_watchdog[kNodeA], "idle = stop mode + watchdog");
 	check(motor->last_mode[kNodeB] == 0, "idle node B stop too");
 
 	// ② 命令往返
@@ -324,8 +321,7 @@ int main()
 
 	// ⑧ tx 失败遥测: 写失败注入 (下一时隙盲发重试)
 	auto motor2 = std::make_shared<FakeMotor>();
-	auto fake2 = std::make_unique<FakeTransport>(
-		[motor2](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+	auto fake2 = std::make_unique<FakeTransport>([motor2](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
 			return motor2->respond(in, n, out);
 		});
 	auto flaky = std::make_unique<FlakyWriteTransport>(std::move(fake2));
@@ -344,8 +340,7 @@ int main()
 
 	// ⑨ 重启: stop 释放 transport、start 复位 quick_stop 闩锁与泵态
 	auto motor3 = std::make_shared<FakeMotor>();
-	auto fake3 = std::make_unique<FakeTransport>(
-		[motor3](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+	auto fake3 = std::make_unique<FakeTransport>([motor3](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
 			return motor3->respond(in, n, out);
 		});
 	FakeTransport *fake3_raw = fake3.get();

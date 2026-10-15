@@ -232,11 +232,9 @@ void runPhase(const char *phase, std::vector<PumpArg> &args, int duration_s)
 	{
 		Stats &s = a.st;
 		std::vector<double> v = s.all_us;
-		std::printf(
-			"  pump_%s: n=%lld 迟滞 min=%.1f avg=%.1f p50=%.1f p99=%.1f max=%.1f | "
+		std::printf("  pump_%s: n=%lld 迟滞 min=%.1f avg=%.1f p50=%.1f p99=%.1f max=%.1f | "
 			">10µs=%lld >50µs=%lld >100µs=%lld | 突发均值=%.1fµs 跳帧=%lld\n",
-			a.tag, s.n, s.min_us, s.sum_us / static_cast<double>(s.n),
-			percentileUs(v, 0.50), percentileUs(v, 0.99), s.max_us,
+			a.tag, s.n, s.min_us, s.sum_us / static_cast<double>(s.n), percentileUs(v, 0.50), percentileUs(v, 0.99), s.max_us,
 			s.over_10, s.over_50, s.over_100, s.burst_sum_us / static_cast<double>(s.n), a.skipped);
 	}
 }

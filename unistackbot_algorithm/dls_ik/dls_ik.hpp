@@ -94,12 +94,7 @@ public:
 	 * 阻塞时长: 数十次迭代 × 每次一次 FK+雅可比, 典型 <1ms, 上限 max_iter×重启;
 	 *           timeout_ns≠0 时被墙钟预算封顶 (超时 = ITERATION_LIMIT + stats.timed_out)
 	 */
-	[[nodiscard]] IkResult solve(
-		const CartesianPose & target,
-		const std::vector<double> & seed,
-		const RedundancyPreference & red,
-		std::vector<double> & out_q,
-		DlsIkStats * stats = nullptr,
+	[[nodiscard]] IkResult solve(const CartesianPose & target, const std::vector<double> & seed, const RedundancyPreference & red, std::vector<double> & out_q, DlsIkStats * stats = nullptr,
 		SolveMode mode = SolveMode::STREAMING) const override;
 
 	[[nodiscard]] bool ready() const override {return fk_ != nullptr;}
@@ -129,9 +124,7 @@ private:
 	// 单次 DLS 求解 (给定种子, 无重启); deadline = 墙钟预算终点 (max()=不限时),
 	// 每迭代首检查, 到时按迭代上限失败处理; iter_cap = 本种子的迭代上限;
 	// sigma_out/err_out = 退出时的最新 σ_min / 加权误差 (可空; 调用方初始化为 -1)
-	IkResult solveOnce(
-		const CartesianPose & target, const std::vector<double> & seed,
-		const RedundancyPreference & red, std::vector<double> & out_q,
+	IkResult solveOnce(const CartesianPose & target, const std::vector<double> & seed, const RedundancyPreference & red, std::vector<double> & out_q,
 		const std::chrono::steady_clock::time_point & deadline,
 		int iter_cap,
 		int * iterations_used = nullptr,
@@ -139,13 +132,10 @@ private:
 		double * err_out = nullptr) const;
 
 	// 零空间目标梯度 ∇H (限位中心距 + 可操作度, 数值微分可操作度项)
-	void nullspaceGradient(
-		const std::vector<double> & q, const RedundancyPreference & red,
-		std::vector<double> & grad, UrdfFk::Scratch & fk_scratch) const;
+	void nullspaceGradient(const std::vector<double> & q, const RedundancyPreference & red, std::vector<double> & grad, UrdfFk::Scratch & fk_scratch) const;
 
 	// 位姿误差: [位置误差 3; 姿态误差 3 (轴角向量)]
-	static Eigen::Matrix<double, 6, 1> poseError(
-		const CartesianPose & a, const CartesianPose & b);
+	static Eigen::Matrix<double, 6, 1> poseError(const CartesianPose & a, const CartesianPose & b);
 
 	const UrdfFk * fk_{nullptr};
 	DlsIkConfig cfg_;
