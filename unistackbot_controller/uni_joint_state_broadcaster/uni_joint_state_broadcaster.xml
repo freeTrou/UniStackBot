@@ -1,0 +1,7 @@
+<library path="uni_joint_state_broadcaster">
+  <class name="unistackbot_controller/UniJointStateBroadcaster"
+         type="unistackbot_controller::UniJointStateBroadcaster"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>JointState broadcaster with URDF-declaration-order contract (replaces stock JSB whose name order is unordered-map traversal order; full interface passthrough, optional publish_hz; instance name stays joint_state_broadcaster so /joint_states is unchanged; 2026-10-20)</description>
+  </class>
+</library>

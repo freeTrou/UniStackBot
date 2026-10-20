@@ -16,6 +16,7 @@
   <depend>ament_index_cpp</depend>
   <depend>tinyxml2_vendor</depend>
   <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>tf2_msgs</depend>
   <depend>eigen</depend>
@@ -33,5 +34,7 @@
     <pluginlib plugin="cartesian_motion_controller/cartesian_motion_controller.xml" />
     <pluginlib plugin="joint_stream_controller/joint_stream_controller.xml" />
     <pluginlib plugin="ee_state_broadcaster/ee_state_broadcaster.xml" />
+    <pluginlib plugin="base_velocity_controller/base_velocity_controller.xml" />
+    <pluginlib plugin="uni_joint_state_broadcaster/uni_joint_state_broadcaster.xml" />
   </export>
 </package>

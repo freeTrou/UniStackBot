@@ -9,7 +9,7 @@ controller_manager:
     lock_memory: true
 
     joint_state_broadcaster:
-      type: joint_state_broadcaster/JointStateBroadcaster
+      type: unistackbot_controller/UniJointStateBroadcaster
     joint_stream_controller:
       type: unistackbot_controller/JointStreamController
     cartesian_motion_controller:

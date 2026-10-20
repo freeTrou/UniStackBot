@@ -16,7 +16,7 @@ controller_manager:
     lock_memory: true       # mlockall (页锁; 需 memlock ulimit, 失败仅 WARN)
 
     joint_state_broadcaster:
-      type: joint_state_broadcaster/JointStateBroadcaster
+      type: unistackbot_controller/UniJointStateBroadcaster
 
     joint_stream_controller:
       type: unistackbot_controller/JointStreamController

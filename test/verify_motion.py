@@ -56,6 +56,33 @@ def mode_js(args):
 		print('FAIL: js 无 /joint_states')
 		return 1
 
+	# 顺序契约断言 (2026-10-20 UniJointStateBroadcaster): /joint_states name 序 = URDF
+	# 声明序, 命令关节必须是同序子集 —— 乱序即回退官方 JSB 或 URDF 改序, 立刻红
+	snap = {}
+	def _snap_first(msg):
+		snap.setdefault('names', list(msg.name))
+	sub = node.create_subscription(JointState, '/joint_states', _snap_first, 10)
+	end2 = time.time() + 3
+	while 'names' not in snap and time.time() < end2:
+		rclpy.spin_once(node, timeout_sec=0.1)
+	node.destroy_subscription(sub)
+	first = snap.get('names') or []
+	if len(first) != len(set(first)):
+		print(f'FAIL: 顺序契约 — /joint_states 含重复关节名 {sorted(set(n for n in first if first.count(n) > 1))}')
+		return 1
+	pos_in_stream = [first.index(j) for j in joints if j in first]
+	missing = [j for j in joints if j not in first]
+	if not first:
+		print('FAIL: 顺序契约 — 3s 内未见 /joint_states 帧, 无法断言')
+		return 1
+	if missing:
+		print(f'FAIL: 顺序契约 — {missing} 不在 /joint_states (name 数 {len(first)})')
+		return 1
+	if pos_in_stream != sorted(pos_in_stream):
+		print(f'FAIL: 顺序契约 — 命令关节在 /joint_states 中非同序子集 (期望 {joints}, 实际序 {first})')
+		return 1
+	print(f'PASS: 顺序契约 (命令关节 = /joint_states 同序子集, {len(first)} 关节 URDF 序)')
+
 	t0 = time.time()
 	i = 0
 	while time.time() - t0 < dur:

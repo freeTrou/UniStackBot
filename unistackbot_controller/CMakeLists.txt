@@ -22,6 +22,7 @@ list(APPEND CMAKE_MODULE_PATH /opt/ros/humble/share/tinyxml2_vendor/cmake/Module
 find_package(TinyXML2 REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
 find_package(unistackbot_interface REQUIRED)
@@ -130,6 +131,32 @@ install(TARGETS ee_state_broadcaster
 )
 install(FILES ee_state_broadcaster/ee_state_broadcaster.xml
   DESTINATION share/${PROJECT_NAME}/ee_state_broadcaster
+)
+
+# 关节状态广播 (2026-10-20): name 序 = URDF 声明序契约, 取代官方 JSB 三链位置
+# (官方默认模式输出序 = ResourceManager 无序容器遍历序, mcap 实锤乱序, 训练数据
+#  按位置切数组错位)。库名 uni_ 前缀避让官方 libjoint_state_broadcaster.so
+add_library(uni_joint_state_broadcaster SHARED
+  uni_joint_state_broadcaster/uni_joint_state_broadcaster.cpp
+)
+target_compile_features(uni_joint_state_broadcaster PUBLIC cxx_std_17)
+target_include_directories(uni_joint_state_broadcaster PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
+)
+ament_target_dependencies(uni_joint_state_broadcaster
+  rclcpp controller_interface realtime_tools pluginlib sensor_msgs
+)
+target_link_libraries(uni_joint_state_broadcaster ${TINYXML2_LIBRARY})
+pluginlib_export_plugin_description_file(controller_interface
+  uni_joint_state_broadcaster/uni_joint_state_broadcaster.xml
+)
+install(TARGETS uni_joint_state_broadcaster
+  DESTINATION lib
+)
+install(FILES uni_joint_state_broadcaster/uni_joint_state_broadcaster.xml
+  DESTINATION share/${PROJECT_NAME}/uni_joint_state_broadcaster
 )
 
 # FK 命令行工具 (调试 + TF 对拍)

@@ -203,7 +203,9 @@ echo "$E" | grep -q "未知链" && ok "统一入口未知链显式报错" || bad
 wait_controllers() {  # $1=最长等待秒数 $2=log
 	for _ in $(seq 1 "$1"); do
 		C=$(timeout 8 ros2 control list_controllers 2>/dev/null)
-		if echo "$C" | grep -q "joint_state_broadcaster.*active" && echo "$C" | grep -q "$JS_FIRST.*active"; then
+		# type 断言收紧 (2026-10-20): 在位的必须是自研 UniJointStateBroadcaster —— 回退
+		# 官方 JSB (乱序无契约) 时 name/active 检查照样绿, 只有 type 能抓住
+		if echo "$C" | grep -q "joint_state_broadcaster.*UniJointStateBroadcaster.*active" && echo "$C" | grep -q "$JS_FIRST.*active"; then
 			return 0
 		fi
 		[ -s "$2" ] && grep -qE "Error|error while" "$2" && return 2

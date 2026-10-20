@@ -12,7 +12,7 @@ controller_manager:
     cpu_affinity: 1
     lock_memory: true
     joint_state_broadcaster:
-      type: joint_state_broadcaster/JointStateBroadcaster
+      type: unistackbot_controller/UniJointStateBroadcaster
     js_arms:
       type: unistackbot_controller/JointStreamController
     js_torso:

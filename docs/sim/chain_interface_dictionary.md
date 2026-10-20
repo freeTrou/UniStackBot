@@ -34,7 +34,7 @@ ros2 control list_hardware_components
 
 | 话题 | 类型 | 方向 | 频率 | 作用 |
 |---|---|---|---|---|
-| `/joint_states` | sensor_msgs/JointState | 链→上层 | 500Hz（控制频率） | 关节空间**单一事实源** |
+| `/joint_states` | sensor_msgs/JointState | 链→上层 | 500Hz（控制频率） | 关节空间**单一事实源**；name 序 = URDF 声明序（2026-10-20 契约，见下节） |
 | `/joint_stream_controller/command` | unistackbot_interface/JointCommand | 上层→链 | 上层定（点流） | 关节命令入口 |
 | `/joint_stream_controller/applied_command` | unistackbot_interface/JointCommand | 链→上层 | 全率（=控制频率；`observe_applied_command` 默认关） | 实际下发命令观测（跟踪账） |
 | `/cartesian_motion_controller/command` | geometry_msgs/PoseStamped | 上层→链 | 上层定 | 笛卡尔命令入口（base 系） |
@@ -78,14 +78,16 @@ ros2 control list_hardware_components
 控制周期，控制周期不假设命令频率。CM 的 IK 预算可选 message_rate 自适应档
 （0.8 × 消息间隔滑窗中位数）——高频轨迹流自动收紧预算。
 
-### /joint_states（消费必读：name 与数值按索引对应，但**顺序无保证 → 按名对齐**）
+### /joint_states（顺序契约：name 序 = URDF `<ros2_control>` 声明序, 2026-10-20 起）
 
 | 字段 | 含义 |
 |---|---|
-| name[] | 关节名（乱序坑：消费必须按名索引，勿按位置） |
+| name[] | 关节名,**序 = URDF 声明序**（自研 UniJointStateBroadcaster 契约,见下注; 官方 JSB 时代为 ResourceManager 无序容器遍历序、无保证） |
 | position[] | 关节角 [rad] |
 | velocity[] | 关节速度 [rad/s] |
-| effort[] | 仿真链恒 0（真机才是真实力矩） |
+| effort[] | **分链**: mock 恒 0（kinematic 后端无动力学）; gz/mujoco = 执行器真实力矩（消费前查翻转率, 高翻转=伺服病理段, 见 stationlite mujoco README #7） |
+
+> **顺序沿革 (2026-10-20 mcap 实锤)**: 官方 JSB 默认模式 name 乱序（stationlite mujoco 实测与 command 侧错位, 训练数据按位置切数组全错）→ 三链换自研 `UniJointStateBroadcaster`（实例名 `joint_state_broadcaster` 不变, 话题不变）, name 序钉死 URDF 声明序——与 command 侧（`parseJointsFromUrdf` 同一遍历口径）同源同序, 命令关节恒为同序子集, 按位置对位拼接观测/动作安全。无 state 接口的字段填 0。旧数据（换装前 mcap）仍按名对齐消费。
 
 ### ~/command（JointCommand——点流，共用语义见本节上方总则）
 
