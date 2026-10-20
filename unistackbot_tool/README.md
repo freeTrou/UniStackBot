@@ -20,6 +20,9 @@
 |---|---|---|---|
 | **连续记录** | mcap (rosbag2) | 时域验证: 跟踪误差/频响/超调, sim↔real 对拍 | `record_verify.sh` |
 | **点位资产** | json v1 | 空间轨迹: 回放验证/遥操采样/示教点位库 | `convert_points_v0_v1.py` → `demo_points_playback.py` |
+| **effort 质量筛查** | mcap (复用连续记录) | 伺服病理段检测: 翻转率×速度位移失配双判据, 训练数据消费前过筛 | `check_effort_flips.py` |
+
+**effort 质量筛查** (`check_effort_flips.py`, 2026-10-20): MuJoCo 位置伺服在最小惯量构型可进继电器式极限环——effort 满幅高频换向、位置看似静止。此类段落的 effort 观测是仿真病理非物理。双判据 (窗峰翻转率 + 速度-位移失配比) 好/病包双向校准; 高翻转但速度位移一致 = 物理换向, 显式注明。退出码 0 干净 / 1 检出病理, 可作数据管线的 CI 门。病理档案: `arms/stationlite/mujoco/README.md` #7。
 
 ### 2. 连续记录规范
 

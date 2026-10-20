@@ -15,7 +15,12 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_init()
 {
 	auto_declare<std::string>("base_link", "");
 	auto_declare<std::string>("tip_link", "");
-	auto_declare<double>("publish_hz", publish_hz_);
+	// publish_hz 不走 auto_declare<double>: yaml 写整数时 override 已按 int64 auto-declare,
+	// get_value<double> 抛异常且 Humble CM 不 catch → 进程终止 (2026-10-20 审查 A1)
+	if (!get_node()->has_parameter("publish_hz"))
+	{
+		get_node()->declare_parameter<double>("publish_hz", publish_hz_);
+	}
 	// Humble: controller_manager 把自身 robot_description 以参数覆盖注入控制器节点
 	auto_declare<std::string>("robot_description", "");
 	return controller_interface::CallbackReturn::SUCCESS;
@@ -23,17 +28,24 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_init()
 
 controller_interface::CallbackReturn EeStateBroadcaster::on_configure(const rclcpp_lifecycle::State & /*previous_state*/)
 {
-	unistackbot_common::ulog_config log_cfg;
-	log_cfg.console = true;
-	log_cfg.file_path = nullptr;
-	log_cfg.level = unistackbot_common::ulog_level::info;
-	log_cfg.max_bytes = 0;
-	log_cfg.backups = 0;
-	unistackbot_common::ulog_init(log_cfg);   // 幂等 + 引用计数 (与同进程其他组件共存)
+	unistackbot_common::ulog_init_console();   // 幂等 + 引用计数, 首配生效 (收拢自 6 份逐字拷贝)
 
 	base_link_ = get_node()->get_parameter("base_link").as_string();
 	tip_link_ = get_node()->get_parameter("tip_link").as_string();
-	publish_hz_ = get_node()->get_parameter("publish_hz").as_double();
+	const auto prm = get_node()->get_parameter("publish_hz");
+	if (prm.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER)
+	{
+		publish_hz_ = static_cast<double>(prm.as_int());   // yaml 整数容错 (A1)
+	}
+	else if (prm.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
+	{
+		publish_hz_ = prm.as_double();
+	}
+	else
+	{
+		ULOG_ERROR("%s: publish_hz 类型非法 (需数值)", kPluginName);
+		return controller_interface::CallbackReturn::ERROR;
+	}
 	if (base_link_.empty() || tip_link_.empty())
 	{
 		ULOG_ERROR("%s: base_link/tip_link 未配置 (yaml 需给)", kPluginName);
@@ -123,7 +135,14 @@ controller_interface::CallbackReturn EeStateBroadcaster::on_activate(const rclcp
 controller_interface::return_type EeStateBroadcaster::update(const rclcpp::Time & time, const rclcpp::Duration & /*period*/)
 {
 	// 50Hz 时间节流 (RT trylock 非阻塞; 拿不到锁跳过本拍 —— 下一拍再来)
-	if ((time - last_pub_).seconds() < 1.0 / publish_hz_ || !pub_)
+	if (time < last_pub_)
+	{
+		// 仿真时间回卷 (mujoco reset 含时间回卷, controller 保持 active): 重锚防节流门
+		// 永久关闭 (2026-10-20 审查实锤: /ee_state 五机型全配 50Hz, reset 后静默整段
+		// 回卷前时长; base_velocity 的帧分频档免疫故只修两 broadcaster)
+		last_pub_ = time;
+	}
+	if (!pub_ || (time - last_pub_).seconds() < 1.0 / publish_hz_)
 	{
 		return controller_interface::return_type::OK;
 	}

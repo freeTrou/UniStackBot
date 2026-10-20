@@ -62,13 +62,7 @@ int main(int argc, char ** argv)
 	rclcpp::init(argc, argv);
 	auto node = rclcpp::Node::make_shared("supervisor");
 
-	unistackbot_common::ulog_config log_cfg;
-	log_cfg.console = true;
-	log_cfg.file_path = nullptr;
-	log_cfg.level = unistackbot_common::ulog_level::info;
-	log_cfg.max_bytes = 0;
-	log_cfg.backups = 0;
-	unistackbot_common::ulog_init(log_cfg);
+	unistackbot_common::ulog_init_console();   // 幂等 + 引用计数, 首配生效 (收拢自 6 份逐字拷贝)
 
 	// ---- 监控状态 (全部本节点线程私有, 订阅回调与定时器同默认回调组串行) ----
 	CartesianMotionStatus cm_last;

@@ -27,6 +27,7 @@ unistackbot_common::ulog_shutdown();
 | API | 语义 |
 |---|---|
 | `ulog_init(cfg)` | 幂等 + 计引用: 首调用起 writer, 后续只计引用 (首配置为准) |
+| `ulog_init_console()` | 控制台缺省配置便捷入口 (console+info, 无文件 sink)——控制器/节点统一走此 helper, 防 6 份逐字拷贝首配漂移 (2026-10-20) |
 | `ulog_shutdown()` | 退引用, **末位才真停** (排空+落盘+join); 之后 emit 短路计入 dropped |
 | `ulog_flush()` | 排空环 + fflush 确认 (5s 超时保护) |
 | `ulog_set_level(lvl)` | 运行期调级, 任意线程 |

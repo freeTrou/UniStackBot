@@ -122,13 +122,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 {
 	// ulog 全工程统一打印 (2026-09-17 裁决): init 幂等 + 引用计数 —— 同进程与
 	// SimControlHardware 并存时互不干扰; 终端 sink 恒开 (launch 捕获 stdout)
-	unistackbot_common::ulog_config log_cfg;
-	log_cfg.console = true;
-	log_cfg.file_path = nullptr;
-	log_cfg.level = unistackbot_common::ulog_level::info;
-	log_cfg.max_bytes = 0;
-	log_cfg.backups = 0;
-	unistackbot_common::ulog_init(log_cfg);
+	unistackbot_common::ulog_init_console();   // 幂等 + 引用计数, 首配生效 (收拢自 6 份逐字拷贝)
 
 	base_link_ = get_node()->get_parameter("base_link").as_string();
 	tip_link_ = get_node()->get_parameter("tip_link").as_string();

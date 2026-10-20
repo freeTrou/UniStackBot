@@ -458,6 +458,20 @@ inline uint64_t ulog_written()
 	return ulog_detail::writer().written.load(std::memory_order_relaxed);
 }
 
+// 控制器/节点控制台缺省配置 (2026-10-20 收拢 6 份逐字拷贝 —— copy#6 见
+// uni_joint_state_broadcaster): console sink + info 级, 无文件 sink。ulog_init
+// 引用计数 + 首配生效 —— 进程内第一个初始化者定配置, 各处统一走本 helper 防漂移。
+inline void ulog_init_console()
+{
+	ulog_config cfg{};
+	cfg.console = true;
+	cfg.file_path = nullptr;
+	cfg.level = ulog_level::info;
+	cfg.max_bytes = 0;
+	cfg.backups = 0;
+	ulog_init(cfg);
+}
+
 }  // namespace unistackbot_common
 
 // ---- 调用侧宏: 级别过滤第一句 (级别外零开销), 编译期 printf 格式检查 ----

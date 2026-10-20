@@ -7,6 +7,7 @@ find_package(ament_cmake REQUIRED)
 install(PROGRAMS
   scripts/record_verify.sh
   scripts/convert_points_v0_v1.py
+  scripts/check_effort_flips.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

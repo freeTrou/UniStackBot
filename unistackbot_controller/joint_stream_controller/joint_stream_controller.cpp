@@ -35,13 +35,7 @@ controller_interface::CallbackReturn JointStreamController::on_init()
 
 controller_interface::CallbackReturn JointStreamController::on_configure(const rclcpp_lifecycle::State & /*previous_state*/)
 {
-	unistackbot_common::ulog_config log_cfg;
-	log_cfg.console = true;
-	log_cfg.file_path = nullptr;
-	log_cfg.level = unistackbot_common::ulog_level::info;
-	log_cfg.max_bytes = 0;
-	log_cfg.backups = 0;
-	unistackbot_common::ulog_init(log_cfg);   // 幂等 + 引用计数 (与同进程其他组件共存)
+	unistackbot_common::ulog_init_console();   // 幂等 + 引用计数, 首配生效 (收拢自 6 份逐字拷贝)
 
 	const std::string interp = get_node()->get_parameter("interpolation").as_string();
 	if (interp == "hold")

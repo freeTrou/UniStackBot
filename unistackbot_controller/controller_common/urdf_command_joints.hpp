@@ -14,17 +14,15 @@ namespace unistackbot_controller
 {
 
 /*
- * 解析 URDF <ros2_control> 块: position 命令关节表 + min/max/max_velocity。
- * 单一事实源: 限位与 BackendKinematic / CM 控制器同参数同缺省。
- * (2026-09-23 从 joint_stream_controller 匿名命名空间提取共享 —— OTG 门同款消费,
- *  关节契约解析必须单源; 函数体逐行保持不变)
- * 上界 fail-fast (2026-09-23 审查补): 消费方 JS/门用 kMaxJoints 定长数组按序写入,
- * 17+ 命令关节的 URDF 会在配置期越界 —— 在唯一入口拒绝, 不留给运行期。
- * 多块全合并 (2026-10-14 定形): ros2_control 块 = 硬件描述, 一机型一块;
- * 控制器编组 (js_arms/js_torso 等) 归 yaml joints 显式列表, 不在块层过滤 ——
- * mujoco 插件按组件加载, 双块=双仿真实例 (进程单例被打破, 实证 2026-10-14)。
+ * URDF <ros2_control> 块关节遍历骨架 (2026-10-20 解析单源化): 文档序遍历全部块的
+ * 全部 <joint>, 回调自筛自集。JS 命令侧 (parseJointsFromUrdf) 与 UniJointState-
+ * Broadcaster state 侧共用同一骨架 —— /joint_states 序 == command 序 的对齐契约
+ * 由单一遍历保证, 不再靠两份手抄循环逐位一致。
+ * 回调签名 fn(const tinyxml2::XMLElement * joint_el, const char * name) -> bool,
+ * 返回 false 中止遍历 (回调自填 err)。
  */
-inline bool parseJointsFromUrdf(const std::string & urdf, std::vector<std::string> & names, std::vector<double> & qmin, std::vector<double> & qmax, std::vector<double> & vmax, std::string & err)
+template <typename Fn>
+inline bool forEachRos2ControlJoint(const std::string & urdf, std::string & err, Fn && fn)
 {
 	tinyxml2::XMLDocument doc;
 	if (doc.Parse(urdf.c_str(), urdf.size()) != tinyxml2::XML_SUCCESS)
@@ -49,6 +47,31 @@ inline bool parseJointsFromUrdf(const std::string & urdf, std::vector<std::strin
 			{
 				continue;
 			}
+			if (!fn(j, jn))
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/*
+ * 解析 URDF <ros2_control> 块: position 命令关节表 + min/max/max_velocity。
+ * 单一事实源: 限位与 BackendKinematic / CM 控制器同参数同缺省。
+ * (2026-09-23 从 joint_stream_controller 匿名命名空间提取共享 —— OTG 门同款消费,
+ *  关节契约解析必须单源; 2026-10-20 遍历骨架再上收 forEachRos2ControlJoint)
+ * 上界 fail-fast (2026-09-23 审查补): 消费方 JS/门用 kMaxJoints 定长数组按序写入,
+ * 17+ 命令关节的 URDF 会在配置期越界 —— 在唯一入口拒绝, 不留给运行期。
+ * 多块全合并 (2026-10-14 定形): ros2_control 块 = 硬件描述, 一机型一块;
+ * 控制器编组 (js_arms/js_torso 等) 归 yaml joints 显式列表, 不在块层过滤 ——
+ * mujoco 插件按组件加载, 双块=双仿真实例 (进程单例被打破, 实证 2026-10-14)。
+ */
+[[nodiscard]] inline bool parseJointsFromUrdf(const std::string & urdf, std::vector<std::string> & names, std::vector<double> & qmin, std::vector<double> & qmax, std::vector<double> & vmax, std::string & err)
+{
+	const bool ok = forEachRos2ControlJoint(urdf, err,
+		[&](const tinyxml2::XMLElement * j, const char * jn)
+		{
 			bool has_cmd = false;
 			double mn = 0.0, mx = 0.0, vm = 5.0;
 			for (const tinyxml2::XMLElement * prm = j->FirstChildElement("param"); prm != nullptr;
@@ -76,7 +99,7 @@ inline bool parseJointsFromUrdf(const std::string & urdf, std::vector<std::strin
 			}
 			if (!has_cmd)
 			{
-				continue;   // mimic / 无 position 命令的关节不归本控制器
+				return true;   // mimic / 无 position 命令的关节不归本控制器
 			}
 			if (names.size() >= unistackbot_interface::kMaxJoints)
 			{
@@ -88,7 +111,11 @@ inline bool parseJointsFromUrdf(const std::string & urdf, std::vector<std::strin
 			qmin.push_back(mn);
 			qmax.push_back(mx);
 			vmax.push_back(vm > 0.0 ? vm : 5.0);
-		}
+			return true;
+		});
+	if (!ok)
+	{
+		return false;
 	}
 	if (names.empty())
 	{

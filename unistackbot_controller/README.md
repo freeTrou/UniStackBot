@@ -1,6 +1,6 @@
 # unistackbot_controller
 
-控制器集成包：三个自研控制器插件 + ROS 工具节点。算法库住 `unistackbot_algorithm`（2026-09-17 拆分），本包只消费类型。
+控制器集成包：四个自研控制器插件 + ROS 工具节点。算法库住 `unistackbot_algorithm`（2026-09-17 拆分），本包只消费类型。
 
 ## CartesianMotionController（CM, P1.5）
 
@@ -25,6 +25,16 @@ IK 上环宿主：`cartesian_motion_controller/` 自包含文件夹。双机型�
 **插值** `interpolation`：`hold`（默认，每周期步长饱和逼近）| `ruckig`（OtgStream 整形；路径插值永不在控制器——形状轴归上层/MoveIt）。
 
 **断流语义**（2026-10-10 统一，与 CM 同一套，无参数无机制）：`~/command` 停发 = 最后一帧即当前目标，臂收敛到它保持；恢复的大跳变由通用超限防线兜底（ruckig v/a/j 界 + hold 档步长饱和 + 限位 clamp）。
+
+## UniJointStateBroadcaster（UniJSB, 2026-10-20）
+
+`/joint_states` 广播,三链取代官方 JSB 的位置（实例名 `joint_state_broadcaster` 不变,话题不变,下游零感知）: `uni_joint_state_broadcaster/` 自包含文件夹。
+
+**动机**（mcap 实锤 stationlite mujoco）: 官方 JSB 默认模式 name 序 = ResourceManager 无序容器遍历序,无契约——实测乱序与 command 侧错位,训练数据按位置切数组全错;官方 `joints`+`interfaces` 参数可钉序但逐关节只认领一个接口（丢 velocity/effort）。
+
+**契约**: name 序 = URDF `<ros2_control>` 声明序（与 command 侧 `parseJointsFromUrdf` 共享 `forEachRos2ControlJoint` 同一遍历骨架,命令关节恒为同序子集）;全接口透传,无该接口的字段填 0;`publish_hz` 默认 0=全率（>0 时间节流,含仿真时间回卷重锚）。**只读**（零命令接口）。
+
+**坑档**: 话题必须顶层绝对名 `/joint_states`（`~/joint_states` 会展开成实例名前缀）;库/文件夹名 `uni_` 前缀避让官方 `libjoint_state_broadcaster.so`（同名 so class loader 定位不可控）。
 
 ## EeStateBroadcaster（EE, 2026-09-21）
 

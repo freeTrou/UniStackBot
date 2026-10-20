@@ -38,13 +38,7 @@ controller_interface::CallbackReturn BaseVelocityController::on_init()
 
 controller_interface::CallbackReturn BaseVelocityController::on_configure(const rclcpp_lifecycle::State &)
 {
-	unistackbot_common::ulog_config log_cfg;
-	log_cfg.console = true;
-	log_cfg.file_path = nullptr;
-	log_cfg.level = unistackbot_common::ulog_level::info;
-	log_cfg.max_bytes = 0;
-	log_cfg.backups = 0;
-	unistackbot_common::ulog_init(log_cfg);
+	unistackbot_common::ulog_init_console();   // 幂等 + 引用计数, 首配生效 (收拢自 6 份逐字拷贝)
 
 	// ---- 运动学插件装配 (必填无默认 fail-fast 列可选项) ----
 	const std::string kin_name = get_node()->get_parameter("base_kinematics").as_string();
