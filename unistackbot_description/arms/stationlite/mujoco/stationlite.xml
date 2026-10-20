@@ -1,7 +1,7 @@
 <mujoco model="stationlite">
   <!-- v4 (2026-09-29): visual mesh + capsule collision(disabled) + URDF 实际位置/惯量 -->
   <compiler angle="radian" meshdir="../meshes/visual/"/>
-  <option timestep="0.001"/>
+  <option timestep="0.001" integrator="implicitfast"/>
   <asset>
     <mesh name="base" file="base.STL"/>
     <mesh name="armbase" file="armbase.STL"/>
