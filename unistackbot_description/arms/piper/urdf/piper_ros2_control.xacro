@@ -145,7 +145,8 @@
                         <state_interface name="velocity"/>
                     </joint>
                 </xacro:if>
-                <xacro:unless value="${use_gazebo in ['mujoco', 'ign']}">
+                <xacro:if value="${use_gazebo in [True, 'true', 'classic']}">
+                    <!-- classic: gazebo_ros2_control 的 mimic 需命令接口 + 参数 (插件内镜像) -->
                     <joint name="gripper_joint1">
                         <command_interface name="position"/>
                         <state_interface name="position"/>
@@ -162,7 +163,26 @@
                         <param name="multiplier">-0.5</param>
                         <param name="offset">0.0</param>
                     </joint>
-                </xacro:unless>
+                </xacro:if>
+                <xacro:if value="${use_gazebo in [False, 'false']}">
+                    <!-- mock (2026-10-20 契约=物理DOF): 从指 state-only —— 对外命令面 7 关节
+                         (= 真机 SDK 形状, Jazzy+ 原生 mimic 同方向); 耦合由 kinematic backend
+                         按 mimic/multiplier 参数推导 (与 mujoco equality 同构) -->
+                    <joint name="gripper_joint1">
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                        <param name="mimic">gripper</param>
+                        <param name="multiplier">0.5</param>
+                        <param name="offset">0.0</param>
+                    </joint>
+                    <joint name="gripper_joint2">
+                        <state_interface name="position"/>
+                        <state_interface name="velocity"/>
+                        <param name="mimic">gripper</param>
+                        <param name="multiplier">-0.5</param>
+                        <param name="offset">0.0</param>
+                    </joint>
+                </xacro:if>
             </xacro:if>
 
         </ros2_control>

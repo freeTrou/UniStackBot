@@ -17,6 +17,8 @@ struct JointMeta
 	int mimic_source{-1};            // -1 = 独立关节; 否则源关节索引
 	double mimic_multiplier{1.0};    // mimic 变换: 位置 = multiplier * 源关节 + offset
 	double mimic_offset{0.0};        // mimic 变换偏置 (rad)
+	bool has_command{true};          // false = state-only 从动关节 (2026-10-20 契约=物理DOF:
+	                                 //   mimic 从指无命令接口, 位置由后端从源推导, 不进命令面)
 
 	bool is_mimic() const
 	{

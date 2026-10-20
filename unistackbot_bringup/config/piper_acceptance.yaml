@@ -4,7 +4,7 @@
 fingerprint:                # 静态判据 (2026-09-22 实测登记)
   subchain_count: 13        # 判据②: check_urdf child 数 (use_world + use_ros2_control 展开)
   joints_by_chain:          # 判据③: 各形态命令关节集 (顺序=URDF <ros2_control> 序)
-    mock:   [joint1, joint2, joint3, joint4, joint5, joint6, gripper, gripper_joint1, gripper_joint2]
+    mock:   [joint1, joint2, joint3, joint4, joint5, joint6, gripper]   # 从指 state-only (2026-10-20 契约=物理DOF)
     ign:    [joint1, joint2, joint3, joint4, joint5, joint6, gripper]
     mujoco: [joint1, joint2, joint3, joint4, joint5, joint6, gripper]
   plugins:               # 判据③½: per-chain 硬件插件名 (2026-10-14 立, 堵 ign 分支缺失假绿那类洞)

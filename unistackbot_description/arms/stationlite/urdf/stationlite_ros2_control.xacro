@@ -52,7 +52,8 @@
             </joint>
             <!-- left_gripper_joint2 (mimic): MuJoCo 模式下 state-only (equality 耦合) -->
             <!-- gripper_joint2 removed for MuJoCo testing -->
-            <xacro:unless value="${use_gazebo == 'mujoco'}">
+            <xacro:if value="${use_gazebo == 'ign'}">
+                <!-- ign: gz 插件 mimic 参数需命令接口 (插件内镜像; _mimic 后缀坑独立挂账) -->
                 <joint name="left_gripper_joint2">
                     <command_interface name="position"/>
                     <state_interface name="position"/>
@@ -64,7 +65,18 @@
                     <param name="mimic">left_gripper_joint1</param>
                     <param name="multiplier">-1.0</param>
                 </joint>
-            </xacro:unless>
+            </xacro:if>
+            <xacro:if value="${use_gazebo in [False, 'false']}">
+                <!-- mock (2026-10-20 契约=物理DOF): 从指 state-only —— 命令面 14 关节
+                     (= 真机 SDK setGripperPosition 单值形状); 耦合由 kinematic backend
+                     按 mimic/multiplier 推导 (与 mujoco equality 同构) -->
+                <joint name="left_gripper_joint2">
+                    <state_interface name="position"/>
+                    <state_interface name="velocity"/>
+                    <param name="mimic">left_gripper_joint1</param>
+                    <param name="multiplier">-1.0</param>
+                </joint>
+            </xacro:if>
 
             <!-- 右臂 6 关节 (与左臂对称) -->
             <xacro:stationlite_revolute_joint joint_name="right_joint1" lo="-2.824" hi="2.824" effort="10" vel="3.0"/>
@@ -86,7 +98,8 @@
             </joint>
             <!-- right_gripper_joint2 (mimic): MuJoCo 模式下 state-only -->
             <!-- gripper_joint2 removed for MuJoCo testing -->
-            <xacro:unless value="${use_gazebo == 'mujoco'}">
+            <xacro:if value="${use_gazebo == 'ign'}">
+                <!-- ign: gz 插件 mimic 参数需命令接口 (插件内镜像; _mimic 后缀坑独立挂账) -->
                 <joint name="right_gripper_joint2">
                     <command_interface name="position"/>
                     <state_interface name="position"/>
@@ -98,7 +111,18 @@
                     <param name="mimic">right_gripper_joint1</param>
                     <param name="multiplier">-1.0</param>
                 </joint>
-            </xacro:unless>
+            </xacro:if>
+            <xacro:if value="${use_gazebo in [False, 'false']}">
+                <!-- mock (2026-10-20 契约=物理DOF): 从指 state-only —— 命令面 14 关节
+                     (= 真机 SDK setGripperPosition 单值形状); 耦合由 kinematic backend
+                     按 mimic/multiplier 推导 (与 mujoco equality 同构) -->
+                <joint name="right_gripper_joint2">
+                    <state_interface name="position"/>
+                    <state_interface name="velocity"/>
+                    <param name="mimic">right_gripper_joint1</param>
+                    <param name="multiplier">-1.0</param>
+                </joint>
+            </xacro:if>
 
         </ros2_control>
 

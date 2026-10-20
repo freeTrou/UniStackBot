@@ -287,7 +287,7 @@ C=$(timeout 5 ros2 control list_controllers 2>/dev/null)
 echo "$C" | grep -q "cartesian_motion_controller.*inactive" && ok "CM 以 inactive 注册 (三件套齐)" || bad "CM 未注册为 inactive"
 SVCN=$(timeout 5 ros2 service list 2>/dev/null | grep -c "/sim_control/")
 [ "$SVCN" -ge 5 ] && ok "/sim_control 服务齐全 (${SVCN}个)" || bad "/sim_control 服务缺 ($SVCN/5+)"
-run_motion false "$TJS_MOCK" "$TCM_MOCK"
+run_motion false "$TJS_MOCK" "$TCM_MOCK" "" "$MIM_PAIRS"   # mimic 断言补接 (2026-10-20: 从指 state-only 后这是从动跟随的唯一回归门)
 cleanup_launch "$LPID"
 
 # ================= 4. Fortress 链 (可选) =================

@@ -131,10 +131,16 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 
-		// 命令接口契约: 恰好一个 position
-		if (joint.command_interfaces.size() != 1 || joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION)
+		// 命令接口契约: 恰好一个 position; 例外 = 带 mimic 参数的从动关节可 state-only
+		// (2026-10-20 契约=物理DOF: 从指不出命令接口, 后端按 mimic 参数从源推导)
+		const bool declares_mimic = joint.parameters.count("mimic") != 0 && !joint.parameters.at("mimic").empty();
+		if (joint.command_interfaces.size() == 0 && declares_mimic)
 		{
-			ULOG_ERROR("Joint '%s' must declare exactly one position command interface", joint.name.c_str());
+			joints_[i].has_command = false;
+		}
+		else if (joint.command_interfaces.size() != 1 || joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION)
+		{
+			ULOG_ERROR("Joint '%s' must declare exactly one position command interface (state-only 仅限 mimic 从动关节)", joint.name.c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 
@@ -244,6 +250,10 @@ std::vector<hardware_interface::CommandInterface> SimControlHardware::export_com
 	interfaces.reserve(cmd_position_.size());
 	for (size_t i = 0; i < cmd_position_.size(); ++i)
 	{
+		if (!joints_[i].has_command)
+		{
+			continue;   // state-only mimic 从动: 不进命令面 (由后端从源推导)
+		}
 		interfaces.emplace_back(info_.joints[i].name, hardware_interface::HW_IF_POSITION, &cmd_position_[i]);
 	}
 	return interfaces;
