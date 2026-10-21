@@ -51,7 +51,7 @@ constexpr int32_t kPrioCm = 80;   // CM 档 (yaml thread_priority)
 constexpr int32_t kPrioBus = 90;  // 总线主站档 (IgH, 高于 CM: write 不可被 update 推迟)
 constexpr int64_t kWarmupNs = 500'000'000LL;    // 共同预热窗 (墙钟 0.5s)
 constexpr size_t kStackPadBytes = 256u * 1024u;
-constexpr int32_t kJoints = 32;        // 总线报文按 32 关节设计 (人形态上限; ros2_control 链的 kMaxJoints=16 是另一层)
+constexpr int32_t kJoints = 32;        // 总线报文按 32 关节设计 (kMaxJoints 整机预算, 2026-10-21 起 32; 原 16 已扩)
 constexpr uint8_t kModeCsp = 1;
 constexpr double kPgain = 0.5;          // CM 模拟: P 控制
 constexpr double kActuatorRate = 0.05;  // 执行器一阶逼近系数 (每拍 5%, 同 kinematic 后端语义)

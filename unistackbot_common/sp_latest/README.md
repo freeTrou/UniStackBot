@@ -242,3 +242,40 @@ g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -I../rt_tune bench_sp_latest_chain.c
 | 2kHz ×30s (终版) | 随机 **104µs=真实撞上撞窗带** | 0 / 4 | 15 (0.025%) | 0.0454 (+2%) | 8.4 / 9.7 |
 
 (errRMS 随频率降低增大 = 执行器一阶模型每拍修正 2.5% 的控制带宽账, 与通道无关。)
+
+
+## DynamicSpLatest —— 装配期定容的动态尺寸变体 (2026-10-21, 组合模型 R-a)
+
+`dynamic_sp_latest.hpp`: 缓冲尺寸**运行期装配时定** (`init(n, initial)`), 消除总线段的
+节点数容量常量 (组合模型: 节点数是配置轴; SpLatest 的 `slots_[2]` 定长 POD 是容量
+存在的唯一原因)。算法/RT 纪律/TSAN 姿势与 SpLatest 同款 (宣告式 seqlock 直接继承)。
+
+| 差异点 | SpLatest | DynamicSpLatest |
+|---|---|---|
+| 容量 | 类型布局 (编译期) | init(n) 装配期 (运行期配置) |
+| 交换载荷 | T 整体值拷贝 | 元素 std::copy (n×sizeof(T), 尺寸 init 后固定→零分配) |
+| 读侧 | `read(T& out)` 值出参 | `read(T* dst, cap, seq)` **调用方预分配缓冲** |
+| T 约束 | trivially copyable | 同 (元素级) |
+| 重装配 | 重新 init (T 同尺寸) | `init(n2)` 尺寸可变 (stop 后无读写者时) |
+
+测试 `test_dynamic_sp_latest.cpp` **23 cases 全绿**: 语义/尺寸契约/逐元素自洽/重装配
++ 多线程压测 (写者 500Hz 贴设计域, 24 节点, 逐帧自洽校验, **撕裂=0**) + readLastFrame
+路径。**TSAN**: 数据拷贝路径的 race 报告为 seqlock 模型性误报 (设计即允许撕裂读+版本
+校验事后丢弃; 校验原子零报告=保护成立), 文件级白名单 `tsan_suppressions.txt`
+(ulog 同款纪律: 白名单外任何报告视为失败), `setarch -R` 禁 ASLR 跑 (新内核 TSAN 兼容)。
+
+**基准** (24 节点, publish+read 单拍, 本机): dynamic ≈0.045µs (折合 0.002µs/节点)
+vs SpLatest 单节点 ≈0.021µs —— 交换容量 24× 不折算 RT 预算。
+
+```bash
+# 测试 / TSAN (白名单纪律同 ulog):
+cd unistackbot_common/sp_latest
+g++ -std=c++17 -O2 -pthread -Wall -Wextra -Wconversion test_dynamic_sp_latest.cpp \
+    -I.. -o /tmp/test_dsl && /tmp/test_dsl
+g++ -std=c++17 -O1 -g -fsanitize=thread -pthread test_dynamic_sp_latest.cpp \
+    -I.. -o /tmp/test_dsl_tsan
+TSAN_OPTIONS="suppressions=tsan_suppressions.txt" setarch $(uname -m) -R /tmp/test_dsl_tsan
+```
+
+**消费状态**: 总线域适配 (BusCommand/BusState 定长结构退役 → DynamicSpLatest,
+kMaxNodes 退役) = 下一步 (2026-10-21 组合模型裁决, 方案 R-a)。

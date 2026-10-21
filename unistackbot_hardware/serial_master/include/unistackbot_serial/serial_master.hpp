@@ -28,7 +28,7 @@
 // 安全默认: start 后未 publish 过命令 = 持续发停机帧+看门狗位 (安全怠速)。
 // 生命周期: stop() 释放 transport、start() 复位循环态与 quick_stop 闩锁 —— 可重启。
 //
-// 交换: BusCommand/BusState 经 SpLatest (POD 定长, 零锁零等待)。
+// 交换: NodeCommand/NodeSnapshot 载荷经 DynamicSpLatest (装配期定容动态双缓冲, 零锁零等待零分配)。
 // 慢通道: read_param/write_param 返回 kUnsupported (unitree 纯周期帧协议无此能力)。
 
 namespace unistackbot_serial
@@ -54,13 +54,15 @@ public:
 	// 装配期注入 (组合根在 start() 之前调用)。安全状态机不经注入——总线内部组件,
 	// start 期按 cfg.statemachine 名经工厂自建 per-node 实例。
 	void attach_transport(std::unique_ptr<IoTransport> io);
-	void set_protocol(std::unique_ptr<unistackbot_protocol::ProtocolCore> proto) override;
 
 	[[nodiscard]] bool start(const unistackbot_bus::MasterConfig &cfg) override;
 	void stop() override;
-	void publish_cmd(const unistackbot_bus::BusCommand &cmd) override;
-	[[nodiscard]] bool take_state(unistackbot_bus::BusState &out) override;
+	void publish_cmd(const unistackbot_protocol::NodeCommand *cmds, std::size_t n) override;
+	using MasterBase::publish_cmd;   // vector 便利重载不因 override 遮蔽
+	[[nodiscard]] bool take_state(std::vector<unistackbot_bus::NodeSnapshot> &out) override;
 	void quick_stop() override;
+	void enable(std::uint8_t node_id) override;
+	void disable(std::uint8_t node_id) override;
 	void fault_clear() override;   // 清故障闩锁 (全节点; 全清后自熄, 见 cpp)
 	[[nodiscard]] unistackbot_statemachine::NeutralState state() const override;
 	[[nodiscard]] unistackbot_bus::ParamStatus read_param(std::uint8_t, std::uint32_t, std::uint64_t &, int) override

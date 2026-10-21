@@ -1,0 +1,6 @@
+# DynamicSpLatest seqlock 数据路径 —— 模型性报告白名单 (2026-10-21)
+# seqlock 设计即允许读者拷贝"写者可能正在写"的槽位, 靠 published_ 奇偶+夹逼校验
+# 事后丢弃撕裂拷贝 (丢弃值从不进控制流); published_/current_ 校验原子零报告 = 保护成立。
+# 文件级白名单 (TSAN 帧符号经内联后仅剩 publish/read 裸名, 函数级匹配不稳)。
+# 白名单外任何报告仍视为失败 (ulog 同款纪律)。
+race:dynamic_sp_latest.hpp

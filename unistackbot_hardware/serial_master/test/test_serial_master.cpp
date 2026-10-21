@@ -18,13 +18,12 @@
  *   cd unistackbot_hardware/serial_master/test
  *   g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_serial_master.cpp \
  *       ../src/serial_master.cpp ../src/framer.cpp ../src/termios_transport.cpp \
- *       ../../protocol/src/unitree_im_core.cpp ../../protocol/src/protocol_factory.cpp \
- *       ../../statemachine/src/unitree_im_safety.cpp \
- *       ../../statemachine/src/node_safety_factory.cpp \
- *       ../../bus/src/master_factory.cpp \
- *       -I../include -I../../protocol/include -I../../statemachine/include \
- *       -I../../bus/include -I../../../unistackbot_common -pthread \
- *       -o /tmp/test_serial_master && /tmp/test_serial_master
+ *       ../../bus/src/master_factory.cpp ../../protocol/src/unitree_im_core.cpp \
+ *       ../../protocol/src/dm_motor_core.cpp ../../protocol/src/protocol_factory.cpp \
+ *       ../../statemachine/src/unitree_im_safety.cpp ../../statemachine/src/cia402_safety.cpp \
+ *       ../../statemachine/src/dm_safety.cpp ../../statemachine/src/node_safety_factory.cpp \
+ *       -I../include -I../../bus/include -I../../protocol/include -I../../statemachine/include \
+ *       -I../../../unistackbot_common -o /tmp/test_serial_master && /tmp/test_serial_master
  */
 #include <cmath>
 #include <cstdio>
@@ -38,8 +37,9 @@
 #include "unistackbot_serial/fake_transport.hpp"
 #include "unistackbot_serial/serial_master.hpp"
 
-using unistackbot_bus::BusCommand;
-using unistackbot_bus::BusState;
+using CmdFrame = std::vector<unistackbot_protocol::NodeCommand>;
+using StateFrame = std::vector<unistackbot_bus::NodeSnapshot>;
+using unistackbot_protocol::NodeCommand;
 using unistackbot_bus::MasterBase;
 using unistackbot_bus::MasterConfig;
 using unistackbot_protocol::NodeCommand;
@@ -80,6 +80,7 @@ public:
 	std::uint64_t cmd_frames = 0;
 	double last_position[16] = {};
 	std::uint8_t last_mode[16] = {};
+	bool ever_run[16] = {false};   // 粘性: 帧上出现过 mode1 (意图握手帧只发一拍, 采样窗口不可靠)
 	bool last_watchdog[16] = {};
 
 	// responder: 输入写入字节 → 输出应答字节
@@ -99,6 +100,10 @@ public:
 			++cmd_frames;
 			const std::uint8_t id = in[i + 2] & 0x0Fu;
 			last_mode[id] = (in[i + 2] >> 4) & 0x07u;
+			if (last_mode[id] == 1)
+			{
+				ever_run[id] = true;
+			}
 			last_watchdog[id] = (in[i + 2] >> 7) != 0u;
 			// 位置: int32 → rad (输出端)
 			const std::int32_t q_raw = static_cast<std::int32_t>(load32(in + i + 8));
@@ -150,17 +155,14 @@ MasterConfig makeCfg()
 {
 	MasterConfig cfg;
 	cfg.endpoint = "fake";
+	cfg.protocol = "unitree_im";        // 组合模型 (2026-10-21): 段级名, start 期 per-node 自建
 	cfg.statemachine = "unitree_im";   // 主站 start 期经工厂自建 (总线内部组件)
 	cfg.rate_hz = 250.0;   // 测试提速 (2 节点 slot 2ms)
 	cfg.baudrate = 6000000;
 	cfg.thread_priority = 0;   // 测试环境不抢 FIFO (0=rt_tune 降级 SCHED_OTHER)
 	cfg.cpu_affinity = -1;    // 测试不绑核
 	cfg.stale_cycles = 30;    // 250Hz 下 120ms
-	cfg.node_count = 2;
-	cfg.node_id[0] = kNodeA;
-	cfg.node_id[1] = kNodeB;
-	cfg.ratio[0] = kRatio;
-	cfg.ratio[1] = kRatio;
+	cfg.nodes = {{kNodeA, {}, {}, kRatio}, {kNodeB, {}, {}, kRatio}};
 	return cfg;
 }
 
@@ -228,7 +230,6 @@ int main()
 	m->attach_transport(std::move(fake));
 
 	// 组合根注入 (协议+翻译器从工厂创建后注入, 总线不自己创建依赖)
-	m->set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
 
 	check(m->start(makeCfg()), "start with injected deps");
 	check(m->running(), "running");
@@ -240,15 +241,15 @@ int main()
 	check(motor->last_mode[kNodeB] == 0, "idle node B stop too");
 
 	// ② 命令往返
-	BusCommand cmd;
-	cmd.node[0].mode = NodeMode::kRun;
-	cmd.node[0].position = 1.234;
-	cmd.node[0].kp = 10.0;
-	cmd.node[0].watchdog_enable = true;
-	cmd.node[1].mode = NodeMode::kRun;
-	cmd.node[1].position = -0.5;
-	cmd.node[1].kp = 10.0;
-	cmd.node[1].watchdog_enable = true;
+	CmdFrame cmd(2);
+	cmd[0].mode = NodeMode::kRun;
+	cmd[0].position = 1.234;
+	cmd[0].kp = 10.0;
+	cmd[0].watchdog_enable = true;
+	cmd[1].mode = NodeMode::kRun;
+	cmd[1].position = -0.5;
+	cmd[1].kp = 10.0;
+	cmd[1].watchdog_enable = true;
 	m->publish_cmd(cmd);
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
 	check(motor->last_mode[kNodeA] == 1, "run mode on wire");
@@ -256,7 +257,7 @@ int main()
 	check(std::fabs(motor->last_position[kNodeB] + 0.5) < 1e-3, "position roundtrip B");
 
 	// ③ 状态翻译
-	BusState st;
+	StateFrame st(2);
 	bool got = false;
 	for (int i = 0; i < 20 && !got; ++i)
 	{
@@ -266,9 +267,9 @@ int main()
 	check(got, "take_state got live snapshot");
 	if (got)
 	{
-		check(st.node_state[0] == NeutralState::kEnabled, "node A ENABLED");
-		check(st.node[0].node_id == kNodeA, "node A id matched");
-		check(std::fabs(st.node[0].position - 1.234) < 1e-3, "state position A");
+		check(st[0].state == NeutralState::kEnabled, "node A ENABLED");
+		check(st[0].fb.node_id == kNodeA, "node A id matched");
+		check(std::fabs(st[0].fb.position - 1.234) < 1e-3, "state position A");
 	}
 	check(m->state() == NeutralState::kEnabled, "segment worst-of = ENABLED");
 
@@ -327,7 +328,6 @@ int main()
 	auto flaky = std::make_unique<FlakyWriteTransport>(std::move(fake2));
 	FlakyWriteTransport *flaky_raw = flaky.get();
 	SerialMaster m2;
-	m2.set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
 	m2.attach_transport(std::move(flaky));
 	check(m2.start(makeCfg()), "start with flaky transport");
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
@@ -345,23 +345,185 @@ int main()
 		});
 	FakeTransport *fake3_raw = fake3.get();
 	m->attach_transport(std::move(fake3));
-	m->set_protocol(unistackbot_protocol::createProtocolCore("unitree_im"));
 	check(m->start(makeCfg()), "restart after stop");
 	check(m->running(), "restart running");
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
 	check(motor3->cmd_frames > 5, "frames flowing after restart");
-	BusCommand run_cmd;
-	run_cmd.node[0].mode = NodeMode::kRun;
-	run_cmd.node[0].position = 0.5;
-	run_cmd.node[0].kp = 10.0;
-	run_cmd.node[0].watchdog_enable = true;
-	run_cmd.node[1] = run_cmd.node[0];
+	CmdFrame run_cmd(2);
+	run_cmd[0].mode = NodeMode::kRun;
+	run_cmd[0].position = 0.5;
+	run_cmd[0].kp = 10.0;
+	run_cmd[0].watchdog_enable = true;
+	run_cmd[1] = run_cmd[0];
 	m->publish_cmd(run_cmd);
 	std::this_thread::sleep_for(std::chrono::milliseconds(80));
 	check(motor3->last_mode[kNodeA] == 1, "quick_stop latch cleared on restart");
 	check(m->state() == NeutralState::kEnabled, "state after restart");
 	m->stop();
 	check(fake3_raw->closed(), "second stop closes transport");
+
+	// ---- ⑧ 组合模型装配预演 (2026-10-21): 名解析/混型/kind 校验/诊断 (装配级,
+	//      不需帧回环 —— dm 协议帧内容无关, 只验 start 的工厂与校验路径) ----
+	{
+		auto mk = unistackbot_bus::createMaster("serial");
+		auto *mm = dynamic_cast<SerialMaster *>(mk.get());
+		check(mm != nullptr, "组合模型 master 创建");
+		auto mot2 = std::make_shared<FakeMotor>();
+		mm->attach_transport(std::make_unique<FakeTransport>([mot2](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+				return mot2->respond(in, n, out);
+			}));
+		MasterConfig dm = makeCfg();
+		dm.protocol = "dm4340";          // 段级缺省 (stationlite j1-3 形态)
+		dm.statemachine = "dm4340";
+		dm.nodes[1].protocol = "dm4310";   // 节点 1 覆写 (混型!)
+		dm.nodes[1].statemachine = "dm4310";
+		dm.nodes[0].ratio = dm.nodes[1].ratio = 1.0;   // 达妙恒等
+		// 串口拒不可帧化协议 (2026-10-21 审查 P1: dm 帧头 0x00/0x00=CAN 形态,
+		// Framer 将以流中任意 00 00 对同步解噪声)——混型节点表亦被段级同族校验拒
+		check(!mm->start(dm), "串口拒无帧头协议 (dm 走 CAN 主站)");
+		mm->stop();
+		// 拒绝路径: 执行器协议缺状态机名 (段级与节点级皆空)
+		MasterConfig bad = makeCfg();
+		bad.protocol = "dm4310";
+		bad.statemachine = "";
+		bad.nodes[0].ratio = bad.nodes[1].ratio = 1.0;
+		check(!mm->start(bad), "执行器缺状态机名 → 拒");
+		// 拒绝路径: 两级协议名皆空
+		MasterConfig bad2 = makeCfg();
+		bad2.protocol = "";
+		bad2.statemachine = "unitree_im";
+		check(!mm->start(bad2), "两级协议名皆空 → 拒");
+		// 拒绝路径: dm ratio≠1 (装配期 fail-fast, 先于 framer 校验)
+		MasterConfig bad3 = makeCfg();
+		bad3.protocol = "dm4310";
+		bad3.statemachine = "dm4310";
+		bad3.nodes[0].ratio = bad3.nodes[1].ratio = 9.0;
+		check(!mm->start(bad3), "dm ratio≠1 → 拒 (fail-fast)");
+		// 拒绝路径: 跨族混搭 (unitree 协议 + dm 状态机)
+		MasterConfig bad4 = makeCfg();
+		bad4.statemachine = "dm4310";
+		check(!mm->start(bad4), "跨族混搭 → 拒");
+		// 拒绝路径: 重复节点 id (2026-10-21 审查补: 拓扑一致性)
+		MasterConfig bad5 = makeCfg();
+		bad5.nodes[1].id = bad5.nodes[0].id;
+		check(!mm->start(bad5), "重复节点 id → 拒");
+		// 宇树段级简写回归: 原形态仍可 start
+		auto mk3 = unistackbot_bus::createMaster("serial");
+		auto *m3 = dynamic_cast<SerialMaster *>(mk3.get());
+		m3->attach_transport(std::make_unique<FakeTransport>([mot2](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+				return mot2->respond(in, n, out);
+			}));
+		MasterConfig ut = makeCfg();
+		check(m3->start(ut), "宇树段级简写零行为变化");
+		m3->stop();
+	}
+
+	// ---- ⑨ 意图接口三件套 (2026-10-21): enable()/disable() 显式路径 ----
+	{
+		auto mk2 = unistackbot_bus::createMaster("serial");
+		auto *mi = dynamic_cast<SerialMaster *>(mk2.get());
+		auto mot3 = std::make_shared<FakeMotor>();
+		mi->attach_transport(std::make_unique<FakeTransport>([mot3](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+				return mot3->respond(in, n, out);
+			}));
+		check(mi->start(makeCfg()), "意图测试 start");
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));   // idle 期: disable_command 帧 (宇树=kStop)
+		check(mot3->last_mode[kNodeA] == 0 && mot3->last_watchdog[kNodeA], "idle=协议安全形态 (kStop+wd, 零行为变化)");
+		mi->enable(kNodeA);   // 显式意图: 泵→request_enable→enable_command (宇树=锚定 kRun)
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));
+		// 宇树请求生命周期: 反馈 mode=kRun 即自清 → 握手帧只发一拍, 之后回数据流
+		// (idle) 覆盖 last_mode —— 断言用粘性标志 (握手发生过)
+		check(mot3->ever_run[kNodeA] && !mot3->ever_run[kNodeB], "enable() → 命令面握手 kRun (仅目标节点)");
+		check(mot3->last_mode[kNodeA] == 0, "握手完成后回数据流 (idle, 请求自清语义)");
+		mi->disable(kNodeA);  // 显式断能: 停机帧
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));
+		check(mot3->last_mode[kNodeA] == 0, "disable() → 停机帧");
+		mi->enable(0xFE);     // 表外 id: no-op 不崩
+		std::this_thread::sleep_for(std::chrono::milliseconds(40));
+		check(true, "表外 id enable no-op");
+		mi->stop();
+	}
+	// ---- ⑩ 二轮审查: 急停压意图 + 意图旗失效 ----
+	{
+		auto mk4 = unistackbot_bus::createMaster("serial");
+		auto *mq = dynamic_cast<SerialMaster *>(mk4.get());
+		auto mot4 = std::make_shared<FakeMotor>();
+		mq->attach_transport(std::make_unique<FakeTransport>([mot4](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+				return mot4->respond(in, n, out);
+			}));
+		check(mq->start(makeCfg()), "二轮 start");
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));   // kReady
+		mq->enable(kNodeA);                                           // 意图挂起
+		mq->quick_stop();                                             // e-stop 压制
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));
+		check(!mot4->ever_run[kNodeA], "急停期间挂起 enable 不上链 (急停压意图)");
+		mq->stop();
+	}
+	// ---- ⑪ 二轮审查: FAULT 期 enable 意图失效 (fault_clear 回 READY 不自动复电) ----
+	{
+		auto mk5 = unistackbot_bus::createMaster("serial");
+		auto *mf = dynamic_cast<SerialMaster *>(mk5.get());
+		auto mot5 = std::make_shared<FakeMotor>();
+		mf->attach_transport(std::make_unique<FakeTransport>([mot5](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+				return mot5->respond(in, n, out);
+			}));
+		check(mf->start(makeCfg()), "⑪ start");
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));   // kReady
+		mot5->error_bits = 0x00000100u;                               // 注入故障 → FAULT
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));
+		mf->enable(kNodeA);                                           // FAULT 期点击 (意图将被失效)
+		std::this_thread::sleep_for(std::chrono::milliseconds(40));
+		mot5->error_bits = 0;                                         // 故障源消除
+		mf->fault_clear();                                            // 0xFB → err=0 → confirm → kReady
+		std::this_thread::sleep_for(std::chrono::milliseconds(80));
+		check(!mot5->ever_run[kNodeA], "FAULT 期 enable 意图已失效 — 回 READY 不自动复电");
+		mf->stop();
+	}
+
+
+
+	// ---- ⑫ 容量动态化 (方案 R-a): 节点数运行期无容量上限 ----
+	// 串口形态单段节点上限由协议 id 域决定 (unitree ≤14): 顶格 14 节点装配+交换;
+	// >16 交换已在 DynamicSpLatest 组件级证明 (24 节点压测); dm 24 节点属 CAN 形态
+	// (CanMaster)。id 域自声明拒绝 (unitree id 15=广播) 同验。
+	{
+		auto mk6 = unistackbot_bus::createMaster("serial");
+		auto *md = dynamic_cast<SerialMaster *>(mk6.get());
+		auto mot6 = std::make_shared<FakeMotor>();
+		md->attach_transport(std::make_unique<FakeTransport>([mot6](const std::uint8_t *in, std::size_t n, std::uint8_t *out) {
+				return mot6->respond(in, n, out);
+			}));
+		MasterConfig big = makeCfg();
+		const std::size_t kTop = 14;   // unitree id 域顶格 (1..14; 15=广播)
+		big.nodes.clear();
+		for (std::size_t k = 0; k < kTop; ++k)
+		{
+			big.nodes.push_back({static_cast<std::uint8_t>(k + 1), {}, {}, kRatio});
+		}
+		check(md->start(big), "14 节点顶格装配 (unitree id 域满, 无容量常量)");
+		CmdFrame bigcmd(kTop);
+		for (std::size_t k = 0; k < kTop; ++k)
+		{
+			bigcmd[k].mode = NodeMode::kRun;
+			bigcmd[k].position = 0.1 * static_cast<double>(k);
+			bigcmd[k].kp = 10.0;
+		}
+		md->publish_cmd(bigcmd);
+		std::this_thread::sleep_for(std::chrono::milliseconds(80));
+		StateFrame snap(kTop);
+		bool got = false;
+		for (int i = 0; i < 20 && !got; ++i)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			got = md->take_state(snap);
+		}
+		check(got && snap.size() == kTop, "14 节点状态快照");
+		md->stop();
+		// id 域拒绝: id 15 (unitree 广播域)
+		MasterConfig e8 = makeCfg();
+		e8.nodes[0].id = 15;
+		check(!md->start(e8), "unitree id=15 (广播域) → 拒 (id 域自声明)");
+	}
 
 	std::printf("%s: %d cases, %d failed\n", g_fail == 0 ? "PASS" : "FAIL", g_case, g_fail);
 	return g_fail == 0 ? 0 : 1;
