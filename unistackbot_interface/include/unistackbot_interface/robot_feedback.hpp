@@ -1,3 +1,7 @@
+/*
+ * **形态挂账 (2026-10-21)**: 同 RobotCommand —— 零消费者期保持定长 POD 自洽形态;
+ * 动态化挂账, 触发器 = 第一个真实 RL 契约消费者。
+ */
 #ifndef UNISTACKBOT_INTERFACE__ROBOT_FEEDBACK_HPP_
 #define UNISTACKBOT_INTERFACE__ROBOT_FEEDBACK_HPP_
 

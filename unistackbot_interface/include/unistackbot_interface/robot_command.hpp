@@ -1,3 +1,10 @@
+/*
+ * **形态挂账 (2026-10-21 组合模型复审)**: 当前定长 POD + trivially copyable = 为
+ * SpLatest 值通道设计的自洽形态 (零消费者)。总线段交换已动态化 (DynamicSpLatest,
+ * 装配期定容); 本头**动态化挂账, 触发器 = 第一个真实 RL 契约消费者**——届时按实际
+ * 需求定形态 (vector 帧 + 对象版双缓冲交换原语, 非 POD 帧不进现有 seqlock), 与
+ * 消费者共同定稿, 不预先抽象 (最小集纪律)。
+ */
 #ifndef UNISTACKBOT_INTERFACE__ROBOT_COMMAND_HPP_
 #define UNISTACKBOT_INTERFACE__ROBOT_COMMAND_HPP_
 

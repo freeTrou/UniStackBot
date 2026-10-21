@@ -19,6 +19,14 @@ namespace unistackbot_interface
 // 升容量的路径 (如将来上 43-DoF 人形): 改此数 + 全仓重编 + verify —— monorepo
 // 无外部消费者、帧不跨进程不序列化, 变更成本 = 一次构建 (2026-09-17 裁决)。
 // 帧大小 @32: RobotCommand ≈ 1.6 KB / RobotFeedback ≈ 0.9 KB。
+// 分层裁决 (2026-10-21 组合模型复审, 四层终态):
+//   ①总线段交换 = 已动态化 (DynamicSpLatest 装配期定容, kMaxNodes 退役);
+//   ②ROS msg (JointCommand) = 本身变长, 无定长问题;
+//   ③契约头 RobotCommand/RobotFeedback (本常量消费) = 定长 POD 挂账, 触发器=
+//     第一个真实 RL 契约消费者 (零消费期 POD 形态自洽);
+//   ④RT 控制器 = OtgStream 已运行期 DOF 化 (OtgStreamDyn, 2026-10-21 当日落地,
+//     CM/JS 已切); 仍挂账: CM SolvedTarget/MeasJoints POD 通道、sim 队列——
+//     触发器=>32 关节机型立项, 逐控制器按 ros2_control 主流改造。
 inline constexpr uint32_t kMaxJoints = 32;
 
 }  // namespace unistackbot_interface

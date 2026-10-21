@@ -45,6 +45,9 @@ struct SimCommand
 {
 	SimCmdType type{SimCmdType::RESET};
 	uint32_t count{0};    // 关节总数快照 (圈定索引范围, 生效与否看 mask)
+// **形态挂账 (2026-10-21 组合模型复审)**: 定长数组住 SpscRing (无锁队列元素须
+// POD 定长——memcpy 语义); 动态化需 ring 改造 (新原语), 触发器 = 仿真需求超
+// 32 关节机型立项 (当前最大 r1_pro 21, 覆盖有余)。
 	std::array<uint8_t, kMaxJoints> mask{};
 	std::array<double, kMaxJoints> positions{};
 	std::array<double, kMaxJoints> velocities{};

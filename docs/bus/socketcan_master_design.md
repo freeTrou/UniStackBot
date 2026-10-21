@@ -1,8 +1,9 @@
-# SocketCAN 实时主站 · 完整设计方案(CAN FD 后端,形态 B 线程1)
+# SocketCAN 实时主站 · 完整设计方案(**CAN + CAN FD 双模后端**,形态 B 线程1)
 
 > 配套:`docs/architecture/hardware_framework_design.md`(形态 B / master.hpp 五要素 / v3 语义 / 协议层)、`docs/guides/linux_rt_guide.md`(§2.1 线程模板、§2.5 SpLatest)、`docs/bus/ethercat_master_design.md`(EC 分支,结构平行)。
 > 纯 C++17 + POSIX + SocketCAN;目标平台 NVIDIA Orin + RK3576 双平台,用户态代码同源,平台差异收进配置与自检。
 > 定位:master.hpp 接口的第二个真实后端(fake 为第一个)。
+> **双模裁决(2026-10-21 用户拍板):主站完整支持经典 CAN 与 CAN FD 两种模式**——同一实现,`fd` 配置开关切换;首消费者达妙(stationlite)走经典模式(fd=false),Piper 等 CAN FD 从站走 fd=true。BRS/dbitrate/TDC 各节为 FD 模式专属,经典模式跳过。
 
 ## 0. 总览
 
@@ -46,9 +47,11 @@ void* bus_thread(void*) {
 
 ## 2. Socket 层(五个必须对的选项 + 收发纪律)
 
+**双模开关(2026-10-21)**:`fd=false`(经典)时不置 `CAN_RAW_FD_FRAMES`——socket 上只有 `can_frame`(16B);`fd=true` 时开启,socket 上 `can_frame` 与 `canfd_frame`(72B)混流,**RX 判型用 recvmsg 返回长度**(16=经典 / 72=FD;错误帧恒 16B 经典结构,即使 FD 模式);TX 按模式组帧(FD 帧手动置 `CANFD_BRS`)。ProtocolCore 产物是纯数据段,帧头组装归主站——经典 8B 段与 FD 64B 段对内芯透明。
+
 ```c
 int s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
-setsockopt(s, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &on, sizeof(on));   // ① FD 帧
+setsockopt(s, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &on, sizeof(on));   // ① FD 帧 (双模开关: fd=true 才置)
 struct can_filter flt[] = {{/* 只订本站 ID */}};                   // ② 内核层过滤(否则杂帧进用户态,softirq 变重)
 setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, flt, sizeof(flt));
 setsockopt(s, SOL_SOCKET,  SO_TIMESTAMPNS, &on, sizeof(on));      // ③ 内核收帧时间戳 → 快照 ts
@@ -109,7 +112,7 @@ bind(s, &addr, ...);  // if_nametoindex(cfg.interface)
 
 主路径三细节:①订阅即开关(默认不投递);②**错误帧永远以 `struct can_frame`(16B)到达,即使开了 FD**——rx_drain 必须两种 MTU 都认,否则错误帧被当垃圾或错位解码;③payload 布局 per `linux/can/error.h`(data[0]=类, [1]=控制器状态, [2]=协议类型, [3]=位置, [4]=收发器, [5..6]=私有)。
 
-**驱动能力警告 + 双平台错误面测绘**:错误帧由驱动构造,**类别覆盖度是驱动能力不是协议保证**(有驱动漏报 passive 迁移的先例)——Orin(M_TTCAN)与 RK3576(CANFD)必须各自实测订阅面(人为制造:拔线→BUSOFF?短路→TRX?干扰→PROT?),实测写进平台能力声明,盲区由通道 3~5 轮询兜底;此测绘并入 §8 第 3 步装机自检。
+**驱动能力警告 + 双平台错误面测绘**:错误帧由驱动构造,**类别覆盖度是驱动能力不是协议保证**(有驱动漏报 passive 迁移的先例)——Orin(M_TTCAN)与 RK3576(CANFD)必须各自实测订阅面(人为制造:拔线→BUSOFF?短路→TRX?干扰→PROT?),实测写进平台能力声明,盲区由通道 3~5 轮询兜底;此测绘并入 §9 第 3 步装机自检。
 
 **订阅三注意**:①`CAN_ERR_FLAG` 须同时置入 filter 的 can_id 和 can_mask(漏一处收不到或全收);②handler 只计数不打印(洪水防护)+ 错误帧本身占带宽,吵闹总线订阅面收窄;③分级订阅:链路生死+TRX/NOANSWER 常驻,PROT/LOSTARB bring-up 全开、量产收窄(写进能力声明运行模式)。
 
@@ -193,7 +196,30 @@ bind(s, &addr, ...);  // if_nametoindex(cfg.interface)
 | state_ex 年龄 | ≤1 拍;反馈分频轴按策略标注 |
 | bus-off 恢复 | 全链路(急停→恢复→重锚定→放行)注入测试通过 |
 
-## 8. 实施顺序(先证据后代码)
+## 8. 达妙接入修订(2026-10-21,stationlite A3 前设计分析)
+
+首消费者 = stationlite 达妙臂,实测事实对本设计的六处修订 + 带宽硬账 + 两待拍板项:
+
+**六修订**:
+1. 首跑经典模式(fd=false,1Mbps)——双模开关的第一个实例;
+2. **命令-回显模式**:达妙反馈由命令触发(每 MIT 帧回一反馈帧),无轮询——§3 的"反馈分频/广播同步"策略不适用(协议无广播命令帧),时隙天然对齐;
+3. rx_drain 按 can_id 分发(recv_id 0x11-0x17→节点槽),无 Framer——内核帧对象,较串口少整层(同步/拼接/重同步);
+4. 慢通道 SDO = kUnsupported(达妙参数帧 0x33/0x55 按范围裁决暂缓);
+5. `ip link` 装配参数:bitrate 1M + `restart-ms 100` + `txqueuelen 1000`(厂商 start_can.sh 实证);
+6. 测试桩 = FakeMotor(vcan 上的模拟电机:收 MIT→组反馈回写,q 渐进跟随,故障注入旋钮静默/坏帧/延迟)+ vcan0 E2E(vcan 原生支持 FD 帧,双模都可测)。
+
+**带宽硬账(单总线 7 节点,命令-回显)**:
+```
+14 帧/拍 × 400Hz = 5600 帧/s;经典帧 8B@1M ≈ 111~130µs → 67% 负载,贴 70% 红线
+互证: 厂商 mcap p50 间隔 2.51ms(400Hz)但 p95 掉 10ms —— 总线饱和边缘签名
+500Hz 则 84% 爆线 → CAN 节拍须与 update_rate 解耦
+```
+
+**节拍与急停定调(2026-10-21 用户拍板)**:
+- **CAN 节拍纯配置化**(`MasterConfig.rate_hz`),设计不预设——400/500Hz 是装机时按机型总线负载算的配置值(达妙预算账 67%@400Hz 留作装机参考),update_rate 与总线节拍本就解耦;
+- **quick_stop 形态暂定 A(软急停)**:锚定实测位+kd 阻尼 MIT 持续发(臂受控停,失能帧只留最底层)——与框架"断流=最后帧保持"语义同构;真机窗口实测后定稿(B=失能帧硬停,竖直臂重力下垂,仅操作员显式断使能/运输态用)。
+
+## 9. 实施顺序(先证据后代码)
 
 ```
 1. candump 抓真实流量 → 协议帧格式/节奏/负载确认
