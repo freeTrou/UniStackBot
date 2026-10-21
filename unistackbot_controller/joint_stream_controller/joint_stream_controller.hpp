@@ -10,8 +10,7 @@
 
 #include "controller_interface/controller_interface.hpp"
 #include "realtime_tools/realtime_publisher.hpp"
-#include "sp_latest/sp_latest.hpp"
-#include "unistackbot_interface/joint_capacity.hpp"
+#include "sp_latest/dynamic_sp_latest.hpp"
 #include "unistackbot_interface/msg/joint_command.hpp"
 
 #include "ruckig/otg_stream.hpp"
@@ -66,16 +65,17 @@ private:
 	// 观测面: 当拍应用命令 (cmd_) 发布; tryPublish 非阻塞 (拿不到锁跳拍)
 	void publishApplied();
 
-	// 值通道快照 (POD): 回调线程做名映射 → RT 侧零 string 零 vector。
-	// JointCommand rosidl 类型非 POD, 不能直接进 SpLatest —— 快照即翻译层
-	struct CmdSnapshot
-	{
-		double position[unistackbot_interface::kMaxJoints];
-		uint64_t seq;
-	};
+	// 值通道快照 (DynamicSpLatest, 装配期定容=关节数): 回调线程做名映射 → 接口序
+	// position vector → publish; RT 侧 readFill 零分配。JointCommand rosidl 非 POD,
+	// 快照即翻译层 (元素 double trivially copyable)
 	rclcpp::Subscription<unistackbot_interface::msg::JointCommand>::SharedPtr cmd_sub_;
-	unistackbot_common::SpLatest<CmdSnapshot> rt_cmd_;
+	unistackbot_common::DynamicSpLatest<double> rt_cmd_;
 	uint64_t cmd_seq_{0};
+	std::vector<double> cmd_mapped_;       // 回调线程: 名映射后接口序 position (装配期定容)
+	std::vector<double> cmd_rt_;           // RT 侧: readFill 接收缓冲 (装配期定容)
+	std::vector<double> tgt_scratch_;      // RT 循环 scratch (activate 期定容; 零分配: update
+	                                       // 内禁止 vector 构造, 2026-10-21 二轮审查 RT 纪律)
+	std::vector<double> out_scratch_;      // OTG 输出 scratch (同上)
 	std::atomic<uint64_t> cmd_seq_pub_{0};   // 回调线程产序号 (唯一写者)
 
 	// ---- 关节表 (on_configure 定容) ----
@@ -93,7 +93,7 @@ private:
 
 	// ---- 插值 ----
 	Interpolation interpolation_{Interpolation::HOLD};
-	unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints> otg_;
+	unistackbot_common::OtgStreamDyn otg_;
 	double max_acceleration_{5.0};
 	double max_jerk_{20.0};
 	bool otg_ready_{false};

@@ -123,9 +123,12 @@ private:
 	// ---- RT 路径状态 (update 线程私有, 零周期分配) ----
 	std::vector<double> cmd_;            // 上一拍命令 (链序)
 	std::vector<double> q_meas_;         // 实测关节 (链序, 误差基准 + 回调种子源)
+	std::vector<double> tgt_scratch_;    // RT 循环 scratch (activate 期定容; update 内禁止
+	                                     // vector 构造, 2026-10-21 二轮审查 RT 纪律)
+	std::vector<double> out_scratch_;    // OTG 输出 scratch (同上)
 	std::vector<double> qd_meas_;        // 实测关节速度 (链序, ARRIVAL_SETTLED 双条件)
 	bool has_target_{false};
-	std::array<double, unistackbot_interface::kMaxJoints> goal_{};   // 最新成功解的关节终点 (OTG 追踪目标)
+	std::vector<double> goal_;               // 最新成功解的关节终点 (OTG 追踪目标; on_configure 按 chain_n 定容)
 	bool have_goal_{false};
 	CartesianPose target_pose_{};        // 当前采纳目标 (base 系; 来自解算载荷)
 	uint64_t target_seq_{0};
@@ -138,6 +141,10 @@ private:
 	std::string warned_frame_;           // 非本帧目标的单次警告去重 (回调线程私有)
 
 	// ---- 跨线程通道 (POD; §16.6 改版核心) ----
+	// **容量挂账 (2026-10-21 组合模型分层裁决)**: q[kMaxJoints] 定长 = SpLatest POD
+	// 值通道契约 (跨线程无锁交换须定长), 非规格常量滥用; otg_/goal_ 已运行期化
+	// (OtgStreamDyn/vector)。触发器 = >32 关节机型立项, 届时通道改造
+	// (DynamicSpLatest<double> 拆通道或对象双缓冲), 与 CM/JS 全链挂账同批。
 	// 回调 → RT: 每条 ~/command 消息一次 IK 的结果 (关节终点 + 遥测)
 	struct SolvedTarget
 	{
@@ -163,7 +170,7 @@ private:
 	std::vector<double> cb_q_;            // 回调线程私有: 解缓冲
 
 	// ---- OTG 输出级 (RT 线程私有; §16.6: OtgStream 唯一平滑入口) ----
-	unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints> otg_;
+	unistackbot_common::OtgStreamDyn otg_;   // 运行期 DOF (链长 = URDF 关节数, on_configure 定)
 	bool otg_ready_{false};
 
 	// ---- 断流语义 (2026-10-10 统一, 用户裁决) ----

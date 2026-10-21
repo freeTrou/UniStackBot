@@ -346,7 +346,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 			sol.result = static_cast<uint8_t>(result);
 			sol.timed_out = st.timed_out;
 			sol.min_sigma = st.min_sigma;
-			for (std::uint32_t i = 0; i < chain_n && i < unistackbot_interface::kMaxJoints; ++i)
+			for (std::uint32_t i = 0; i < chain_n; ++i)
 			{
 				sol.q[i] = cb_q_[i];
 			}
@@ -462,7 +462,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	has_target_ = false;
 	have_goal_ = false;
 	consecutive_fail_ = 0;
-	goal_.fill(0.0);
+	goal_.assign(fk_->jointCount(), 0.0);
 	rate_calibrated_ = false;
 	period_n_ = 0;
 	otg_ready_ = false;
@@ -498,7 +498,7 @@ controller_interface::return_type CartesianMotionController::update(const rclcpp
 	{
 		MeasJoints mj{};
 		mj.n = static_cast<uint32_t>(n);
-		for (std::size_t i = 0; i < n && i < unistackbot_interface::kMaxJoints; ++i)
+		for (std::size_t i = 0; i < n; ++i)
 		{
 			mj.q[i] = q_meas_[i];
 		}
@@ -538,21 +538,20 @@ controller_interface::return_type CartesianMotionController::update(const rclcpp
 			}
 			// OTG 输出级装配 (§16.6): vmax=URDF 单一事实源; a/j=机型资产;
 			// max_target_jump 0.3 = 关节目标跳变容忍 (每条消息一解, 分支翻转界)
-			unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::Limits lim;
-			for (std::size_t i = 0; i < lim.max_velocity.size(); ++i)
+			unistackbot_common::OtgStreamDyn::Limits lim;
+			lim.max_velocity.assign(n, 0.0);
+			for (std::size_t i = 0; i < n; ++i)
 			{
 				lim.max_velocity[i] = (i < vmax_.size()) ? vmax_[i] : 3.0;
 			}
-			lim.max_acceleration.fill(max_acceleration_);
-			lim.max_jerk.fill(max_jerk_);
-			if (!otg_.init(1.0 / hz, lim, 0.3))
+			lim.max_acceleration.assign(n, max_acceleration_);
+			lim.max_jerk.assign(n, max_jerk_);
+			if (!otg_.init(n, 1.0 / hz, lim, 0.3))
 			{
 				ULOG_ERROR("cm: OtgStream init 失败 (限值/dt 非法)");
 				return controller_interface::return_type::ERROR;
 			}
-			std::array<double, unistackbot_interface::kMaxJoints> q0{};
-			for (std::size_t i = 0; i < n; ++i) {q0[i] = q_meas_[i];}
-			otg_.reset(q0);   // 实测位锚定: 激活零跳变
+			otg_.reset(q_meas_);   // 实测位锚定: 激活零跳变
 			otg_ready_ = true;
 			if (hz_auth > 0)
 			{
@@ -624,19 +623,18 @@ controller_interface::return_type CartesianMotionController::update(const rclcpp
 		// 目标选择: HOLD/无解算目标/FK 异常 → 自目标 (= 保持, C2 停在原地);
 		// 正常 → 最新关节终点 goal_ (每拍重规划 = 可打断原生语义, §16.6)。
 		// ~/command 停发不是状态: goal_ 保持, 臂收敛到最后命令的位姿 (断流语义统一 2026-10-10)
-		std::array<double, unistackbot_interface::kMaxJoints> tgt{};
+		// RT 零分配 (二轮审查): tgt/out 为 activate 期定容 scratch, update 内禁止 vector 构造
 		const bool servo = !hold && have_goal_ && meas_ok;
 		if (servo)
 		{
-			tgt = goal_;
+			tgt_scratch_ = goal_;        // 等尺寸赋值, 零分配
 		}
 		else
 		{
-			for (std::size_t i = 0; i < n; ++i) {tgt[i] = cmd_[i];}
+			for (std::size_t i = 0; i < n; ++i) {tgt_scratch_[i] = cmd_[i];}
 		}
-		std::array<double, unistackbot_interface::kMaxJoints> out{};
-		(void)otg_.update(tgt, out);   // Hold 时 out 恒有效 (OtgStream 契约)
-		(void)applySolution(out.data());   // 皮带扣: NaN 门+限位+步长 (Limits 之上)
+		(void)otg_.update(tgt_scratch_, out_scratch_);   // Hold 时 out 恒有效 (契约; target 就地跳变限幅)
+		(void)applySolution(out_scratch_.data());   // 皮带扣: NaN 门+限位+步长 (Limits 之上)
 	}
 	for (std::size_t i = 0; i < command_interfaces_.size(); ++i)
 	{

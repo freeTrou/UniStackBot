@@ -133,6 +133,13 @@ controller_interface::CallbackReturn JointStreamController::on_configure(const r
 	}
 	cmd_.assign(joint_names_.size(), 0.0);
 	target_.assign(joint_names_.size(), 0.0);
+	cmd_mapped_.assign(joint_names_.size(), 0.0);
+	cmd_rt_.assign(joint_names_.size(), 0.0);
+	tgt_scratch_.assign(joint_names_.size(), 0.0);
+	out_scratch_.assign(joint_names_.size(), 0.0);
+	// DynamicSpLatest 与旧 SpLatest 行为差异: publish 要求先 init (n≠size 拒) ——
+	// 旧版未 init 也能 publish (seq 从 0 自增)。此处装配期定容。
+	rt_cmd_.init(joint_names_.size(), 0.0);
 
 	// 观测面 (可选): 全率发布插值后的应用命令 (与 CM status 同款 RealtimePublisher)
 	observe_applied_ = get_node()->get_parameter("observe_applied_command").as_bool();
@@ -157,14 +164,15 @@ controller_interface::CallbackReturn JointStreamController::on_configure(const r
 	// ruckig 档: OtgStream 装配 (编译期 16 上限, 运行期用前 n 轴)
 	if (interpolation_ == Interpolation::RUCKIG)
 	{
-		unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::Limits lim;
-		for (std::size_t i = 0; i < lim.max_velocity.size(); ++i)
+		unistackbot_common::OtgStreamDyn::Limits lim;
+		lim.max_velocity.assign(joint_names_.size(), 0.0);
+		for (std::size_t i = 0; i < joint_names_.size(); ++i)
 		{
 			lim.max_velocity[i] = (i < vmax_.size()) ? vmax_[i] : 3.0;   // 各关节速度限 (URDF)
 		}
-		lim.max_acceleration.fill(max_acceleration_);
-		lim.max_jerk.fill(max_jerk_);
-		if (!otg_.init(1.0 / hz, lim, 0.3))
+		lim.max_acceleration.assign(joint_names_.size(), max_acceleration_);
+		lim.max_jerk.assign(joint_names_.size(), max_jerk_);
+		if (!otg_.init(joint_names_.size(), 1.0 / hz, lim, 0.3))
 		{
 			ULOG_ERROR("%s: OtgStream init 失败", kPluginName);
 			return controller_interface::CallbackReturn::ERROR;
@@ -186,9 +194,8 @@ controller_interface::CallbackReturn JointStreamController::on_configure(const r
 				++dropped_len_;
 				return;
 			}
-			// 按名映射: 消息关节序 → 本控制器关节序 (缺关节整条丢弃), 产出 POD 快照
-			CmdSnapshot snap{};
-			snap.seq = ++cmd_seq_pub_;
+			// 按名映射: 消息关节序 → 本控制器关节序 (缺关节整条丢弃), 发布接口序 vector
+			// (DynamicSpLatest: 元素拷贝零分配; 元素 double trivially copyable)
 			for (std::size_t i = 0; i < joint_names_.size(); ++i)
 			{
 				const auto it = std::find(m->joint_names.begin(), m->joint_names.end(), joint_names_[i]);
@@ -197,13 +204,13 @@ controller_interface::CallbackReturn JointStreamController::on_configure(const r
 					++dropped_len_;
 					return;
 				}
-				snap.position[i] = m->position[static_cast<std::size_t>(it - m->joint_names.begin())];
+				cmd_mapped_[i] = m->position[static_cast<std::size_t>(it - m->joint_names.begin())];
 			}
-			rt_cmd_.publish(snap);
+			rt_cmd_.publish(cmd_mapped_);
 			// 投递遥测 (2026-10-09 走廊冻结排查): 回调级计数 —— 停止增长=DDS 投递断
 			if (cmd_seq_pub_ % 25 == 0)
 			{
-				ULOG_INFO("%s: 回调采纳 seq=%lu j4=%.3f", kPluginName, static_cast<unsigned long>(cmd_seq_pub_), snap.position[3]);
+				ULOG_INFO("%s: 回调采纳 seq=%lu j1=%.3f", kPluginName, static_cast<unsigned long>(cmd_seq_pub_), cmd_mapped_[0]);
 			}
 		});
 
@@ -252,9 +259,7 @@ controller_interface::CallbackReturn JointStreamController::on_activate(const rc
 	target_ = cmd_;
 	if (interpolation_ == Interpolation::RUCKIG && otg_ready_)
 	{
-		std::array<double, unistackbot_interface::kMaxJoints> q{};
-		for (std::size_t i = 0; i < n; ++i) {q[i] = cmd_[i];}
-		otg_.reset(q);   // 从当前位重规划 (清旧轨迹)
+		otg_.reset(cmd_);   // 从当前位重规划 (清旧轨迹)
 	}
 	ULOG_INFO("%s: 激活 (%zu 关节, 命令保持)", kPluginName, n);
 	return controller_interface::CallbackReturn::SUCCESS;
@@ -313,25 +318,21 @@ controller_interface::return_type JointStreamController::update(const rclcpp::Ti
 			}
 			if (interpolation_ == Interpolation::RUCKIG)
 			{
-				// otg dt 校准 (Ruckig 定长数组, init 无堆分配)
-				unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::Limits lim;
-				for (std::size_t i = 0; i < lim.max_velocity.size(); ++i)
+				// otg dt 校准 (OtgStreamDyn 运行期 DOF; init 后 vector 尺寸固定, 零分配)
+				unistackbot_common::OtgStreamDyn::Limits lim;
+				lim.max_velocity.assign(n, 0.0);
+				for (std::size_t i = 0; i < n; ++i)
 				{
 					lim.max_velocity[i] = (i < vmax_.size()) ? vmax_[i] : 3.0;
 				}
-				lim.max_acceleration.fill(max_acceleration_);
-				lim.max_jerk.fill(max_jerk_);
-				otg_ready_ = otg_.init(1.0 / hz, lim, 0.3);
+				lim.max_acceleration.assign(n, max_acceleration_);
+				lim.max_jerk.assign(n, max_jerk_);
+				otg_ready_ = otg_.init(n, 1.0 / hz, lim, 0.3);
 				// init 会清 initialized_ (OtgStream 契约: init 后必须 reset 才有安全基准)
 				// —— 不重锚 = 校准后 update 恒 Hold = ruckig 永久冻结 (2026-09-23 A/B
 				// 实测实锤, 激活首 32ms 后死)。以当前命令位重锚, v/a 归零 —— 32ms
 				// 窗口内速度微小, 连续性无损。
-				std::array<double, unistackbot_interface::kMaxJoints> q{};
-				for (std::size_t i = 0; i < n; ++i)
-				{
-					q[i] = cmd_[i];
-				}
-				otg_.reset(q);
+				otg_.reset(cmd_);
 			}
 			if (hz_auth > 0)
 			{
@@ -351,12 +352,14 @@ controller_interface::return_type JointStreamController::update(const rclcpp::Ti
 	//    新消息只**采纳目标** —— 步进在 ② 每周期执行 (消息率与控制率解耦:
 	//    2026-09-21 实测教训, 步进挂在收消息上时 100Hz 流的臂速被钳到
 	//    step×消息率 = vmax/5, 历史上被 hz=1 的巨步长+write 层钳位掩盖)
-	CmdSnapshot snap;
 	uint64_t snap_seq = 0;
-	if (rt_cmd_.read(snap, snap_seq) && snap_seq != cmd_seq_)
+	const bool live = rt_cmd_.read(cmd_rt_.data(), cmd_rt_.size(), snap_seq) &&
+		unistackbot_common::DynamicSpLatest<double>::frameKind(snap_seq) ==
+		unistackbot_common::DynamicSpLatest<double>::FrameKind::kLive;
+	if (live && snap_seq != cmd_seq_)
 	{
 		cmd_seq_ = snap_seq;
-		std::vector<double> q(snap.position, snap.position + n);
+		auto q = cmd_rt_;
 		if (sanitize(q))
 		{
 			target_ = q;   // hold/ruckig 同: 采纳为当前目标
@@ -397,12 +400,10 @@ controller_interface::return_type JointStreamController::update(const rclcpp::Ti
 	}
 	else if (interpolation_ == Interpolation::RUCKIG && otg_ready_)
 	{
-		std::array<double, unistackbot_interface::kMaxJoints> tgt{};
-		std::array<double, unistackbot_interface::kMaxJoints> out{};
-		for (std::size_t i = 0; i < n; ++i) {tgt[i] = target_[i];}
-		if (otg_.update(tgt, out) == unistackbot_common::OtgStream<unistackbot_interface::kMaxJoints>::UpdateResult::Ok)
+		tgt_scratch_ = target_;
+		if (otg_.update(tgt_scratch_, out_scratch_) == unistackbot_common::OtgStreamDyn::UpdateResult::Ok)
 		{
-			for (std::size_t i = 0; i < n; ++i) {cmd_[i] = out[i];}
+			cmd_ = out_scratch_;
 			hold_run_ = 0;
 		}
 		else

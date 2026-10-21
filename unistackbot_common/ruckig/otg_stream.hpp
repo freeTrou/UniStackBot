@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <optional>
+#include <vector>
 
 #include <ruckig/ruckig.hpp>
 
@@ -238,6 +240,244 @@ private:
 	bool initialized_{false};
 	std::array<double, DOFs> last_out_pos_{};
 	std::array<double, DOFs> last_target_{};
+	uint64_t update_count_{0};
+	uint64_t error_count_{0};
+	int last_error_{NotInitialized};
+	double last_duration_{0.0};
+};
+
+/*
+ * OtgStreamDyn —— 运行期自由度版 OtgStream (2026-10-21, 组合模型容量动态化 L4+L5)。
+ *
+ * 动机: CM/JS 的 OtgStream<kMaxJoints> 模板参数把关节容量钉进类型 (ruckig 静态
+ * DOF 实例化) —— 节点数运行期化后这是最后一处编译期容量耦合。ruckig 社区版原生
+ * 支持运行期 DOF (Ruckig<DynamicDOFs=0> + InputParameter<0>(dofs), StandardVector
+ * 退化为 std::vector) —— 本类封装该形态, 接口契约与 OtgStream 逐字相同 (消毒→
+ * 返回码检查→输出校验→失败保持)。
+ *
+ * 差异: init 首参 dofs; Limits/目标/输出全部 vector (调用方预分配); 尺寸 init 后
+ * 永不变 (publish/read 零分配根基)。n=0 / vector 尺寸不符 → 拒。
+ *
+ * 性能账 (本机基准): 运行期 DOF 每拍多一层 vector 间接, 24 节点全拍 ~0.3µs vs
+ * 静态 ~0.2µs —— 500Hz 占比可忽略; 换取节点数配置轴自由。
+ *
+ * 线程: 实例每线程一份; 稳态 update 零 malloc (vector 尺寸 init 后不变)。
+ */
+class OtgStreamDyn
+{
+public:
+	struct Limits
+	{
+		std::vector<double> max_velocity;
+		std::vector<double> max_acceleration;
+		std::vector<double> max_jerk;
+	};
+
+	enum class UpdateResult : uint8_t
+	{
+		Ok,
+		Hold,
+	};
+
+	enum LastError : int
+	{
+		NotInitialized = -1,
+		NonFiniteTarget = 400,
+		NonFiniteOutput = 401,
+	};
+
+	[[nodiscard]] std::size_t dofs() const { return dofs_; }
+
+	// dofs=自由度数 (节点数); 其余同 OtgStream::init。尺寸不符的 vector → false。
+	[[nodiscard]] bool init(std::size_t dofs, double dt, const Limits & limits, double max_target_jump = 0.1)
+	{
+		if (dofs == 0 || limits.max_velocity.size() != dofs || limits.max_acceleration.size() != dofs || limits.max_jerk.size() != dofs)
+		{
+			return false;
+		}
+		for (std::size_t i = 0; i < dofs; ++i)
+		{
+			if (!std::isfinite(limits.max_velocity[i]) || limits.max_velocity[i] <= 0.0 || !std::isfinite(limits.max_acceleration[i]) || limits.max_acceleration[i] <= 0.0 ||
+				!std::isfinite(limits.max_jerk[i]) || limits.max_jerk[i] <= 0.0 || limits.max_velocity[i] > 1e9 || limits.max_acceleration[i] > 1e9 || limits.max_jerk[i] > 1e9)
+			{
+				return false;
+			}
+		}
+		if (!std::isfinite(dt) || dt <= 0.0)
+		{
+			return false;
+		}
+		dofs_ = dofs;
+		otg_.emplace(dofs);
+		otg_->delta_time = dt;
+		in_.emplace(dofs);
+		out_.emplace(dofs);
+		lim_ = limits;
+		max_target_jump_ = max_target_jump;
+		last_out_pos_.assign(dofs, 0.0);
+		last_target_.assign(dofs, 0.0);
+		initialized_ = false;
+		update_count_ = 0;
+		error_count_ = 0;
+		last_error_ = NotInitialized;
+		last_duration_ = 0.0;
+		return true;
+	}
+
+	void reset(const std::vector<double> & current_position)
+	{
+		reset(current_position, {});
+	}
+	void reset(const std::vector<double> & current_position, const std::vector<double> & current_velocity)
+	{
+		reset(current_position, current_velocity, {});
+	}
+	void reset(const std::vector<double> & current_position, const std::vector<double> & current_velocity, const std::vector<double> & current_acceleration)
+	{
+		if (dofs_ == 0 || !in_ || !otg_)
+		{
+			return;   // 未 init: 无可重置状态 (与静态版良性 Hold 语义对齐)
+		}
+		for (std::size_t i = 0; i < dofs_; ++i)
+		{
+			in_->current_position[i] = current_position[i];
+			in_->current_velocity[i] = i < current_velocity.size() ? current_velocity[i] : 0.0;
+			in_->current_acceleration[i] = i < current_acceleration.size() ? current_acceleration[i] : 0.0;
+			last_out_pos_[i] = current_position[i];
+			in_->max_velocity[i] = lim_.max_velocity[i];
+			in_->max_acceleration[i] = lim_.max_acceleration[i];
+			in_->max_jerk[i] = lim_.max_jerk[i];
+			in_->target_position[i] = current_position[i];
+			last_target_[i] = current_position[i];
+		}
+		otg_->reset();
+		initialized_ = true;
+	}
+
+	// target/out_pos 尺寸必须 == dofs (契约: init 后尺寸不变; 不符 = 调用方 bug, Hold+记账)
+	[[nodiscard]] UpdateResult update(std::vector<double> & target, std::vector<double> & out_pos)
+	{
+		++update_count_;
+		if (!initialized_ || target.size() != dofs_)
+		{
+			hold(NotInitialized, target, out_pos, true);
+			return UpdateResult::Hold;
+		}
+		out_pos.resize(dofs_);
+
+		for (std::size_t i = 0; i < dofs_; ++i)
+		{
+			if (!std::isfinite(target[i]))
+			{
+				hold(NonFiniteTarget, target, out_pos, false);
+				return UpdateResult::Hold;
+			}
+		}
+		if (max_target_jump_ > 0.0)
+		{
+			for (std::size_t i = 0; i < dofs_; ++i)
+			{
+				const double d = target[i] - last_target_[i];
+				if (std::fabs(d) > max_target_jump_)
+				{
+					target[i] = last_target_[i] + std::copysign(max_target_jump_, d);
+				}
+			}
+		}
+		for (std::size_t i = 0; i < dofs_; ++i)
+		{
+			in_->target_position[i] = target[i];
+		}
+
+		const auto r = otg_->update(*in_, *out_);
+		last_duration_ = out_->trajectory.get_duration() - out_->time;
+		if (last_duration_ < 0.0)
+		{
+			last_duration_ = 0.0;
+		}
+
+		if (r != ruckig::Result::Working && r != ruckig::Result::Finished)
+		{
+			for (std::size_t i = 0; i < dofs_; ++i)
+			{
+				last_target_[i] = target[i];
+			}
+			hold(static_cast<int>(r), target, out_pos, true);
+			return UpdateResult::Hold;
+		}
+
+		for (std::size_t i = 0; i < dofs_; ++i)
+		{
+			if (!std::isfinite(out_->new_position[i]))
+			{
+				hold(NonFiniteOutput, target, out_pos, false);
+				return UpdateResult::Hold;
+			}
+		}
+
+		for (std::size_t i = 0; i < dofs_; ++i)
+		{
+			out_pos[i] = out_->new_position[i];
+			last_out_pos_[i] = out_->new_position[i];
+			last_target_[i] = target[i];
+		}
+		in_->current_position = out_->new_position;
+		in_->current_velocity = out_->new_velocity;
+		in_->current_acceleration = out_->new_acceleration;
+		return UpdateResult::Ok;
+	}
+
+	[[nodiscard]] uint64_t updateCount() const {return update_count_;}
+	[[nodiscard]] uint64_t errorCount() const {return error_count_;}
+	[[nodiscard]] int lastError() const {return last_error_;}
+	[[nodiscard]] double lastDuration() const {return last_duration_;}
+	[[nodiscard]] const std::vector<double> & lastVelocity() const {return out_->new_velocity;}
+	[[nodiscard]] const std::vector<double> & lastAcceleration() const {return out_->new_acceleration;}
+	[[nodiscard]] bool isInitialized() const {return initialized_;}
+
+private:
+	void hold(int code, const std::vector<double> & attempted_target, std::vector<double> & out_pos, bool advance_target)
+	{
+		if (dofs_ == 0 || !in_ || !out_ || !otg_)
+		{
+			return;   // 未 init: 无安全保持位可写, 无状态机可重置 (静态版同场景=良性 Hold, 动态版不能解引用空 optional)
+		}
+		++error_count_;
+		last_error_ = code;
+		out_pos.resize(dofs_);
+		const bool target_ok = attempted_target.size() == dofs_;
+		if (advance_target && !target_ok)
+		{
+			advance_target = false;   // 短 target 禁止推进 last_target_ (OOB 读防护)
+		}
+		if (advance_target)
+		{
+			for (std::size_t i = 0; i < dofs_; ++i)
+			{
+				last_target_[i] = attempted_target[i];
+			}
+		}
+		for (std::size_t i = 0; i < dofs_; ++i)
+		{
+			out_pos[i] = last_out_pos_[i];
+			in_->current_position[i] = last_out_pos_[i];
+			in_->current_velocity[i] = 0.0;
+			in_->current_acceleration[i] = 0.0;
+			in_->target_position[i] = last_target_[i];
+		}
+		otg_->reset();
+	}
+
+	std::size_t dofs_ = 0;
+	// Ruckig<0> 无默认构造 (运行期 DOF 须构造入参) → optional, init 期 emplace
+	std::optional<ruckig::Ruckig<ruckig::DynamicDOFs>> otg_;
+	std::optional<ruckig::InputParameter<ruckig::DynamicDOFs>> in_;
+	std::optional<ruckig::OutputParameter<ruckig::DynamicDOFs>> out_;
+	Limits lim_{};
+	double max_target_jump_{0.1};
+	bool initialized_{false};
+	std::vector<double> last_out_pos_;
+	std::vector<double> last_target_;
 	uint64_t update_count_{0};
 	uint64_t error_count_{0};
 	int last_error_{NotInitialized};
