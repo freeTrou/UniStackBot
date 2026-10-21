@@ -46,6 +46,24 @@ public:
 	// 断使能命令: 协议各自的安全停机形态 (unitree = mode 0 + 看门狗位)。
 	[[nodiscard]] virtual unistackbot_protocol::NodeCommand disable_command() const = 0;
 
+	// 急停安全形态 (2026-10-21 审查 P0 修): quick_stop 的帧形态归状态机——泵硬编码
+	// 中立 kStop 对达妙编码为失能帧 (三相释放零保持力), e-stop 反成最危险命令。
+	// 默认 = 断使能形态 (宇树 mode0 阻尼停机本身就是安全急停, 零行为变化);
+	// 子类按协议覆写 (达妙 = 锚定实测位 + kd 阻尼 MIT, 受控停不砸)。
+	[[nodiscard]] virtual unistackbot_protocol::NodeCommand safety_stop_command() const
+	{
+		return disable_command();
+	}
+
+	// 安全驻留形态 (命令流未开始的 idle 帧, 2026-10-21 审查 P0 修): 语义与 disable
+	// 不同——disable = 操作员显式断能 (达妙 0xFD 三相释放, 运输态), idle = 等待
+	// 命令流的安全驻留。默认 = 断使能形态; 达妙覆写为锚定阻尼 MIT (维持使能与
+	// 保持力, 堵 "enable 确认 → idle 失能 → 命令流全被忽略" 链)。
+	[[nodiscard]] virtual unistackbot_protocol::NodeCommand idle_command() const
+	{
+		return disable_command();
+	}
+
 	// ── 中立骨架 (协议无关) ──
 
 	// 当前粗态 (快照层可在其上按 last_seen 超陈覆盖为 kUnknown——信念撤销, 不改本机)。

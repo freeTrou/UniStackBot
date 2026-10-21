@@ -11,10 +11,14 @@ namespace unistackbot_protocol
 // kClear = 清故障 (2026-10-10 解除 special() 延后): unitree 语义 = mode 6 +
 // tor_raw=-256 魔数 (内芯强制, 调用方只给模式)。厂商 encode 只支持 0/1,
 // 此扩展为加性 (oracle 对拍不受影响)。
+// kEnable = 显式使能 (2026-10-21 达妙接入加): dm_motor = 独立使能特殊帧 0xFC
+// (失能态下 MIT 帧不生效, 使能必须是独立动作); unitree = kRun 同义 (使能即发
+// MIT 首帧); cia402 = 使能链 (经 cmd_raw)。加性词汇, 老内芯各自解释。
 enum class NodeMode : std::uint8_t
 {
 	kStop = 0,
 	kRun = 1,
+	kEnable = 2,
 	kClear = 6,
 };
 
@@ -66,17 +70,45 @@ struct FrameSpec
 	std::size_t crc_cover_len = 0;     // 覆盖长度
 };
 
-// 协议内芯最小接口 (纯 codec 轴, 3 方法; 三面的完整形状与延后清单见架构文档 §2.1/§2.3)。
+// 节点类别 (2026-10-21 组合模型): 执行器=命令+反馈+状态机 (statemachine 配置必填);
+// 传感器=只读无状态机 (statemachine 必空, 数据走数值槽, 实现挂起待第一个真实传感器)。
+// 协议注册表自声明, bus 层按此做配置交叉校验与调度分槽 (命令槽 vs 只收槽)。
+enum class ProtocolKind : std::uint8_t
+{
+	kActuator = 0,
+	kSensor = 1,
+};
+
+// 协议内芯最小接口 (纯 codec 轴, 4 方法; 三面的完整形状与延后清单见架构文档 §2.1/§2.3)。
 // 纪律: 纯函数语义、零分配、零异常 —— encode/decode 均不 new/malloc, 供 RT 泵直呼。
+// 契约 (总线侧消费, 2026-10-21 文档化): 帧合法时 decode 必须正确填充 node_id,
+// 且 node_id 的解码不依赖 ratio/量程档 —— 串口段的探路路由 (先 decode 取 id 定槽,
+// 再按槽位用正确 ratio 重解码) 依赖此契约, 各内芯有测试硬化。
 class ProtocolCore
 {
 public:
 	virtual ~ProtocolCore() = default;
 
+	// 节点类别 (组合模型 kind 交叉校验与调度分槽依据)
+	[[nodiscard]] virtual ProtocolKind kind() const = 0;
+
+	// ratio 语义声明 (2026-10-21 审查 P1): start 期 fail-fast 校验用——配置错误的
+	// 减速比此前静默死节点 (encode 每帧拒收, 无诊断)。unitree: 任意 >0 (转子↔输出
+	// 换算); dm_motor: 恒等 1.0 (减速比内含于量程, 非 1 = 配置错误)。
+	[[nodiscard]] virtual bool ratio_valid(double ratio) const = 0;
+
+	// 节点 id 域自声明 (2026-10-21 二轮审查: 宇树 4bit id 域 (≤14, 15=广播) 曾以
+	// 硬编码检查泄漏进串口主站通用校验——协议知识进协议)。unitree=≤14;
+	// dm=CAN 11bit 全域 (≤0x7FF)。
+	[[nodiscard]] virtual bool id_valid(std::uint8_t node_id) const = 0;
+
 	// Framer 要的元数据 (RX 反馈帧)
 	[[nodiscard]] virtual FrameSpec framespec() const = 0;
 
 	// 控制面: 命令 → 帧。返回写入字节数; buf 不足 / ratio 非法 / 任一值非有限 → 0。
+	// **encode 返回 0 = 本拍无帧可发, 主站跳过该节点发送** (2026-10-21 契约) ——
+	// 传感器协议 (decode-only) encode 恒返 0, 泵的调度循环由此对节点类型免疫
+	// (主站稳定性契约: 不为传感器改主站)。执行器协议命令帧恒返定长。
 	[[nodiscard]] virtual std::size_t encode(std::uint8_t *buf, std::size_t cap, const NodeCommand &cmd, std::uint8_t node_id, double ratio) const = 0;
 
 	// 反馈面: 帧 → 反馈。长度/帧头/CRC 任一不符 → false (不抛不写半截)。

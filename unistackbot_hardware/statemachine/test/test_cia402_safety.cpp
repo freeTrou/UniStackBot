@@ -76,7 +76,8 @@ int main()
 		return 1;
 	}
 	const auto names = unistackbot_statemachine::availableNodeSafetyMachines();
-	check(names.size() == 2, "registry has two machines");
+	// 注册表加性扩展 (2026-10-21 dm4310/dm4340 进驻): 精确计数断言退役
+	check(names.size() >= 2, "registry has two machines");
 	bool has_u = false, has_c = false;
 	for (const auto &n : names)
 	{

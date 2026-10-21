@@ -62,7 +62,14 @@ int main()
 	// ── ⓪ 工厂 ──
 	check(unistackbot_statemachine::createNodeSafety("no_such") == nullptr, "unknown name -> nullptr (fail-fast)");
 	const auto names = unistackbot_statemachine::availableNodeSafetyMachines();
-	check(names.size() == 2, "registry has unitree_im + cia402");
+	// 注册表加性扩展 (2026-10-21 dm4310/dm4340 进驻): 精确计数断言退役 —— 成员检查
+	bool has_u = false, has_c = false;
+	for (const auto &n : names)
+	{
+		has_u = has_u || n == "unitree_im";
+		has_c = has_c || n == "cia402";
+	}
+	check(has_u && has_c, "registry has unitree_im + cia402");
 	std::unique_ptr<NodeSafety> ns = unistackbot_statemachine::createNodeSafety("unitree_im");
 	check(ns != nullptr, "factory creates unitree_im");
 	if (!ns)

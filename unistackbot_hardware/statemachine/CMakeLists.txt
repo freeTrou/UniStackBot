@@ -14,6 +14,7 @@ find_package(unistackbot_protocol REQUIRED)
 add_library(${PROJECT_NAME}
   src/unitree_im_safety.cpp
   src/cia402_safety.cpp
+  src/dm_safety.cpp
   src/node_safety_factory.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)

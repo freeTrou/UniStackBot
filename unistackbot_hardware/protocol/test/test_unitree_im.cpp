@@ -391,7 +391,14 @@ void testFactoryAndInterface()
 	check(core != nullptr, "factory creates unitree_im");
 	check(createProtocolCore("no_such_protocol") == nullptr, "unknown name -> null (fail-fast)");
 	const std::vector<std::string> names = availableProtocolCores();
-	check(names.size() == 1 && names[0] == "unitree_im", "registry lists protocols");
+	// 注册表加性扩展 (2026-10-21 dm_motor 进驻): 本测试只保证 unitree_im 在列 ——
+	// 精确集合断言退役 (每加协议都要改老测试 = 注册表增长的假失败)
+	bool unitree_listed = false;
+	for (const auto &n : names)
+	{
+		unitree_listed = unitree_listed || n == "unitree_im";
+	}
+	check(unitree_listed, "registry lists protocols");
 
 	if (core == nullptr)
 	{
@@ -437,6 +444,30 @@ void testFactoryAndInterface()
 
 }  // namespace
 
+// 探路契约 (B1, protocol_core.hpp: 帧合法时 decode 必填 node_id 且不依赖 ratio) ——
+// 串口主站 classifyFrame 的探路路由 (ratio[0] 探路取 id 定槽 → ratio[i] 重解码) 依赖此契约
+void testProbeContract()
+{
+	std::uint8_t f[26] = {};
+	f[0] = 0xFC;
+	f[1] = 0xEE;
+	f[2] = static_cast<std::uint8_t>((7 & 0x0Fu) | (1u << 4));   // id=7 | mode=1
+	f[3] = 40; f[4] = 50; f[5] = 48;
+	f[6] = 0x00; f[7] = 0x0A; f[8] = 0x80; f[9] = 0x02;
+	f[10] = 0x00; f[11] = 0x00; f[12] = 0x00; f[13] = 0x01; f[14] = 0x00;
+	const std::uint32_t crc = unistackbot_protocol::unitree_im::crc32(f + 2, 20);
+	f[22] = static_cast<std::uint8_t>(crc & 0xFF);
+	f[23] = static_cast<std::uint8_t>((crc >> 8) & 0xFF);
+	f[24] = static_cast<std::uint8_t>((crc >> 16) & 0xFF);
+	f[25] = static_cast<std::uint8_t>((crc >> 24) & 0xFF);
+	NodeFeedback fa, fb, fc;
+	check(decodeFrame(f, 26, fa, 38.0 / 3.0), "契约帧 r=38/3 decode");
+	check(decodeFrame(f, 26, fb, 32.0), "契约帧 r=32 decode");
+	check(decodeFrame(f, 26, fc, 6.33), "契约帧 r=6.33 decode");
+	check(fa.node_id == fb.node_id && fb.node_id == fc.node_id && fa.node_id == 7,
+		"同帧不同 ratio node_id 相同 (探路契约)");
+}
+
 int main()
 {
 	testCrcTable();
@@ -447,6 +478,7 @@ int main()
 	testGainClampAndPrior();
 	testClearFrame();
 	testFactoryAndInterface();
+	testProbeContract();
 	std::printf("%s: %d cases, %d failed\n", g_fail == 0 ? "PASS" : "FAIL", g_case, g_fail);
 	return g_fail == 0 ? 0 : 1;
 }

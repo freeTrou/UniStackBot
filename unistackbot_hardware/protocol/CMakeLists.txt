@@ -13,6 +13,7 @@ find_package(ament_cmake REQUIRED)
 # 加新协议 = src/protocol_factory.cpp 注册表加一行 (设计 §2.1)。
 add_library(${PROJECT_NAME}
   src/unitree_im_core.cpp
+  src/dm_motor_core.cpp
   src/protocol_factory.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)

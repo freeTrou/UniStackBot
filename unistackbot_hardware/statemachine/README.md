@@ -34,18 +34,29 @@ unistackbot_protocol ← unistackbot_statemachine (本包) ← unistackbot_bus �
 
 ## 测试
 
-**77 cases 全绿**（node_safety 37 + cia402 40；g++ 直编零 ROS；经工厂创建、基类指针驱动——多态即骨架用法）：
+**122 cases 全绿**（node_safety 37 + cia402 40 + dm_safety 45；g++ 直编零 ROS；经工厂创建、基类指针驱动——多态即骨架用法）：
 工厂（未知名拒绝/清单）/ 四态推进 + FAULT 粘性 / 清故障握手（request→confirm，
 error 未清时 confirm 无效）/ 使能守卫与锚定（防跳变：用最新实测位 + 先验增益）/
 断使能命令 / 意图请求守卫（OFFLINE/FAULT 拒绝、故障自动清使能请求）。
 
+**dm_safety**（2026-10-21 第三个安全机, stationlite A2）：全码表 0/1/3-5/8-E（+
+未定义 2/6/7 保守按故障）/ FAULT 粘性 / 清故障握手 / enable=独立特殊帧（kEnable，
+无参数——锚定归主站控制流）/ disable=失能帧（警示：失能无保持力仅紧急停用）/**safety_stop/idle 覆写**=锚定实测位+kPriorKp/kPriorKd(45/2) 阻尼 MIT 保持力（2026-10-21 审查 P0：泵硬编码 kStop 曾对达妙落为失能帧——e-stop/idle 双路径形态归状态机；宇树默认=disable 同帧零变化）/
+请求生命周期自持（err 即确认信号）/ 经 DmMotorCore 端到端字节验证。工厂注册
+dm4310/dm4340 两 key（码表全系列同，型号无关）。
+
 ```bash
 cd unistackbot_hardware/statemachine/test
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_node_safety.cpp \
-    ../src/unitree_im_safety.cpp ../src/cia402_safety.cpp ../src/node_safety_factory.cpp \
+    ../src/unitree_im_safety.cpp ../src/cia402_safety.cpp ../src/dm_safety.cpp ../src/node_safety_factory.cpp \
     -I../include -I../../protocol/include -o /tmp/test_safety && /tmp/test_safety
 # CiA402 七态/链测试:
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_cia402_safety.cpp \
-    ../src/unitree_im_safety.cpp ../src/cia402_safety.cpp ../src/node_safety_factory.cpp \
+    ../src/unitree_im_safety.cpp ../src/cia402_safety.cpp ../src/dm_safety.cpp ../src/node_safety_factory.cpp \
     -I../include -I../../protocol/include -o /tmp/test_cia402 && /tmp/test_cia402
+# DmSafety (达妙, 2026-10-21):
+g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_dm_safety.cpp \
+    ../src/dm_safety.cpp ../src/unitree_im_safety.cpp ../src/cia402_safety.cpp ../src/node_safety_factory.cpp \
+    ../../protocol/src/dm_motor_core.cpp -I../include -I../../protocol/include \
+    -o /tmp/test_dm_safety && /tmp/test_dm_safety
 ```

@@ -37,6 +37,16 @@ constexpr std::size_t kCmdFrameLen = 20;
 constexpr std::size_t kFbFrameLen = 26;
 constexpr std::uint8_t kBroadcastId = 15;   // 广播 (无返回) —— special() 延后项, 先记常量
 
+// ---- MIT 定点系数 (转子侧刻度, 厂商 demo 实证; 2026-10-21 从 encode/decode
+// 魔法数收拢为具名常量——系数语义单一事实源, 消费面 hpp 可见) ----
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kTauScale = 2560.0;             // 定点/物理 [count/Nm]
+constexpr double kVelScale = 64.0 / (2.0 * kPi);   // [count/(rad/s)]
+constexpr double kPosScale = 32768.0 / (2.0 * kPi);   // [count/rad]
+constexpr double kKpScale = 12800.0;             // [count/(Nm/rad)]
+constexpr double kKdScale = 51200.0;             // [count/(Nm·s/rad)]
+constexpr std::int16_t kClearTorqueRaw = -256;   // 清故障魔数 (mode 6 下协议强制, 2026-10-10)
+
 // ---- 增益先验 (2026-10-10, 厂商 r1-7a_sdk 例程值: --home/--goto kp=60, kd 默认 0.5) ----
 // 输出端物理单位, 真机机型资产 yaml 的起手账 —— 装配层显式引用, 内芯不自动填充
 // (无默认纪律: 缺配置 fail-fast 而非静默用先验)。终值经 T1/T2 重力补偿对拍后按关节分档。
@@ -58,6 +68,9 @@ constexpr double kPriorKd = 0.5;    // 速度刚度 [Nm·s/rad]
 class UnitreeImCore final : public ProtocolCore
 {
 public:
+	[[nodiscard]] ProtocolKind kind() const override { return ProtocolKind::kActuator; }
+	[[nodiscard]] bool ratio_valid(double ratio) const override { return ratio > 0.0; }
+	[[nodiscard]] bool id_valid(std::uint8_t node_id) const override { return node_id <= 14; }   // 15=广播
 	[[nodiscard]] FrameSpec framespec() const override;
 	[[nodiscard]] std::size_t encode(std::uint8_t *buf, std::size_t cap, const NodeCommand &cmd, std::uint8_t node_id, double ratio) const override;
 	[[nodiscard]] bool decode(const std::uint8_t *frame, std::size_t len, NodeFeedback &fb, double ratio) const override;

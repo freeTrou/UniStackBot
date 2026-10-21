@@ -18,7 +18,7 @@
 
 - **状态翻译/节点安全机** → 姊妹包 `unistackbot_statemachine`（NodeSafety 轴; 本包只供
   统一类型与增益先验常数）
-- **总线交换契约**（MasterBase/BusCommand/BusState）→ 姊妹包 `unistackbot_bus`
+- **总线交换契约**（MasterBase/CmdFrame/StateFrame）→ 姊妹包 `unistackbot_bus`
 - **interface 包的 RobotCommand/RobotFeedback**——本包零 ROS 零外部依赖
   （package.xml 无 depend），g++ 直编即测
 
@@ -68,3 +68,25 @@ g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_unitree_im.cpp \
 ```
 
 注： 厂商甲骨文头须最先 include（其自带 constexpr M_PI 与 glibc 宏冲突，顺序敏感）。
+
+## dm_motor 内芯（2026-10-21，stationlite 真机接入 A1）
+
+达妙 DM 系（第二个协议内芯）：MIT 帧 + 反馈帧 + 使能/失能/清故障特殊帧，
+**一个子类覆盖全型号**（DmMotorType=限值档位，工厂 dm4310/dm4340 两 key 同类）。
+范围纪律=只实现用得到+已验证（POS_VEL/参数帧/存储帧暂缓，分档见
+arms/stationlite/damiao_protocol.md §11）。域约定：帧=电机域，motor_signs 归上层。
+NodeMode 加性词汇 `kEnable`（达妙独立使能帧；unitree 视同 kRun 别名）。
+
+**175 cases 全绿**（g++ 直编零 ROS）——startouchlib codec 作甲骨文
+（test/oracle_startouch/，Apache-2.0 提取副本，逐行保持厂商语义）：
+encode 逐字节对拍（两型号×零/半程/顶格/负值/越界钳位）/ 反馈帧 decode 互校
+（反馈布局 D0=ID|ERR 与控制帧不同，oracle 定点构造）/ 特殊帧字节 FF×7+cmd /
+全幅定点直算（零点码字 0x7FFF 非 0x8000）/ 全码表 0/1/3-5/8-E / 拒收 /
+工厂多态 / unitree kEnable 别名回归。
+
+```bash
+cd unistackbot_hardware/protocol/test
+g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic test_dm_motor.cpp \
+    oracle_startouch/oracle_startouch.cpp ../src/dm_motor_core.cpp ../src/protocol_factory.cpp \
+    ../src/unitree_im_core.cpp -I../include -Ioracle_startouch -o /tmp/test_dm_motor && /tmp/test_dm_motor
+```

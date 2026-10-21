@@ -4,6 +4,7 @@
 
 #include "unistackbot_statemachine/unitree_im_safety.hpp"
 #include "unistackbot_statemachine/cia402_safety.hpp"
+#include "unistackbot_statemachine/dm_safety.hpp"
 
 namespace unistackbot_statemachine
 {
@@ -23,6 +24,9 @@ const std::map<std::string, Maker> & registry()
 		{"cia402", []() -> std::unique_ptr<NodeSafety> {
 			 return std::make_unique<Cia402Safety>();
 		 }},   // CiA402 官方七态机 (EC/CANFD 伺服标准; 2026-10-10 第二个安全机)
+		// 达妙 (2026-10-21 第三个): 码表全系列同, 型号无关; 两 key 与协议工厂同一把
+		{"dm4310", []() -> std::unique_ptr<NodeSafety> { return std::make_unique<DmSafety>(); }},
+		{"dm4340", []() -> std::unique_ptr<NodeSafety> { return std::make_unique<DmSafety>(); }},
 	};
 	return reg;
 }

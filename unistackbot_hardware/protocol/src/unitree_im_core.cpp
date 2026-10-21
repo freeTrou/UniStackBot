@@ -8,7 +8,6 @@ namespace unistackbot_protocol
 namespace
 {
 
-constexpr double kPi = 3.14159265358979323846;
 constexpr std::uint32_t kCrcPoly = 0x04C11DB7u;
 constexpr double kInt16MaxD = 32767.0;
 constexpr double kInt16MinD = -32768.0;
@@ -114,7 +113,8 @@ std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap, const NodeCommand &c
 	}
 
 	const double r2 = ratio * ratio;
-	const std::uint8_t mode_bits = cmd.mode == NodeMode::kRun ? 1u
+	// kEnable 对 unitree = kRun 同义 (使能即发 MIT 首帧, 2026-10-21 kEnable 词汇加入)
+	const std::uint8_t mode_bits = (cmd.mode == NodeMode::kRun || cmd.mode == NodeMode::kEnable) ? 1u
 		: (cmd.mode == NodeMode::kClear ? 6u : 0u);
 	const std::uint8_t mode_byte = static_cast<std::uint8_t>((node_id & 0x0Fu) |
 		(mode_bits << 4) |
@@ -126,12 +126,12 @@ std::size_t encodeFrame(std::uint8_t *buf, std::size_t cap, const NodeCommand &c
 	// (r=32 时 kp 可表达至 ~2621 Nm/rad, 厂商 demo 的 410.7 常量钳位是 38/3
 	// 基准比产物, 不抄: 按实际比值计算值域更大且编解码往返自洽)。
 	const std::int16_t tau_raw = cmd.mode == NodeMode::kClear
-		? static_cast<std::int16_t>(-256)
-		: quantizeI16(cmd.tau / ratio * 2560.0);
-	const std::int16_t spd_raw = quantizeI16(cmd.speed * ratio * 64.0 / (2.0 * kPi));
-	const std::int32_t pos_raw = quantizeI32(cmd.position * ratio * 32768.0 / (2.0 * kPi));
-	const std::int16_t kp_raw = quantizeI16((cmd.kp < 0.0 ? 0.0 : cmd.kp) / r2 * 12800.0);
-	const std::int16_t kd_raw = quantizeI16((cmd.kd < 0.0 ? 0.0 : cmd.kd) / r2 * 51200.0);
+		? kClearTorqueRaw
+		: quantizeI16(cmd.tau / ratio * kTauScale);
+	const std::int16_t spd_raw = quantizeI16(cmd.speed * ratio * kVelScale);
+	const std::int32_t pos_raw = quantizeI32(cmd.position * ratio * kPosScale);
+	const std::int16_t kp_raw = quantizeI16((cmd.kp < 0.0 ? 0.0 : cmd.kp) / r2 * kKpScale);
+	const std::int16_t kd_raw = quantizeI16((cmd.kd < 0.0 ? 0.0 : cmd.kd) / r2 * kKdScale);
 
 	buf[0] = kCmdHeader0;
 	buf[1] = kCmdHeader1;
@@ -171,9 +171,9 @@ bool decodeFrame(const std::uint8_t *frame, std::size_t len, NodeFeedback &fb, d
 	const std::int16_t tau_raw = static_cast<std::int16_t>(getU16(frame + 6));
 	const std::int16_t spd_raw = static_cast<std::int16_t>(getU16(frame + 8));
 	const std::int32_t pos_raw = static_cast<std::int32_t>(getU32(frame + 10));
-	fb.tau = static_cast<double>(tau_raw) / 2560.0 * ratio;
-	fb.speed = static_cast<double>(spd_raw) * 2.0 * kPi / (64.0 * ratio);
-	fb.position = static_cast<double>(pos_raw) * 2.0 * kPi / (32768.0 * ratio);
+	fb.tau = static_cast<double>(tau_raw) / kTauScale * ratio;
+	fb.speed = static_cast<double>(spd_raw) / kVelScale / ratio;
+	fb.position = static_cast<double>(pos_raw) / kPosScale / ratio;
 	fb.error_raw = getU32(frame + 14);
 	fb.state_raw = 0;   // unitree 无状态字概念 (0=无此约定; 复用缓冲防陈值)
 	const std::uint16_t res_exflag = getU16(frame + 18);

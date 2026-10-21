@@ -3,6 +3,7 @@
 #include <map>
 
 #include "unistackbot_protocol/unitree_im_core.hpp"
+#include "unistackbot_protocol/dm_motor_core.hpp"
 
 namespace unistackbot_protocol
 {
@@ -17,6 +18,10 @@ const std::map<std::string, Maker> &registry()
 {
 	static const std::map<std::string, Maker> reg = {
 		{"unitree_im", []() -> std::unique_ptr<ProtocolCore> { return std::make_unique<UnitreeImCore>(); }},
+		// 达妙: 一个子类 (型号=限值档位, 2026-10-21 用户裁决), 两 key = 档位入口
+		// (stationlite 混型臂 j1-3=4340 / j4-6+夹爪=4310, per-node 实例按 yaml 选档)
+		{"dm4310", []() -> std::unique_ptr<ProtocolCore> { return std::make_unique<DmMotorCore>(dm_motor::DmMotorType::kDm4310); }},
+		{"dm4340", []() -> std::unique_ptr<ProtocolCore> { return std::make_unique<DmMotorCore>(dm_motor::DmMotorType::kDm4340); }},
 	};
 	return reg;
 }
