@@ -20,7 +20,7 @@ unistackbot_hardware/              (容器; 内含四个 colcon 包)
                      #  依赖 protocol 包)
   bus/               # ★包 unistackbot_bus: 总线主站轴 (MasterBase 父类=五要素最小集代码化,
                      #  纯交换零线程可见 + 工厂; 运行期注册制——serial 已注册,
-                     #  ethercat/canfd 同款各一行; BusCommand/BusState 自持零 ROS;
+                     #  ethercat/canfd 同款各一行; CmdFrame/StateFrame 自持零 ROS;
                      #  依赖 protocol+statemachine)
 ```
 
