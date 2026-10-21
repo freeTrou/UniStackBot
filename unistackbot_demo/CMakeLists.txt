@@ -53,6 +53,13 @@ install(PROGRAMS
   scripts/r1_pro_arm/r1_pro_demo_cartesian.py
   DESTINATION lib/${PROJECT_NAME}
 )
+# stationlite_arm: 真机轨迹回放 demo (2026-10-20); 点位资产 json 装 share, 脚本运行时双路径查找
+install(PROGRAMS scripts/stationlite_arm/stationlite_demo_replay.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(FILES scripts/stationlite_arm/stationlite_joint_cycle_points.json
+  DESTINATION share/${PROJECT_NAME}/stationlite_arm
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
