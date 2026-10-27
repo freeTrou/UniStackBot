@@ -34,11 +34,24 @@ using unistackbot_interface::RedundancyPreference;
  * 5. **stats 尽力填** —— ok/iterations/solve_us/timed_out 必填; min_sigma 有雅可比
  *    才填 (无则 -1, CM status 通道透传给上层观测)。
  *
- * 接入新求解器 (如用户的 7 轴数值解):
- *   ① 本包新建 <你的求解器>/ 文件夹, 实现 IkSolver (对照 dls_ik/ 为范本)
- *   ② CM on_configure 的选择分支加一行 (yaml 参数 ik_solver: <名字>)
+ * 接入新求解器 (缝③ pluginlib, 2026-10-22; 外部团队交付 IK 件零仓库改动):
+ *   ① 自己的包里实现 IkSolver (对照 dls_ik/ 为范本; 仓内件住 unistackbot_algorithm)
+ *   ② 注册三件 (缺一不可, 2026-10-26 审核修 F9 补全):
+ *      a. PLUGINLIB_EXPORT_CLASS(你的类, unistackbot_algorithm::IkSolver)
+ *      b. 自己包的 plugin.xml (class name = yaml 的 ik_solver 值; 仓内四件见 ik_plugins/)
+ *      c. CMake: pluginlib_export_plugin_description_file(unistackbot_algorithm <xml 路径>)
+ *         —— 唯一发现机制 (写 ament index 资源; package.xml 的 <pluginlib> export 标签
+ *         在 Humble 是惰性的, 不构成注册), 包依赖 unistackbot_algorithm (基类+UrdfFk 头)
+ *      d. vendored IKFast 系生成物必须自隔离: C API 符号族前缀 (仓内 pi_/sl_ 先例) +
+ *         -DIKFAST_NAMESPACE=<族名> —— extern "C" 符号不受 namespace 约束, 撞名即静默
+ *         错机求解 (2026-10-26 审核修 F5 实证)
  *   ③ 验证走 docs/guides/ik_validation_playbook.md 六阶段 (Oracle 基准 → 三链回归)
  *   数值类实现与 DlsIk 平级替换/AB 对比; 解析类实现需另议组合策略 (主路径+兜底)。
+ *
+ * 对外插件缝纪律: 本接口现为跨仓库二进制边界 —— 虚函数签名变更是破坏性变更;
+ * 新增虚函数只允许带默认实现追加在末尾, 不得插序/改签名/删既有虚函数。
+ * 实现 solve 不得抛异常 (vendored 内芯的异常须在适配层内翻译为失败返回——
+ * IKFast 系适配层先例, 2026-10-26 审核修 F3)。
  */
 /*
  * 求解模式 —— 粘性语义的场景化解耦 (2026-09-17 粘性误杀 31/90 冷启动样本后定稿)。
@@ -90,8 +103,10 @@ public:
 
 	[[nodiscard]] virtual bool ready() const = 0;
 
-	// 种子库 (可选能力, 冷启动加速): 默认不支持 —— 返回 false 非致命,
-	// CM worker 已有降级路径 (分支代表+随机阶梯)
+	// 种子库 (可选能力, 冷启动加速): 默认不支持 —— 返回 false。
+	// 消费契约 (如实描述, 2026-10-26 审核修 F9 校正): CM 对显式配置的
+	// seed_library_relpath 按 fail-fast 处理 —— false (未实现/加载失败同等) 拒绝
+	// configure。配置该参数前确认实现支持 (现仅 DlsIk); 不配置则本能力不参与。
 	virtual bool loadSeedLibrary(const std::string & path, std::string & message)
 	{
 		(void)path;

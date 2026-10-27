@@ -172,74 +172,77 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 		return CallbackReturn::ERROR;
 	}
-	// 求解器选择 (IkSolver 接口): 数值类实现平级替换/AB 对比; 选择必须显式
-	// (yaml 声明, 代码无默认 —— 算法↔机型对应永远是人手动定的, 2026-09-22)
+	// 求解器装载 (缝③ pluginlib, 2026-10-22): yaml ik_solver 值 = 插件名, 实现
+	// 住 unistackbot_algorithm/ik_plugins (或外部插件包) —— 外部 IK 件交付零仓库
+	// 改动。选择仍必须显式 (算法↔机型对应永远是人手动定的, 2026-09-22)
 	ik_solver_name_ = get_node()->get_parameter("ik_solver").as_string();
 	if (ik_solver_name_.empty())
 	{
-		ULOG_ERROR("cm: 缺 ik_solver 显式配置 (算法选择必须显式手动; 当前可选: dls | analytic_piper | trac_ik)");
+		ULOG_ERROR("cm: 缺 ik_solver 显式配置 (算法选择必须显式手动; 可选 = 已安装 IkSolver 插件)");
 		return CallbackReturn::ERROR;
 	}
-	std::unique_ptr<IkSolver> ik;
-	if (ik_solver_name_ == "dls")
+	ik_.reset();   // 重配置防御: 先毁旧实例再动 loader (实例删除器指回 loader)
+	try
 	{
-		ik = std::make_unique<DlsIk>();
-	}
-	else if (ik_solver_name_ == "analytic_piper")
-	{
-		ik = std::make_unique<AnalyticPiper>();
-	}
-	else if (ik_solver_name_ == "trac_ik")
-	{
-		// TRAC-IK (vendored BSD-3, 2026-09-29 换装): 回调线程专用 —— 内部起竞赛
-		// pthread + nlopt 分配, 禁入 RT 环 (IkSolver 契约 4 b 类, 见 ik_solver.hpp)。
-		// AB: R1 50ms 100.0% vs DlsIk 92.4%; 1ms 96.0% vs 82.4% (全预算领先)
-		ik = std::make_unique<TracIk>();
-	}
-	else
-	{
-		ULOG_ERROR("cm: 未知 ik_solver '%s' (可选: dls | analytic_piper | trac_ik)", ik_solver_name_.c_str());
-		return CallbackReturn::ERROR;
-	}
-	ULOG_INFO("cm: IK 求解器 = '%s' (显式配置, 回调线程逐条解)", ik_solver_name_.c_str());
-	if (!ik->init(fk.get(), msg))
-	{
-		ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
-		return CallbackReturn::ERROR;
-	}
-	// 种子库 (可选; relpath 空 = 不加载, 走分支+随机阶梯)
-	if (!seed_lib_relpath_.empty())
-	{
-		std::string lib;
-		try
+		if (!ik_loader_)
 		{
-			lib = ament_index_cpp::get_package_share_directory(seed_lib_package_) + "/" + seed_lib_relpath_;
+			// 类目索引静态, 跨配置/cleanup 复用; 已装载库随 loader 存活
+			ik_loader_ = std::make_unique<pluginlib::ClassLoader<IkSolver>>(
+				"unistackbot_algorithm", "unistackbot_algorithm::IkSolver");
 		}
-		catch (const std::exception &)
+		if (!ik_loader_->isClassAvailable(ik_solver_name_))
 		{
-			ULOG_ERROR("cartesian_motion_controller: 种子库包不可解析: %s", seed_lib_package_.c_str());
+			std::string avail;
+			for (const auto & n : ik_loader_->getDeclaredClasses())
+			{
+				if (!avail.empty())
+				{
+					avail += " | ";
+				}
+				avail += n;
+			}
+			ULOG_ERROR("cm: 未知 ik_solver '%s' (已注册:%s)", ik_solver_name_.c_str(), avail.c_str());
 			return CallbackReturn::ERROR;
 		}
-		if (!ik->loadSeedLibrary(lib, msg))
+		pluginlib::UniquePtr<IkSolver> ik = ik_loader_->createUniqueInstance(ik_solver_name_);
+		ULOG_INFO("cm: IK 求解器 = '%s' (插件装载, 回调线程逐条解)", ik_solver_name_.c_str());
+		if (!ik->init(fk.get(), msg))
 		{
 			ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
 			return CallbackReturn::ERROR;
 		}
-		ULOG_INFO("cartesian_motion_controller: 种子库 %zu 条", ik->seedLibrarySize());
+		// 种子库 (可选; relpath 空 = 不加载, 走分支+随机阶梯)
+		if (!seed_lib_relpath_.empty())
+		{
+			std::string lib;
+			try
+			{
+				lib = ament_index_cpp::get_package_share_directory(seed_lib_package_) + "/" + seed_lib_relpath_;
+			}
+			catch (const std::exception &)
+			{
+				ULOG_ERROR("cartesian_motion_controller: 种子库包不可解析: %s", seed_lib_package_.c_str());
+				return CallbackReturn::ERROR;
+			}
+			if (!ik->loadSeedLibrary(lib, msg))
+			{
+				ULOG_ERROR("cartesian_motion_controller: %s", msg.c_str());
+				return CallbackReturn::ERROR;
+			}
+			ULOG_INFO("cartesian_motion_controller: 种子库 %zu 条", ik->seedLibrarySize());
+		}
+		// 显式预算经接口通用口 setBudgetMs 下发 (2026-10-08)。具体类 dynamic_cast
+		// 注入随缝③删除 (2026-10-22): setConfig 块本冗余 —— timeout_ns 同公式已被
+		// setBudgetMs 覆盖, max_iterations=200 即 DlsIkConfig 默认值
+		ik->setBudgetMs(ik_timeout_ms_);
+		fk_ = std::move(fk);
+		ik_ = std::move(ik);
 	}
-	// 回调线程求解配置: 显式预算经接口通用口 setBudgetMs 下发 (2026-10-08——
-	// 此前只经 dynamic_cast 施加 DlsIk, TracIk 拿不到 yaml 值只能用内建默认=静默分歧);
-	// DlsIkConfig 的迭代上限是 DLS 专属, 仍经具体类施加
-	ik->setBudgetMs(ik_timeout_ms_);
-	if (auto * dls = dynamic_cast<DlsIk *>(ik.get()))
+	catch (const pluginlib::PluginlibException & e)
 	{
-		DlsIkConfig ikcfg;
-		ikcfg.timeout_ns = static_cast<uint64_t>(ik_timeout_ms_ * 1e6);
-		ikcfg.max_iterations = 200;
-		dls->setConfig(ikcfg);
+		ULOG_ERROR("cm: ik_solver '%s' 装载失败: %s", ik_solver_name_.c_str(), e.what());
+		return CallbackReturn::ERROR;
 	}
-	fk_ = std::move(fk);
-	ik_ = std::move(ik);
 
 	// vmax (URDF max_velocity 单一事实源): OtgStream Limits 源 + 安全钳位基准;
 	// /update_rate 换算延后到首拍定源 (权威参数优先, 见 update())
@@ -257,8 +260,21 @@ controller_interface::CallbackReturn CartesianMotionController::on_configure(con
 	// QoS 裁决 (2026-09-18): 值通道 = reliable + KeepLast(1) —— 可靠到达且只留最新。
 	// §16.6: 回调内联一次 IK (种子=实测通道), 结果关节终点入值通道 —— RT 环零求解
 	const std::uint32_t chain_n = fk_->jointCount();
+	if (chain_n > unistackbot_interface::kMaxJoints)
+	{
+		// SolvedTarget/MeasJoints 通道 q[kMaxJoints] 定长 (2026-10-21 审查: 原
+		// "i<kMaxJoints" 钳位删除后须有替代 fail-fast——超链踩内存)
+		ULOG_ERROR("cm: 链关节数 %u 超 kMaxJoints=%u (SolvedTarget 通道容量)——升容量重编",
+			chain_n, unistackbot_interface::kMaxJoints);
+		return CallbackReturn::ERROR;
+	}
 	cb_seed_.assign(chain_n, 0.0);
 	cb_q_.assign(chain_n, 0.0);
+	// RT scratch 定容 (update 零分配的前提; 2026-10-22 补: 此前 hpp 加成员+update
+	// 使用但 configure 未 assign → 空 vector 段错误, switch 超时的真身)
+	tgt_scratch_.assign(chain_n, 0.0);
+	out_scratch_.assign(chain_n, 0.0);
+	goal_.assign(chain_n, 0.0);
 	command_sub_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>("~/command", rclcpp::QoS(rclcpp::KeepLast(1)).reliable(),
 		[this, chain_n](const geometry_msgs::msg::PoseStamped::SharedPtr m)
 		{
@@ -462,7 +478,7 @@ controller_interface::CallbackReturn CartesianMotionController::on_activate(cons
 	has_target_ = false;
 	have_goal_ = false;
 	consecutive_fail_ = 0;
-	goal_.assign(fk_->jointCount(), 0.0);
+	std::fill(goal_.begin(), goal_.end(), 0.0);   // configure 已定容, 激活只清零
 	rate_calibrated_ = false;
 	period_n_ = 0;
 	otg_ready_ = false;

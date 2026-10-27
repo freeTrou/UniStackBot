@@ -15,9 +15,12 @@
   <depend>kdl_parser</depend>
   <depend>eigen</depend>
   <depend>unistackbot_interface</depend>
-  <!-- vendored trac_ik 上游特例 (2026-10-08 用户裁决: 上游代码不剥离, 依赖如实声明;
-       仅 trac_ik_solver/ 消费, dls_ik/urdf_fk/analytic_piper 仍零 ROS) -->
+  <!-- ROS 侧可选件依赖 (核心库 libunistackbot_algorithm 仍零 ROS, 方案 C 不变):
+       rclcpp = vendored trac_ik 上游特例 (2026-10-08 裁决: 上游代码不剥离, 依赖
+       如实声明; trac_ik_solver/ 消费) + ik_plugins 注册库 (2026-10-22 缝③);
+       pluginlib = ik_plugins 注册库消费 -->
   <depend>rclcpp</depend>
+  <depend>pluginlib</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

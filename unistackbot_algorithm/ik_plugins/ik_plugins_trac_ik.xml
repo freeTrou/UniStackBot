@@ -1,0 +1,5 @@
+<library path="ik_solvers">
+  <class name="trac_ik" type="unistackbot_algorithm::TracIk" base_class_type="unistackbot_algorithm::IkSolver">
+    <description>TRAC-IK SQP+DLS 竞赛数值解（回调线程专用；yaml: ik_solver: trac_ik）—— 仅 UNISTACKBOT_BUILD_TRAC_IK=ON 时注册</description>
+  </class>
+</library>

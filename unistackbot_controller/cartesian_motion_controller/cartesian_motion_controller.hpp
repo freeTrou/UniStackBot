@@ -12,6 +12,7 @@
 
 #include "controller_interface/controller_interface.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "pluginlib/class_loader.hpp"
 #include "realtime_tools/realtime_publisher.hpp"
 #include "rt_tune/rt_tune.hpp"
 #include "ruckig/otg_stream.hpp"
@@ -20,20 +21,15 @@
 #include "unistackbot_interface/msg/cartesian_control.hpp"
 #include "unistackbot_interface/msg/cartesian_motion_status.hpp"
 
-#include "analytic_piper/analytic_piper.hpp"
-#include "dls_ik/dls_ik.hpp"
-#include "trac_ik_solver/trac_ik_solver.hpp"
+// 具体求解器头不进 CM (缝③ pluginlib 化, 2026-10-22): CM 只认 IkSolver 接口,
+// 实现经 unistackbot_algorithm/ik_plugins (或外部插件包) 运行期按名装载
 #include "ik_solver/ik_solver.hpp"
 #include "urdf_fk/urdf_fk.hpp"
 
 // 算法库住 unistackbot_algorithm 包 (2026-09-17 拆分: 算法与控制器集成解耦);
 // 控制器只消费类型, 命名空间仍属本包
 using unistackbot_algorithm::CartesianPose;
-using unistackbot_algorithm::DlsIk;
-using unistackbot_algorithm::AnalyticPiper;
-using unistackbot_algorithm::TracIk;
 using unistackbot_algorithm::IkSolver;
-using unistackbot_algorithm::DlsIkConfig;
 using unistackbot_algorithm::DlsIkStats;
 using unistackbot_algorithm::RedundancyPreference;
 using unistackbot_algorithm::UrdfFk;
@@ -112,8 +108,11 @@ private:
 
 	// ---- 运动学 (fk_=RT 侧 status 误差; ik_=回调线程侧求解; 实例不跨线程) ----
 	std::unique_ptr<UrdfFk> fk_;
-	std::unique_ptr<IkSolver> ik_;
-	std::string ik_solver_name_{"dls"};
+	// ik_loader_ 必须声明在 ik_ 之前: 成员逆序析构 → ik_ (pluginlib 删除器指回
+	// loader 内部状态, class_loader.hpp onPluginDeletion) 先死, loader 后死
+	std::unique_ptr<pluginlib::ClassLoader<IkSolver>> ik_loader_;
+	pluginlib::UniquePtr<IkSolver> ik_;   // unique_ptr<T, function<void(T*)>>
+	std::string ik_solver_name_{""};      // 必填无默认 (无默认纪律, 2026-09-22)
 	UrdfFk::Scratch fk_scratch_;
 
 	// ---- 接口映射: 接口名序 (CM 声明序) != 链序 (fk.jointNames), 按名映射 ----

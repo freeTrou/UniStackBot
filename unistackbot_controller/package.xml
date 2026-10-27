@@ -30,8 +30,8 @@
 
   <export>
     <build_type>ament_cmake</build_type>
-    <!-- pluginlib 发现走 package.xml export (与 sim_control 同款机制); 路径相对包 share 根 -->
-    <pluginlib plugin="cartesian_motion_controller/cartesian_motion_controller.xml" />
+    <!-- 惰性登记: Humble 实际发现走 ament index 资源 (CMake 宏 pluginlib_export_
+         plugin_description_file 注册, 2026-10-22 对照 pluginlib 源码核实); 路径相对包 share 根 -->    <pluginlib plugin="cartesian_motion_controller/cartesian_motion_controller.xml" />
     <pluginlib plugin="joint_stream_controller/joint_stream_controller.xml" />
     <pluginlib plugin="ee_state_broadcaster/ee_state_broadcaster.xml" />
     <pluginlib plugin="base_velocity_controller/base_velocity_controller.xml" />
