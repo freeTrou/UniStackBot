@@ -51,6 +51,7 @@ install(PROGRAMS
   scripts/r1_7a_arm/r1_7a_demo_cartesian.py
   scripts/r1_pro_arm/r1_pro_demo_joint.py
   scripts/r1_pro_arm/r1_pro_demo_cartesian.py
+  scripts/arm7_test_arm/arm7_test_demo_joint.py
   DESTINATION lib/${PROJECT_NAME}
 )
 # stationlite_arm: 真机轨迹回放 demo (2026-10-20); 点位资产 json 装 share, 脚本运行时双路径查找
