@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- arm7_test ros2_control 块: joint1-7 position 命令接口 (仿真链 CSP); 分支同 r1_7a 范本。
+         限位 = 用户提供的角度真值 (2026-10-22, J2 复核改向 / J3 ±150 待确认);
+         effort/velocity 仍占位 (10/5) —— mock 链够用, 真机批次前补。
+         零位 (装配姿态) 全关节都在限位内部, 无 gz 限位咬死风险 → ign 分支免 initial_value。
+         mujoco 分支未开: MJCF 未生成 (质量属性为壳估算, 动力学链等 ③ 号资料)。 -->
+    <xacro:macro name="arm7_test_ros2_control" params="use_gazebo:=false headless:=true">
+        <ros2_control name="arm7_test" type="system">
+            <hardware>
+                <xacro:if value="${use_gazebo == 'ign'}">
+                    <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+                </xacro:if>
+                <xacro:unless value="${use_gazebo == 'ign'}">
+                    <plugin>unistackbot_sim_control/SimControlHardware</plugin>
+                    <param name="backend">kinematic</param>
+                </xacro:unless>
+            </hardware>
+            <joint name="joint1">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.268928</param>
+                <param name="max">3.490659</param>
+                <param name="max_velocity">5.0</param>
+            </joint>
+            <joint name="joint2">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-0.872665</param>
+                <param name="max">2.879793</param>
+                <param name="max_velocity">5.0</param>
+            </joint>
+            <joint name="joint3">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.617994</param>
+                <param name="max">2.617994</param>
+                <param name="max_velocity">5.0</param>
+            </joint>
+            <joint name="joint4">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-1.134464</param>
+                <param name="max">2.617994</param>
+                <param name="max_velocity">5.0</param>
+            </joint>
+            <joint name="joint5">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-2.617994</param>
+                <param name="max">2.617994</param>
+                <param name="max_velocity">5.0</param>
+            </joint>
+            <joint name="joint6">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-0.349066</param>
+                <param name="max">0.349066</param>
+                <param name="max_velocity">5.0</param>
+            </joint>
+            <joint name="joint7">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+                <param name="min">-1.919862</param>
+                <param name="max">1.919862</param>
+                <param name="max_velocity">5.0</param>
+            </joint>
+        </ros2_control>
+        <!-- Gazebo 侧系统插件 (r1_7a 同款): gz server 加载 gz_ros2_control-system 并
+             用本 yaml 建 CM —— 缺此块时 hardware plugin 声明再多 CM 也不会出生 -->
+        <xacro:if value="${use_gazebo == 'ign'}">
+            <gazebo>
+                <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+                    <robot_param>robot_description</robot_param>
+                    <robot_param_node>robot_state_publisher</robot_param_node>
+                    <parameters>$(find unistackbot_bringup)/config/arm7_test_controllers.yaml</parameters>
+                </plugin>
+            </gazebo>
+        </xacro:if>
+    </xacro:macro>
+</robot>

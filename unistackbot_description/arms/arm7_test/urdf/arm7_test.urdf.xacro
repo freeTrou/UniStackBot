@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="arm7_test">
+    <!-- arm7_test 顶层: 七轴测试臂 (cad2urdf 导入, 2026-10-22)
+         args 与全机型对齐 (r1_7a 同款); bench (测试台架) 是树的根,
+         use_world 时 world 挂在 bench 之上。 -->
+    <xacro:arg name="use_world" default="true"/>
+    <xacro:arg name="use_ros2_control" default="false"/>
+    <xacro:arg name="use_gazebo" default="false"/>
+    <xacro:arg name="headless" default="true"/>
+    <xacro:arg name="use_gripper" default="true"/>   <!-- 无夹爪; 声明仅为 display.launch 五参透传兼容 -->
+
+    <xacro:if value="$(arg use_world)">
+        <link name="world"/>
+        <joint name="arm7_test_world" type="fixed">
+            <parent link="world"/>
+            <child link="bench"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+        </joint>
+    </xacro:if>
+
+    <xacro:include filename="$(find unistackbot_description)/arms/arm7_test/urdf/arm7_test_macro.xacro"/>
+    <xacro:arm7_test_arm/>
+
+    <xacro:if value="$(arg use_ros2_control)">
+        <xacro:include filename="$(find unistackbot_description)/arms/arm7_test/urdf/arm7_test_ros2_control.xacro"/>
+        <xacro:arm7_test_ros2_control use_gazebo="$(arg use_gazebo)" headless="$(arg headless)"/>
+    </xacro:if>
+</robot>
