@@ -3,8 +3,12 @@
 ## 0. 一句话结论
 
 stationlite 左臂 = **三平行轴 6 轴**（j2/j3/j4 严格平行，Pieper 条件形式二成立，几何实测实锤），
-**闭式解析解存在**。当前链上用 **DlsIk**（yaml `ik_solver: dls`，2026-09-29 全程验证含 mujoco
-物理链 circle 连续流）；解析解**已定路未立项**——触发时机见 §5。
+**闭式解析解存在**，且**已上线**——2026-10-21 B 线立项落地：IKFast 生成物
+（`analytic_stationlite_ikfast.cpp`，sl_ 前缀隔离）+ 平行轴指纹选拒 + 周期折叠
+（wrapToLimits）+ 适配层公共件（analytic_common，与 piper 共享）。现行 yaml
+`ik_solver: analytic_stationlite`（2026-10-21 切换，mock 34/1 存量 ign 缺口）；
+数值解 trac_ik 为 fallback。历史：DlsIk（2026-09-29 首验）→ trac_ik（2026-10-08
+全量换装）→ 解析解上线（2026-10-21）。
 
 ## 1. 构型判定（几何实测，2026-09-29）
 

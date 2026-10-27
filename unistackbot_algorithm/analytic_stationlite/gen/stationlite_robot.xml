@@ -1,0 +1,1 @@
+<robot file="stationlite_canonical.dae"><manipulator name="arm"><base>left_armbase</base><effector>left_linkgripper</effector></manipulator></robot>

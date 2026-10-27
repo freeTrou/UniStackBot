@@ -31,10 +31,12 @@ cartesian_motion_controller:
   ros__parameters:
     base_link: left_armbase
     tip_link: left_linkgripper
-    ik_solver: trac_ik   # 数值解默认 trac_ik (2026-10-08 全机型换装; DlsIk=RT 场景/离线调试 fallback)
+    ik_solver: analytic_stationlite   # B 线解析解切换 (2026-10-21, 三平行轴闭式 2026 cases 回代绿; trac_ik=数值 fallback 保留)
+    # 闭式解无预算语义 (setBudgetMs 基类空实现): ik_timeout_ms 仅满足 CM 必填校验,
+    # 对解析解无效; message_rate 自适应档已随切解析解移除 (2026-10-26 审核清理——
+    # 每消息滑窗中位数计算对闭式解是纯空转; 切回 trac_ik 时须恢复该两行:
+    #   ik_timeout_mode: message_rate   # trac_ik Distance 每条烧满定额, 自适应消化 50Hz 流 (2026-10-12 实锤)
     ik_timeout_ms: 50.0
-    ik_timeout_mode: message_rate   # 流式预算自适应 (0.8×消息间隔滑窗中位): trac_ik Distance 每条烧满定额
-                                    # 会把 50Hz 目标流消化力压到 20Hz——视觉顿挫根因 (2026-10-12 实锤修复)
     max_acceleration: 5.0
     max_jerk: 20.0
 
