@@ -22,7 +22,11 @@ using unistackbot_algorithm::check_spherical_wrist;
 using unistackbot_algorithm::WristFingerprint;
 using unistackbot_interface::RedundancyPreference;
 
-extern "C" void ComputeFk(const IkReal * j, IkReal * eetrans, IkReal * eerot);
+// pi_ 前缀系 (2026-10-26 审核修 F5 同步): 生成物 C API 已族前缀隔离
+namespace piper_ikfast
+{
+extern "C" void pi_ComputeFk(const IkReal * j, IkReal * eetrans, IkReal * eerot);
+}
 
 namespace
 {
@@ -151,11 +155,11 @@ int main(int argc, char ** argv)
 				if (skipped < 3)   // 首例诊断: 结果码 + ComputeFk 对拍 + 原始解数
 				{
 					IkReal ee[3], er[9];
-					ComputeFk(q.data(), ee, er);
+					piper_ikfast::pi_ComputeFk(q.data(), ee, er);
 					std::vector<std::vector<double>> all;
 					const int na = ik.solveAll(t, all);
 					std::printf("诊断[样本 %d]: result=%d 目标=(%.4f,%.4f,%.4f) "
-					            "ComputeFk=(%.4f,%.4f,%.4f) 原始解数=%d\n",
+					            "pi_ComputeFk=(%.4f,%.4f,%.4f) 原始解数=%d\n",
 					            i, static_cast<int>(r), t.x, t.y, t.z,
 					            ee[0], ee[1], ee[2], na);
 					std::printf("  q=(");

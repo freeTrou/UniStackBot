@@ -296,7 +296,7 @@ inline CheckValue<T> IKPowWithIntegerCheck(T f, int n)
 
 /// solves the forward kinematics equations.
 /// \param pfree is an array specifying the free joints of the chain.
-IKFAST_API void ComputeFk(const IkReal* j, IkReal* eetrans, IkReal* eerot) {
+IKFAST_API void pi_ComputeFk(const IkReal* j, IkReal* eetrans, IkReal* eerot) {
 IkReal x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15,x16,x17,x18,x19,x20,x21,x22,x23,x24,x25,x26,x27,x28,x29,x30,x31,x32,x33,x34,x35,x36,x37,x38,x39,x40,x41,x42,x43,x44,x45,x46,x47,x48,x49,x50,x51,x52,x53,x54,x55,x56,x57,x58,x59,x60,x61,x62,x63,x64,x65,x66,x67,x68,x69,x70,x71,x72,x73,x74,x75,x76,x77,x78,x79,x80,x81,x82,x83,x84,x85;
 x0=IKsin(j[5]);
 x1=IKsin(j[0]);
@@ -400,13 +400,13 @@ eerot[8]=(((x27*x85))+((x33*(((((-1.0)*(1.0)*x80))+x81+x79+(((-1.0)*(1.0)*x82)))
 eetrans[2]=((0.123)+(((0.28240634)*x7))+((x15*(((((-1.0)*(1.0)*x44))+x45))))+((x2*x27*(((((-1.0)*(0.0887455972310511)*x74))+(((-1.0)*(0.0201300514679932)*x72))+(((-1.0)*(0.0201300514679932)*x76))+(((-1.0)*(0.0887455972310511)*x69))))))+((x15*(((((-1.0)*(1.0)*x40))+(((-1.0)*(1.0)*x41))))))+((x33*(((((0.0201300514679932)*x74))+(((0.0201300514679932)*x69))+(((-1.0)*(0.0887455972310511)*x76))+(((-1.0)*(0.0887455972310511)*x72))))))+((x5*(((((-1.0)*(1.0)*x47))+(((-1.0)*(1.0)*x46))))))+((x5*((x42+(((-1.0)*(1.0)*x43))))))+(((0.03858444)*x10)));
 }
 
-IKFAST_API int GetNumFreeParameters() { return 0; }
-IKFAST_API int* GetFreeParameters() { return NULL; }
-IKFAST_API int GetNumJoints() { return 6; }
+IKFAST_API int pi_GetNumFreeParameters() { return 0; }
+IKFAST_API int* pi_GetFreeParameters() { return NULL; }
+IKFAST_API int pi_GetNumJoints() { return 6; }
 
-IKFAST_API int GetIkRealSize() { return sizeof(IkReal); }
+IKFAST_API int pi_GetIkRealSize() { return sizeof(IkReal); }
 
-IKFAST_API int GetIkType() { return 0x67000001; }
+IKFAST_API int pi_GetIkType() { return 0x67000001; }
 
 class IKSolver {
 public:
@@ -415,7 +415,7 @@ unsigned char _ij0[2], _nj0,_ij1[2], _nj1,_ij2[2], _nj2,_ij3[2], _nj3,_ij4[2], _
 
 IkReal j100, cj100, sj100;
 unsigned char _ij100[2], _nj100;
-bool ComputeIk(const IkReal* eetrans, const IkReal* eerot, const IkReal* pfree, IkSolutionListBase<IkReal>& solutions) {
+bool pi_ComputeIk(const IkReal* eetrans, const IkReal* eerot, const IkReal* pfree, IkSolutionListBase<IkReal>& solutions) {
 j0=numeric_limits<IkReal>::quiet_NaN(); _ij0[0] = -1; _ij0[1] = -1; _nj0 = -1; j1=numeric_limits<IkReal>::quiet_NaN(); _ij1[0] = -1; _ij1[1] = -1; _nj1 = -1; j2=numeric_limits<IkReal>::quiet_NaN(); _ij2[0] = -1; _ij2[1] = -1; _nj2 = -1; j3=numeric_limits<IkReal>::quiet_NaN(); _ij3[0] = -1; _ij3[1] = -1; _nj3 = -1; j4=numeric_limits<IkReal>::quiet_NaN(); _ij4[0] = -1; _ij4[1] = -1; _nj4 = -1; j5=numeric_limits<IkReal>::quiet_NaN(); _ij5[0] = -1; _ij5[1] = -1; _nj5 = -1; 
 for(int dummyiter = 0; dummyiter < 1; ++dummyiter) {
     solutions.Clear();
@@ -10437,19 +10437,19 @@ static inline void polyroots4(IkReal rawcoeffs[4+1], IkReal rawroots[4], int& nu
 
 /// solves the inverse kinematics equations.
 /// \param pfree is an array specifying the free joints of the chain.
-IKFAST_API bool ComputeIk(const IkReal* eetrans, const IkReal* eerot, const IkReal* pfree, IkSolutionListBase<IkReal>& solutions) {
+IKFAST_API bool pi_ComputeIk(const IkReal* eetrans, const IkReal* eerot, const IkReal* pfree, IkSolutionListBase<IkReal>& solutions) {
 IKSolver solver;
-return solver.ComputeIk(eetrans,eerot,pfree,solutions);
+return solver.pi_ComputeIk(eetrans,eerot,pfree,solutions);
 }
 
-IKFAST_API bool ComputeIk2(const IkReal* eetrans, const IkReal* eerot, const IkReal* pfree, IkSolutionListBase<IkReal>& solutions, void* pOpenRAVEManip) {
+IKFAST_API bool pi_ComputeIk2(const IkReal* eetrans, const IkReal* eerot, const IkReal* pfree, IkSolutionListBase<IkReal>& solutions, void* pOpenRAVEManip) {
 IKSolver solver;
-return solver.ComputeIk(eetrans,eerot,pfree,solutions);
+return solver.pi_ComputeIk(eetrans,eerot,pfree,solutions);
 }
 
-IKFAST_API const char* GetKinematicsHash() { return "6ce02ac2b5a6da6ba09f8bf295361ddc"; }
+IKFAST_API const char* pi_GetKinematicsHash() { return "6ce02ac2b5a6da6ba09f8bf295361ddc"; }
 
-IKFAST_API const char* GetIkFastVersion() { return "0x10000049"; }
+IKFAST_API const char* pi_GetIkFastVersion() { return "0x10000049"; }
 
 #ifdef IKFAST_NAMESPACE
 } // end namespace
@@ -10463,23 +10463,23 @@ using namespace IKFAST_NAMESPACE;
 #endif
 int main(int argc, char** argv)
 {
-    if( argc != 12+GetNumFreeParameters()+1 ) {
+    if( argc != 12+pi_GetNumFreeParameters()+1 ) {
         printf("\nUsage: ./ik r00 r01 r02 t0 r10 r11 r12 t1 r20 r21 r22 t2 free0 ...\n\n"
                "Returns the ik solutions given the transformation of the end effector specified by\n"
                "a 3x3 rotation R (rXX), and a 3x1 translation (tX).\n"
-               "There are %d free parameters that have to be specified.\n\n",GetNumFreeParameters());
+               "There are %d free parameters that have to be specified.\n\n",pi_GetNumFreeParameters());
         return 1;
     }
 
     IkSolutionList<IkReal> solutions;
-    std::vector<IkReal> vfree(GetNumFreeParameters());
+    std::vector<IkReal> vfree(pi_GetNumFreeParameters());
     IkReal eerot[9],eetrans[3];
     eerot[0] = atof(argv[1]); eerot[1] = atof(argv[2]); eerot[2] = atof(argv[3]); eetrans[0] = atof(argv[4]);
     eerot[3] = atof(argv[5]); eerot[4] = atof(argv[6]); eerot[5] = atof(argv[7]); eetrans[1] = atof(argv[8]);
     eerot[6] = atof(argv[9]); eerot[7] = atof(argv[10]); eerot[8] = atof(argv[11]); eetrans[2] = atof(argv[12]);
     for(std::size_t i = 0; i < vfree.size(); ++i)
         vfree[i] = atof(argv[13+i]);
-    bool bSuccess = ComputeIk(eetrans, eerot, vfree.size() > 0 ? &vfree[0] : NULL, solutions);
+    bool bSuccess = pi_ComputeIk(eetrans, eerot, vfree.size() > 0 ? &vfree[0] : NULL, solutions);
 
     if( !bSuccess ) {
         fprintf(stderr,"Failed to get ik solution\n");
@@ -10487,7 +10487,7 @@ int main(int argc, char** argv)
     }
 
     printf("Found %d ik solutions:\n", (int)solutions.GetNumSolutions());
-    std::vector<IkReal> solvalues(GetNumJoints());
+    std::vector<IkReal> solvalues(pi_GetNumJoints());
     for(std::size_t i = 0; i < solutions.GetNumSolutions(); ++i) {
         const IkSolutionBase<IkReal>& sol = solutions.GetSolution(i);
         printf("sol%d (free=%d): ", (int)i, (int)sol.GetFree().size());

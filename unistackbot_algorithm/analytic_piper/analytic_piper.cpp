@@ -5,9 +5,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <exception>
 
+#include "analytic_common/analytic_common.hpp"   // 适配层公共件 (2026-10-26 审核修 F10 抽取)
 #include "ikfast_include.h"   // vendored ikfast.h 的告警抑制包装 (见头内注释)
 
+using unistackbot_algorithm::analytic_detail::closestToSeed;
+using unistackbot_algorithm::analytic_detail::filterToLimits;
+using unistackbot_algorithm::analytic_detail::isDuplicateSolution;
+using unistackbot_algorithm::analytic_detail::wrapToLimits;
 using unistackbot_interface::RedundancyType;
 
 namespace unistackbot_algorithm
@@ -19,19 +25,17 @@ namespace
 // 真非球腕的偏差在 cm 量级, 不会被 1mm 误放行。
 constexpr double kWristTolM = 0.001;
 
-// 限位过滤微容差 [rad] (2026-09-23 实锤): 求解在规范化臂 (joint6 origin 88µm 归零)
-// 上进行, 真臂位姿的解会微越限位——piper 折叠零位 j2/j3 恰压限位线, 近零分支
-// 实测 j2=-8.8e-5 / j3=+3.4e-4 被严格过滤全拒 (LIMIT_CONFLICT, "上得去回不来")。
-// 放宽 1e-3 rad (≈3 倍覆盖) 只影响"接受判定"; 输出仍被 CM applySolution 的
-// 限位 clamp + write 层最终防线硬钳——分层语义不变。
-constexpr double kLimitEpsRad = 1e-3;
-
-// IKFast 生成函数 (piper_ikfast.cpp 定义, extern "C")
-extern "C" bool ComputeIk(
+// IKFast 生成函数 (piper_ikfast.cpp 定义, extern "C"; pi_ 前缀 + IKFAST_NAMESPACE
+// =piper_ikfast 隔离 —— 2026-10-26 审核修 F5: 双生成物同库, C API 必须族前缀隔离
+// (stationlite sl_ 同款); 生成 TU 以 -DIKFAST_NAMESPACE=piper_ikfast 编译)
+namespace piper_ikfast
+{
+extern "C" bool pi_ComputeIk(
 	const IkReal * eetrans, const IkReal * eerot, const IkReal * pfree,
 	ikfast::IkSolutionListBase<IkReal> & solutions);
-extern "C" int GetNumFreeParameters();
-extern "C" int GetNumJoints();
+extern "C" int pi_GetNumFreeParameters();
+extern "C" int pi_GetNumJoints();
+}
 
 // CartesianPose (四元数 w 前) → IKFast 输入 (位置 + 3x3 行主序旋转)
 void toIkFastInput(const CartesianPose & t, IkReal * eetrans, IkReal * eerot)
@@ -141,18 +145,42 @@ int AnalyticPiper::solveAll(
 	IkReal eerot[9];
 	toIkFastInput(target, eetrans, eerot);
 	ikfast::IkSolutionList<IkReal> sols;
-	if (!ComputeIk(eetrans, eerot, nullptr, sols))
+	try
+	{
+		// 异常边界 (2026-10-26 审核修 F3): vendored IKFast 的 IKFAST_ASSERT 定义为
+		// throw —— 边界/近奇异目标的 asin/acos 断言异常在此翻译为 0 解 (数值退化≈
+		// 无解), 不允许穿透 IkSolver 缝进入 CM 回调 (风格规则 27 同款边界纪律;
+		// stationlite 同款, 此前 piper 同病潜伏未在默认链)
+		if (!piper_ikfast::pi_ComputeIk(eetrans, eerot, nullptr, sols))
+		{
+			return 0;
+		}
+	}
+	catch (const std::exception &)
 	{
 		return 0;
 	}
 	const int n = static_cast<int>(sols.GetNumSolutions());
 	solutions.reserve(static_cast<size_t>(n));
-	std::vector<IkReal> buf(static_cast<size_t>(GetNumJoints()));
+	std::vector<IkReal> buf(static_cast<size_t>(piper_ikfast::pi_GetNumJoints()));
+	const std::vector<double> & lo = fk_->qMin();
+	const std::vector<double> & hi = fk_->qMax();
 	for (int i = 0; i < n; ++i)
 	{
-		// GetNumFreeParameters()=0 (6 关节 Transform6D) → pfree 恒 nullptr
+		// GetNumFreeParameters()=0 (6 关节 Transform6D) → pfree 恒 nullptr。
+		// 周期折叠 + 去重 (2026-10-26 审核修 F10 补齐, 与 stationlite 对齐):
+		// IKFast 枚举任意 q+2πk 表示, 折叠可回限位内的解此前被误拒
+		// (同一位姿 piper LIMIT_CONFLICT / stationlite OK 的行为分歧根因)
 		sols.GetSolution(i).GetSolution(buf.data(), nullptr);
-		solutions.emplace_back(buf.begin(), buf.end());
+		std::vector<double> q(buf.begin(), buf.end());
+		if (!wrapToLimits(q, lo, hi))   // 非有限解弃 (isfinite 守卫)
+		{
+			continue;
+		}
+		if (!isDuplicateSolution(solutions, q))
+		{
+			solutions.push_back(std::move(q));
+		}
 	}
 	return static_cast<int>(solutions.size());
 }
@@ -170,7 +198,6 @@ IkResult AnalyticPiper::solve(
 		{
 			DlsIkStats s;
 			s.ok = false;
-			s.final_err = (r == IkResult::NOT_READY && !ready_) ? 0.0 : 0.0;
 			*stats = s;
 		}
 		return r;
@@ -185,52 +212,21 @@ IkResult AnalyticPiper::solve(
 		return fail(IkResult::UNSUPPORTED);
 	}
 
-	// 全解枚举 + 限位过滤
+	// 全解枚举 + 限位过滤 + 距 seed 最近 (公共件, stationlite 同款;
+	// 跳变阈值精化按 playbook §3-§4 方法另行标定)
 	std::vector<std::vector<double>> all;
 	const int n = solveAll(target, all);
 	if (n <= 0)
 	{
 		return fail(IkResult::UNREACHABLE);   // 闭式枚举 0 解 = 目标不在工作空间
 	}
-	const std::vector<double> & lo = fk_->qMin();
-	const std::vector<double> & hi = fk_->qMax();
 	std::vector<std::vector<double>> valid;
-	valid.reserve(all.size());
-	for (const auto & q : all)
-	{
-		bool ok = true;
-		for (size_t i = 0; i < q.size() && ok; ++i)
-		{
-			ok = (q[i] >= lo[i] - kLimitEpsRad && q[i] <= hi[i] + kLimitEpsRad);
-		}
-		if (ok)
-		{
-			valid.push_back(q);
-		}
-	}
+	filterToLimits(all, fk_->qMin(), fk_->qMax(), valid);
 	if (valid.empty())
 	{
 		return fail(IkResult::LIMIT_CONFLICT);   // 有解但全部越限位
 	}
-
-	// 距 seed 最近 (STREAMING=粘性 / COLD_START=最近分支, v1 同策略;
-	// 跳变阈值精化按 playbook §3-§4 方法另行标定)
-	const std::vector<double> * best = nullptr;
-	double best_d2 = 0.0;
-	for (const auto & q : valid)
-	{
-		double d2 = 0.0;
-		for (size_t i = 0; i < q.size(); ++i)
-		{
-			const double diff = q[i] - seed[i];
-			d2 += diff * diff;
-		}
-		if (best == nullptr || d2 < best_d2)
-		{
-			best = &q;
-			best_d2 = d2;
-		}
-	}
+	const std::vector<double> * best = closestToSeed(valid, seed);
 	out_q = *best;   // 唯一写入点 (契约 1)
 	if (stats != nullptr)
 	{
