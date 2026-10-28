@@ -1,6 +1,9 @@
 # canfd_master — SocketCAN (CAN FD) 主站后端
 
-**状态**：占位，未动工（2026-09-24 立目录）。**设计已成文**：`docs/bus/socketcan_master_design.md`。
+**状态**：**已落地（2026-10-28，Kvaser can0↔can1 真机台架 3×29 全绿）**。设计：`docs/bus/socketcan_master_design.md`（含达妙修订 §8）。
+
+实现形态：单类 1+1（`canfd_master.hpp/.cpp`）——CAN 无 Framer（内核帧对象）/ socket 住 Impl / FakeMotor 台架即测试缝。经典+FD 双模（frame_len 分型）。首消费者 = stationlite 达妙臂（纯经典 1Mbps）。
+测试：`test/run_canfd_test.sh can0 can1`（真机台架）/ `vcan0 vcan0`（vcan 版）。
 
 ## 要点（设计定稿摘录）
 
