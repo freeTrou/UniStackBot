@@ -82,6 +82,20 @@ constexpr double kPriorKd = 2.0;
 // state_raw=D0 原样 (ID|ERR), node_id=D0 低 4 位; mode 无协议信息保持 kStop。
 [[nodiscard]] bool decodeFrame(const std::uint8_t *frame, std::size_t len, NodeFeedback &fb, double ratio, DmMotorType type);
 
+/*
+ * 镜像方向 (2026-10-27, can1 虚拟电机/录制分析消费; 主站永不经 ProtocolCore 调用,
+ * 故为纯函数不进接口)
+ * 纯函数: 8B 命令帧 → 命令。MIT 帧解位拼接; FF×7+FC/FD/FB 还原 kEnable/kStop/kClear。
+ * 失败: buf 空 / len≠8 / ratio≠1 / type 非法。node_id 不入帧 (CAN ID 住帧头)。
+ */
+[[nodiscard]] bool unpackCommand(const std::uint8_t *frame, std::size_t len, NodeCommand &cmd, double ratio, DmMotorType type);
+
+/*
+ * 纯函数: 反馈 → 8B 帧 (构造 D0=(ERR<<4)|ID + POS/VEL/T + 双温度; 温度截 int8/uint8)。
+ * 失败: buf 空 / cap<8 / ratio≠1 / type 非法 / 任一值非有限。
+ */
+[[nodiscard]] std::size_t packFeedback(std::uint8_t *buf, std::size_t cap, const NodeFeedback &fb, double ratio, DmMotorType type);
+
 }  // namespace dm_motor
 
 // ProtocolCore 的达妙实现 (一个子类, 型号=构造档位; 泵经接口多态调用, 测试直打纯函数)。

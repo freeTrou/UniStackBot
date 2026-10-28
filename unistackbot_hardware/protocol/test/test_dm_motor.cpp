@@ -272,6 +272,90 @@ int main()
 		check(fa.error_raw == fb.error_raw && fa.error_raw == 0x2, "err 半字节亦档位无关");
 	}
 
+	// ---- ⑩ 镜像方向 (2026-10-27, can1 虚拟电机/录制分析): unpackCommand/packFeedback ----
+	{
+		// 命令往返: encode → unpack, 容差 = 各字段 1 LSB 量化 (防"双错自洽"另有甲骨文层①兜底)
+		const struct
+		{
+			double q, dq, kp, kd, tau;
+		} rt[] = {
+			{0, 0, 45, 2, 0},
+			{1.234, -5.6, 300, 2.5, 3.7},
+			{-3.14, 20.0, 500, 5, -9.9},
+			{12.5, -30.0, 0, 0, 10},      // 顶格
+		};
+		const double q_lsb = 25.0 / 65535.0, v_lsb = 60.0 / 4095.0;
+		const double kp_lsb = 500.0 / 4095.0, kd_lsb = 5.0 / 4095.0, t_lsb = 20.0 / 4095.0;
+		for (const auto & c : rt)
+		{
+			NodeCommand cmd = mit(c.q, c.dq, c.kp, c.kd, c.tau);
+			std::uint8_t f[8];
+			check(encodeFrame(f, sizeof f, cmd, 0, 1.0, DmMotorType::kDm4310) == 8, "往返: encode");
+			NodeCommand back;
+			check(unpackCommand(f, 8, back, 1.0, DmMotorType::kDm4310), "往返: unpack");
+			check(back.mode == NodeMode::kRun, "往返: mode=kRun");
+			check(std::abs(back.position - c.q) <= q_lsb + 1e-9, "往返: |Δq|≤1LSB");
+			check(std::abs(back.speed - c.dq) <= v_lsb + 1e-9, "往返: |Δdq|≤1LSB");
+			check(std::abs(back.kp - c.kp) <= kp_lsb + 1e-9, "往返: |Δkp|≤1LSB");
+			check(std::abs(back.kd - c.kd) <= kd_lsb + 1e-9, "往返: |Δkd|≤1LSB");
+			check(std::abs(back.tau - c.tau) <= t_lsb + 1e-9, "往返: |Δtau|≤1LSB");
+		}
+		// 特殊帧还原
+		for (const auto & [mode, cmd_byte] : std::initializer_list<std::pair<NodeMode, std::uint8_t>>{
+				 {NodeMode::kEnable, 0xFCu}, {NodeMode::kStop, 0xFDu}, {NodeMode::kClear, 0xFBu}})
+		{
+			NodeCommand cmd;
+			cmd.mode = mode;
+			std::uint8_t f[8];
+			check(encodeFrame(f, sizeof f, cmd, 0, 1.0, DmMotorType::kDm4310) == 8, "特殊帧 encode");
+			NodeCommand back;
+			check(unpackCommand(f, 8, back, 1.0, DmMotorType::kDm4310), "特殊帧 unpack");
+			check(back.mode == mode, "特殊帧 mode 还原");
+		}
+		// 未知特殊命令拒绝
+		{
+			const std::uint8_t f[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x33};   // 参数帧 (范围外)
+			NodeCommand back;
+			check(!unpackCommand(f, 8, back, 1.0, DmMotorType::kDm4310), "未知特殊命令拒绝 (0x33 暂缓范围)");
+		}
+		// 反馈往返: pack → decode
+		{
+			NodeFeedback src;
+			src.node_id = 0x05;
+			src.error_raw = 0x01;   // 使能态
+			src.position = 2.345;
+			src.speed = -7.8;
+			src.tau = 4.2;
+			src.temp_driver = -10;
+			src.temp_winding = 66;
+			std::uint8_t f[8];
+			check(packFeedback(f, sizeof f, src, 1.0, DmMotorType::kDm4340) == 8, "反馈 pack");
+			NodeFeedback fb;
+			check(decodeFrame(f, 8, fb, 1.0, DmMotorType::kDm4340), "反馈 decode");
+			check(fb.node_id == 0x05 && fb.error_raw == 0x01, "D0 还原 (ERR|ID)");
+			check(std::abs(fb.position - src.position) <= 25.0 / 65535.0 + 1e-9, "反馈 |Δq|≤1LSB");
+			check(std::abs(fb.speed - src.speed) <= 16.0 / 4095.0 + 1e-9, "反馈 |Δdq|≤1LSB (4340 档)");
+			check(std::abs(fb.tau - src.tau) <= 56.0 / 4095.0 + 1e-9, "反馈 |Δtau|≤1LSB (4340 档)");
+			check(fb.temp_driver == -10 && fb.temp_winding == 66, "温度直读往返");
+		}
+		// pack 非有限拒绝
+		{
+			NodeFeedback bad;
+			bad.position = kInf;
+			std::uint8_t f[8];
+			check(packFeedback(f, sizeof f, bad, 1.0, DmMotorType::kDm4310) == 0, "pack 非有限拒绝");
+		}
+	}
+
+	// ---- ⑪ kd=0 手册禁令 (2026-10-27 裁决: 协议知识住协议) ----
+	{
+		std::uint8_t f[8];
+		check(encodeFrame(f, sizeof f, mit(0, 0, 45, 0, 0), 0, 1.0, DmMotorType::kDm4310) == 0,
+			"kp>0 且 kd=0 拒绝 (手册: 位置控制震荡)");
+		check(encodeFrame(f, sizeof f, mit(0, 0, 0, 0, 2.0), 0, 1.0, DmMotorType::kDm4310) == 8,
+			"tau-only (kp=kd=0) 合法 —— 纯力矩前馈");
+	}
+
 	std::printf("%s: %d cases, %d fail\n", g_fail == 0 ? "ALL PASS" : "FAILED", g_case, g_fail);
 	return g_fail == 0 ? 0 : 1;
 }

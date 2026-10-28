@@ -48,6 +48,14 @@ struct NodeSpec
 	std::string protocol;         // 协议名 (空 → 回退段级 MasterConfig::protocol)
 	std::string statemachine;     // 状态机名 (空 → 回退段级; 传感器节点回退后须为空)
 	double ratio = 0.0;           // 减速比 (语义经 ProtocolCore::ratio_valid 校验)
+
+	/*
+	 * CAN 帧头路由 (2026-10-27, CAN 主站必填/其他总线忽略; CAN ID 住帧头,
+	 * 数据段不含 ID——dm_motor_core 域约定)。recv_id 是 rx 分发键: 全段唯一 (装配校验)。
+	 * 部署值先例: stationlite j1-j6 send=0x01-0x06 / recv=0x11-0x16, 夹爪 0x07/0x17。
+	 */
+	std::uint32_t can_send_id = 0;   // 命令帧 CAN ID (MIT/特殊帧同宿; POS_VEL=+0x100 等模式偏移为协议知识暂文档化)
+	std::uint32_t can_recv_id = 0;   // 反馈帧 CAN ID (电机侧配置的 master_id, 部署事实)
 };
 
 // 总线段装配配置 (组合根从机器配置读入; 机型形态见 stationlite_buses.yaml 先例)
