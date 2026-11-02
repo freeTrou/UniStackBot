@@ -1,0 +1,5 @@
+<library path="whole_body_solvers">
+  <class name="dualarm_dls" type="DualArmDls" base_class_type="unistackbot_algorithm::WholeBodySolver">
+    <description>双臂独立链速度级 DLS 占位实现（Phase 1；yaml: solver: dualarm_dls；算法团队 HQP 到位后一行换）</description>
+  </class>
+</library>

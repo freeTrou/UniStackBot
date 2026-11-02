@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>unistackbot_algorithm_solvers</name>
+  <version>0.1.0</version>
+  <description>算法参考实现 + pluginlib 注册（臂算法组维护）: IK 四件 + WB 占位 + vendor。契约住 unistackbot_algorithm (SDK)。</description>
+  <maintainer email="todo@todo.todo">UniStackBot</maintainer>
+  <license>TODO: Declaration of license</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>unistackbot_algorithm</depend>
+  <depend>unistackbot_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>orocos_kdl_vendor</depend>
+  <depend>orocos_kdl</depend>
+  <depend>urdf</depend>
+  <depend>urdfdom</depend>
+  <depend>kdl_parser</depend>
+  <depend>Eigen3</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
