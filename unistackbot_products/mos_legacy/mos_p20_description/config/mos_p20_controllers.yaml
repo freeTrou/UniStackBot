@@ -1,0 +1,107 @@
+# mos_p20 控制器配置 (Phase 1, 2026-10-30; 产品域首件——配置随机型包自带, 命名约定 <robot>_description)
+# 编组: js_arms(14) + js_head(2) + js_torso(1 升降) + ee_broadcaster + cm/jtc inactive 常驻
+# /** 通配节 = update_rate 权威定源 (r1_pro 2026-10-15 实锤教训: 缺它 CM 落中位数兜底 → 龟速爬)
+/**:
+  ros__parameters:
+    update_rate: 500
+
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+    thread_priority: 80
+    cpu_affinity: 1
+    lock_memory: true
+    joint_state_broadcaster:
+      type: unistackbot_controller/UniJointStateBroadcaster
+    js_arms:
+      type: unistackbot_controller/JointStreamController
+    js_head:
+      type: unistackbot_controller/JointStreamController
+    js_torso:
+      type: unistackbot_controller/JointStreamController
+    js_gripper:
+      type: unistackbot_controller/JointStreamController
+    cartesian_motion_controller:
+      type: unistackbot_controller/CartesianMotionController
+    ee_state_broadcaster:
+      type: unistackbot_controller/EeStateBroadcaster
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    whole_body_controller:
+      type: unistackbot_controller/WholeBodyController
+
+# 双臂一条消息原子驱动 (r1_pro js_arms 同款)
+js_arms:
+  ros__parameters:
+    joints: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint,
+             left_elbow_pitch_joint, left_wrist_yaw_joint, left_wrist_roll_joint, left_wrist_pitch_joint,
+             right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint,
+             right_elbow_pitch_joint, right_wrist_yaw_joint, right_wrist_roll_joint, right_wrist_pitch_joint]
+    interpolation: ruckig
+    observe_applied_command: false
+
+js_head:
+  ros__parameters:
+    joints: [head_yaw_joint, head_pitch_joint]
+    interpolation: ruckig
+    observe_applied_command: false
+
+# 升降 = 平移关节 (米); SDK 限位 [-0.3, 0.5)
+js_torso:
+  ros__parameters:
+    joints: [body_joint]
+    interpolation: ruckig
+    observe_applied_command: false
+
+# 夹爪双通道 (平移 0~0.1 m; mos_compat 缓存双侧全列下发)
+js_gripper:
+  ros__parameters:
+    joints: [left_gripper_joint, right_gripper_joint]
+    interpolation: ruckig
+    observe_applied_command: false
+
+joint_trajectory_controller:
+  ros__parameters:
+    joints: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint,
+             left_elbow_pitch_joint, left_wrist_yaw_joint, left_wrist_roll_joint, left_wrist_pitch_joint,
+             right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint,
+             right_elbow_pitch_joint, right_wrist_yaw_joint, right_wrist_roll_joint, right_wrist_pitch_joint]
+    state_interfaces:
+      - position
+      - velocity
+    command_interfaces:
+      - position
+
+# EEB: 左臂 FK 流 (base=body_link 树根, tip=左臂腕; SDK 业务基准同源)
+ee_state_broadcaster:
+  ros__parameters:
+    publish_hz: 50.0
+    base_link: body_link
+    tip_link: left_wrist_pitch_link
+
+# WholeBody 壳: 双臂笛卡尔 (Phase 1 落地; 算法位 dualarm_dls 占位 → 算法团队 HQP 后一行换)
+# 认领 = js_arms 14 关节 (互斥, CM 的 switch 切换语义同款)
+whole_body_controller:
+  ros__parameters:
+    solver: dualarm_dls
+    joints: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint,
+             left_elbow_pitch_joint, left_wrist_yaw_joint, left_wrist_roll_joint, left_wrist_pitch_joint,
+             right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint,
+             right_elbow_pitch_joint, right_wrist_yaw_joint, right_wrist_roll_joint, right_wrist_pitch_joint]
+    end_frames: [left_wrist_pitch_link, right_wrist_pitch_link]
+    base_frame: body_link
+    dt_s: 0.005          # worker 节拍 200Hz (Phase 1 最小版; 定稿对齐总线)
+    max_delta_rad: 0.01  # 安全落地步长/拍
+
+# CM: 左臂 (单 CM 裁决; 双臂协同 = whole_body 壳, Phase 1 后半接入)
+# OTG a/j 限值 = 机型资产 (r1_pro 同款口径; URDF 无此项——velocity=0 病灶在 README 记档)
+cartesian_motion_controller:
+  ros__parameters:
+    base_link: body_link
+    tip_link: left_wrist_pitch_link
+    ik_solver: trac_ik
+    ik_timeout_ms: 50.0
+    ik_timeout_mode: message_rate
+    ik_rate_share: 0.8
+    max_acceleration: 5.0
+    max_jerk: 20.0

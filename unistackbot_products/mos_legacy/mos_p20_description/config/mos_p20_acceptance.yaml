@@ -1,0 +1,30 @@
+# mos_p20 机型验收登记表 (Phase 1, 2026-10-30) —— 测试判据登记值单一事实源
+# 机型住产品域 (命名约定 <robot>_description 自带 urdf/config); 指纹值 = 展开实测 (check_urdf 34)
+# 挂账: ign/mujoco 链未接 (gz 分支/MJCF 未生成——MJCF 手工策展按需另排); 底盘轮系 mock 无世界语义未声明 (r1_pro 裁决同款)
+fingerprint:
+  subchain_count: 34       # check_urdf 实测 (body_link 树根 + 33 子链; 27 运动关节全树)
+  joints_by_chain:
+    mock:   [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint,
+             left_elbow_pitch_joint, left_wrist_yaw_joint, left_wrist_roll_joint, left_wrist_pitch_joint,
+             left_gripper_joint,
+             right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint,
+             right_elbow_pitch_joint, right_wrist_yaw_joint, right_wrist_roll_joint, right_wrist_pitch_joint,
+             right_gripper_joint,
+             head_yaw_joint, head_pitch_joint, body_joint]
+    ign:    []             # 未接 (挂账)
+    mujoco: []             # 未接 (挂账)
+  plugins:
+    mock: unistackbot_sim_control/SimControlHardware
+    ign: ''                # 未接
+    mujoco: ''             # 未接
+tolerance:
+  js_mock: 0.01
+  cm_mock: 0.002
+  js_gz: 0.05
+  cm_gz: 0.005
+  js_mujoco: 0.02
+  cm_mujoco: 0.003
+soft_joints:
+  gz: ''
+mimic:
+  pairs: ''

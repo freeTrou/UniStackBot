@@ -1,0 +1,235 @@
+<?xml version="1.0"?>
+<!-- mos_p20 薄顶层 xacro —— 唯一入口, backend 参数切硬件后端 (piper use_gazebo 先例)
+     backend:=kinematic (默认, mock 链) | udp_board (FakeBoard / 真机)
+     board_ip/board_port/bind_port: udp_board 专用, 部署值非机型资产 -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="mos_p20">
+  <xacro:arg name="backend" default="kinematic"/>
+  <xacro:arg name="board_ip" default="127.0.0.1"/>
+  <xacro:arg name="board_port" default="10086"/>
+  <xacro:arg name="bind_port" default="9090"/>
+  <xacro:property name="backend" value="$(arg backend)"/>
+
+  <xacro:include filename="$(find mos_p20_description)/urdf/mos_p20.urdf"/>
+
+  <ros2_control name="mos_p20" type="system">
+    <hardware>
+      <xacro:if value="${backend == 'kinematic'}">
+        <plugin>unistackbot_sim_control/SimControlHardware</plugin>
+        <param name="backend">kinematic</param>
+      </xacro:if>
+      <xacro:unless value="${backend == 'kinematic'}">
+        <plugin>unistackbot_udp_board/UdpBoardSystem</plugin>
+        <param name="dest_ip">$(arg board_ip)</param>
+        <param name="dest_port">$(arg board_port)</param>
+        <param name="bind_port">$(arg bind_port)</param>
+      </xacro:unless>
+    </hardware>
+
+  <joint name="left_shoulder_pitch_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.75</param>
+  				<param name="max">2.75</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="left_shoulder_roll_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">0</param>
+  				<param name="max">3.14</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="left_shoulder_yaw_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.96</param>
+  				<param name="max">2.96</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="left_elbow_pitch_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.44</param>
+  				<param name="max">0.69</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="left_wrist_yaw_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.76</param>
+  				<param name="max">2.76</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="left_wrist_roll_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-1.83</param>
+  				<param name="max">1.83</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="left_wrist_pitch_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-1.57</param>
+  				<param name="max">1.57</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="left_gripper_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">0</param>
+  				<param name="max">0.1</param>
+  				<param name="max_velocity">0.1</param>
+  			</joint>
+  <joint name="right_shoulder_pitch_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.75</param>
+  				<param name="max">2.75</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="right_shoulder_roll_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-3.14</param>
+  				<param name="max">0</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="right_shoulder_yaw_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.96</param>
+  				<param name="max">2.96</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="right_elbow_pitch_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.44</param>
+  				<param name="max">0.69</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="right_wrist_yaw_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-2.76</param>
+  				<param name="max">2.76</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="right_wrist_roll_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-1.83</param>
+  				<param name="max">1.83</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="right_wrist_pitch_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-1.57</param>
+  				<param name="max">1.57</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="right_gripper_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">0</param>
+  				<param name="max">0.1</param>
+  				<param name="max_velocity">0.1</param>
+  			</joint>
+  <joint name="head_yaw_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-1.05</param>
+  				<param name="max">1.05</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="head_pitch_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-0.524</param>
+  				<param name="max">0.524</param>
+  				<param name="max_velocity">3.0</param>
+  			</joint>
+  <joint name="body_joint">
+  				<command_interface name="position"/>
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  				<param name="min">-0.3</param>
+  				<param name="max">0.5</param>
+  				<param name="max_velocity">0.1</param>
+  			</joint>
+  <joint name="left_front_steering_joint">
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  			</joint>
+  <joint name="left_front_wheel_joint">
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  			</joint>
+  <joint name="left_rear_steering_joint">
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  			</joint>
+  <joint name="left_rear_wheel_joint">
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  			</joint>
+  <joint name="right_front_steering_joint">
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  			</joint>
+  <joint name="right_front_wheel_joint">
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  			</joint>
+  <joint name="right_rear_steering_joint">
+  				<state_interface name="position"/>
+  				<state_interface name="velocity"/>
+  				<state_interface name="effort"/>
+  			</joint>
+  </ros2_control>
+</robot>
