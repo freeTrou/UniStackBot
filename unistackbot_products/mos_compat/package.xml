@@ -19,6 +19,7 @@
 
   <exec_depend>unistackbot_controller</exec_depend>
   <exec_depend>unistackbot_bringup</exec_depend>
+  <exec_depend>unistackbot_udp_board</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

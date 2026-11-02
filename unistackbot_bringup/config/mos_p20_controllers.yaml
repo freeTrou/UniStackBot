@@ -1,6 +1,19 @@
-# mos_p20 控制器配置 (Phase 1, 2026-10-30; 产品域首件——配置随机型包自带, 命名约定 <robot>_description)
-# 编组: js_arms(14) + js_head(2) + js_torso(1 升降) + ee_broadcaster + cm/jtc inactive 常驻
+# mos_p20 控制器配置 (Phase 1, 2026-10-30; 2026-11-02 随机型迁 bringup 标准位)
+# 编组: js_arms(14) + js_head(2) + js_torso(1 升降) + js_gripper(2) + ee_broadcaster + cm/jtc/wb inactive 常驻
 # /** 通配节 = update_rate 权威定源 (r1_pro 2026-10-15 实锤教训: 缺它 CM 落中位数兜底 → 龟速爬)
+
+# /sdk 网关 (mos_compat_node=mos_sdk_interface) 机型参数段——新机型 = 本段换关节表, 网关代码零改动
+mos_sdk_interface:
+  ros__parameters:
+    arm_joints: [left_shoulder_pitch_joint, left_shoulder_roll_joint, left_shoulder_yaw_joint,
+                 left_elbow_pitch_joint, left_wrist_yaw_joint, left_wrist_roll_joint, left_wrist_pitch_joint,
+                 right_shoulder_pitch_joint, right_shoulder_roll_joint, right_shoulder_yaw_joint,
+                 right_elbow_pitch_joint, right_wrist_yaw_joint, right_wrist_roll_joint, right_wrist_pitch_joint]
+    head_joints: [head_yaw_joint, head_pitch_joint]
+    torso_joints: [body_joint]
+    gripper_joints: [left_gripper_joint, right_gripper_joint]
+    gripper_scale: 0.001     # /sdk 输入 mm → URDF m
+    gripper_max_m: 0.1       # 行程上界 (与 URDF limit 一致)
 /**:
   ros__parameters:
     update_rate: 500
