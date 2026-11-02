@@ -1,4 +1,4 @@
-#include "bus_system.hpp"
+#include "unistackbot_robot_system/robot_system.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -8,12 +8,12 @@
 #include "unistackbot_bus/master_factory.hpp"
 #include "unistackbot_udp_board/udp_master.hpp"
 
-namespace unistackbot_bringup
+namespace unistackbot_robot_system
 {
 
-static auto & logger() { static auto lg = rclcpp::get_logger("bus_system"); return lg; }
+static auto & logger() { static auto lg = rclcpp::get_logger("robot_system"); return lg; }
 
-void BusSystem::registerKnownBuses()
+void RobotSystem::registerKnownBuses()
 {
 	// 组合根注册表 (加总线 = 加一行; 各包自注册幂等)
 	static const bool done = []() {
@@ -23,7 +23,7 @@ void BusSystem::registerKnownBuses()
 	(void)done;
 }
 
-hardware_interface::CallbackReturn BusSystem::on_init(const hardware_interface::HardwareInfo & info)
+hardware_interface::CallbackReturn RobotSystem::on_init(const hardware_interface::HardwareInfo & info)
 {
 	if (hardware_interface::SystemInterface::on_init(info) != hardware_interface::CallbackReturn::SUCCESS)
 	{
@@ -33,14 +33,14 @@ hardware_interface::CallbackReturn BusSystem::on_init(const hardware_interface::
 	auto it = params.find("bus");
 	if (it == params.end() || it->second.empty())
 	{
-		RCLCPP_ERROR(logger(), "bus_system: 缺 <param name=\"bus\"> (总线名 = createMaster 工厂 key)");
+		RCLCPP_ERROR(logger(), "robot_system: 缺 <param name=\"bus\"> (总线名 = createMaster 工厂 key)");
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 	const std::string bus = it->second;
 	it = params.find("endpoint");
 	if (it == params.end() || it->second.empty())
 	{
-		RCLCPP_ERROR(logger(), "bus_system: 缺 <param name=\"endpoint\"> (格式由总线解释)");
+		RCLCPP_ERROR(logger(), "robot_system: 缺 <param name=\"endpoint\"> (格式由总线解释)");
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 	double rate_hz = 500.0;
@@ -82,22 +82,22 @@ hardware_interface::CallbackReturn BusSystem::on_init(const hardware_interface::
 	master_ = unistackbot_bus::createMaster(bus);
 	if (!master_)
 	{
-		RCLCPP_ERROR(logger(), "bus_system: createMaster('%s') 失败 (未注册的总线名)", bus.c_str());
+		RCLCPP_ERROR(logger(), "robot_system: createMaster('%s') 失败 (未注册的总线名)", bus.c_str());
 		return hardware_interface::CallbackReturn::ERROR;
 	}
 	if (!master_->start(cfg))
 	{
-		RCLCPP_ERROR(logger(), "bus_system: 总线 '%s' start 拒绝 (endpoint=%s, %zu 节点)",
+		RCLCPP_ERROR(logger(), "robot_system: 总线 '%s' start 拒绝 (endpoint=%s, %zu 节点)",
 			bus.c_str(), cfg.endpoint.c_str(), n);
 		master_.reset();
 		return hardware_interface::CallbackReturn::ERROR;
 	}
-	RCLCPP_INFO(logger(), "bus_system: 总线 '%s' 启动 (%zu 关节, %s @%.0fHz)",
+	RCLCPP_INFO(logger(), "robot_system: 总线 '%s' 启动 (%zu 关节, %s @%.0fHz)",
 		bus.c_str(), n, cfg.endpoint.c_str(), rate_hz);
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-hardware_interface::CallbackReturn BusSystem::on_configure(const rclcpp_lifecycle::State &)
+hardware_interface::CallbackReturn RobotSystem::on_configure(const rclcpp_lifecycle::State &)
 {
 	std::fill(cmd_pos_.begin(), cmd_pos_.end(), 0.0);
 	std::fill(state_pos_.begin(), state_pos_.end(), 0.0);
@@ -105,19 +105,19 @@ hardware_interface::CallbackReturn BusSystem::on_configure(const rclcpp_lifecycl
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-hardware_interface::CallbackReturn BusSystem::on_activate(const rclcpp_lifecycle::State &)
+hardware_interface::CallbackReturn RobotSystem::on_activate(const rclcpp_lifecycle::State &)
 {
-	RCLCPP_INFO(logger(), "bus_system: 激活");
+	RCLCPP_INFO(logger(), "robot_system: 激活");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-hardware_interface::CallbackReturn BusSystem::on_deactivate(const rclcpp_lifecycle::State &)
+hardware_interface::CallbackReturn RobotSystem::on_deactivate(const rclcpp_lifecycle::State &)
 {
-	RCLCPP_INFO(logger(), "bus_system: 去激活");
+	RCLCPP_INFO(logger(), "robot_system: 去激活");
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-std::vector<hardware_interface::StateInterface> BusSystem::export_state_interfaces()
+std::vector<hardware_interface::StateInterface> RobotSystem::export_state_interfaces()
 {
 	std::vector<hardware_interface::StateInterface> interfaces;
 	for (std::size_t i = 0; i < joint_names_.size(); ++i)
@@ -129,7 +129,7 @@ std::vector<hardware_interface::StateInterface> BusSystem::export_state_interfac
 	return interfaces;
 }
 
-std::vector<hardware_interface::CommandInterface> BusSystem::export_command_interfaces()
+std::vector<hardware_interface::CommandInterface> RobotSystem::export_command_interfaces()
 {
 	std::vector<hardware_interface::CommandInterface> interfaces;
 	for (std::size_t i = 0; i < joint_names_.size(); ++i)
@@ -139,7 +139,7 @@ std::vector<hardware_interface::CommandInterface> BusSystem::export_command_inte
 	return interfaces;
 }
 
-hardware_interface::return_type BusSystem::read(const rclcpp::Time &, const rclcpp::Duration &)
+hardware_interface::return_type RobotSystem::read(const rclcpp::Time &, const rclcpp::Duration &)
 {
 	if (!master_ || !master_->take_state(snap_))
 	{
@@ -154,7 +154,7 @@ hardware_interface::return_type BusSystem::read(const rclcpp::Time &, const rclc
 	return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type BusSystem::write(const rclcpp::Time &, const rclcpp::Duration &)
+hardware_interface::return_type RobotSystem::write(const rclcpp::Time &, const rclcpp::Duration &)
 {
 	if (!master_)
 	{
@@ -169,6 +169,6 @@ hardware_interface::return_type BusSystem::write(const rclcpp::Time &, const rcl
 	return hardware_interface::return_type::OK;
 }
 
-}  // namespace unistackbot_bringup
+}  // namespace unistackbot_robot_system
 
-PLUGINLIB_EXPORT_CLASS(unistackbot_bringup::BusSystem, hardware_interface::SystemInterface)
+PLUGINLIB_EXPORT_CLASS(unistackbot_robot_system::RobotSystem, hardware_interface::SystemInterface)

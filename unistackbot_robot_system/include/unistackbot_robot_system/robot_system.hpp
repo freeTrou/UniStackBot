@@ -1,7 +1,7 @@
-#ifndef UNISTACKBOT_BRINGUP__BUS_SYSTEM_HPP_
-#define UNISTACKBOT_BRINGUP__BUS_SYSTEM_HPP_
+#ifndef UNISTACKBOT_ROBOT_SYSTEM__ROBOT_SYSTEM_HPP_
+#define UNISTACKBOT_ROBOT_SYSTEM__ROBOT_SYSTEM_HPP_
 /*
- * BusSystem —— 通用总线 SystemInterface 适配器 (2026-11-02, 用户裁决住组合根 bringup):
+ * RobotSystem —— 通用总线 SystemInterface 适配器 (2026-11-02 组合根, 独立包 robot_system):
  * "全工程唯一碰 ROS 的总线路径" (master_base.hpp 契约) 的**单数**实现——一条代码服务
  * 所有 MasterBase 总线, 总线差异全部住配置与总线包。
  *
@@ -26,13 +26,13 @@
 #include "rclcpp_lifecycle/state.hpp"
 #include "unistackbot_bus/master_base.hpp"
 
-namespace unistackbot_bringup
+namespace unistackbot_robot_system
 {
 
-class BusSystem : public hardware_interface::SystemInterface
+class RobotSystem : public hardware_interface::SystemInterface
 {
 public:
-	RCLCPP_SHARED_PTR_DEFINITIONS(BusSystem)
+	RCLCPP_SHARED_PTR_DEFINITIONS(RobotSystem)
 
 	[[nodiscard]] hardware_interface::CallbackReturn on_init(
 		const hardware_interface::HardwareInfo & info) override;
@@ -65,5 +65,5 @@ private:
 	std::vector<std::string> joint_names_;
 };
 
-}  // namespace unistackbot_bringup
-#endif  // UNISTACKBOT_BRINGUP__BUS_SYSTEM_HPP_
+}  // namespace unistackbot_robot_system
+#endif  // UNISTACKBOT_ROBOT_SYSTEM__ROBOT_SYSTEM_HPP_

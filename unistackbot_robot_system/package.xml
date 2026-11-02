@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>unistackbot_robot_system</name>
+  <version>0.1.0</version>
+  <description>RobotSystem: 通用总线 SystemInterface 适配器 (组合根——bus/endpoint 选总线, 节点表=URDF joint 序)</description>
+  <maintainer email="work@todo.todo">work</maintainer>
+  <license>TODO: License declaration</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>unistackbot_protocol</depend>
+  <depend>unistackbot_statemachine</depend>
+  <depend>unistackbot_bus</depend>
+  <depend>unistackbot_udp_board</depend>
+
+  <exec_depend>unistackbot_controller</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
