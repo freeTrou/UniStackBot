@@ -131,16 +131,16 @@ hardware_interface::CallbackReturn SimControlHardware::on_init(const hardware_in
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 
-		// 命令接口契约: 恰好一个 position; 例外 = 带 mimic 参数的从动关节可 state-only
-		// (2026-10-20 契约=物理DOF: 从指不出命令接口, 后端按 mimic 参数从源推导)
-		const bool declares_mimic = joint.parameters.count("mimic") != 0 && !joint.parameters.at("mimic").empty();
-		if (joint.command_interfaces.size() == 0 && declares_mimic)
+		// 命令接口契约: 恰好一个 position; 0 个 = state-only 合法 (被动观测关节)
+		// (2026-10-20 mimic 从指首例 → 2026-10-30 一般化: ros2_control 语义本允许无命令接口关节;
+		//  P20 轮系 mock 链被动观测触发——命令集不含它们, JSB 照发 state, TF/可视化完整)
+		if (joint.command_interfaces.size() == 0)
 		{
 			joints_[i].has_command = false;
 		}
 		else if (joint.command_interfaces.size() != 1 || joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION)
 		{
-			ULOG_ERROR("Joint '%s' must declare exactly one position command interface (state-only 仅限 mimic 从动关节)", joint.name.c_str());
+			ULOG_ERROR("Joint '%s' must declare exactly one position command interface (0 个 = state-only, 其余组合非法)", joint.name.c_str());
 			return hardware_interface::CallbackReturn::ERROR;
 		}
 

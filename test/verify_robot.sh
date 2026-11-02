@@ -58,13 +58,22 @@ ROBOT_DIR=""
 for cat in $CATEGORIES; do
 	[ -d "$DESC_SHARE/$cat/$ROBOT" ] && ROBOT_DIR="$DESC_SHARE/$cat/$ROBOT"
 done
+# 产品域机型回退 (2026-10-30): 命名约定 <robot>_description 包自带 urdf/config/acceptance (框架零改动)
+CONFIG_SHARE="$BRINGUP_SHARE"
+if [ -z "$ROBOT_DIR" ]; then
+	PDESC="$(ros2 pkg prefix --share "${ROBOT}_description" 2>/dev/null)" || PDESC=""
+	if [ -n "$PDESC" ] && [ -f "$PDESC/urdf/$ROBOT.urdf.xacro" ]; then
+		ROBOT_DIR="$PDESC"
+		CONFIG_SHARE="$PDESC"
+	fi
+fi
 [ -n "$ROBOT_DIR" ] || { echo "未知机型 $ROBOT: 各类别目录均无 (分类: $CATEGORIES)"; exit 1; }
 XACRO="$ROBOT_DIR/urdf/$ROBOT.urdf.xacro"
-CYAML="$BRINGUP_SHARE/config/${ROBOT}_controllers.yaml"
+CYAML="$CONFIG_SHARE/config/${ROBOT}_controllers.yaml"
 [ -f "$XACRO" ] || { echo "未知机型 '$ROBOT': $XACRO 不存在 (可用: $(ls "$DESC_SHARE/arms" | tr '\n' ' '))"; exit 1; }
 [ -f "$CYAML" ] || { echo "机型 '$ROBOT' 缺控制器配置: $CYAML"; exit 1; }
 # 机型验收登记表 (§5.7 定义判据的登记值单一事实源): 形态指纹 + 容差/mimic/软关节收口于此
-AYAML="$BRINGUP_SHARE/config/${ROBOT}_acceptance.yaml"
+AYAML="$CONFIG_SHARE/config/${ROBOT}_acceptance.yaml"
 [ -f "$AYAML" ] || { echo "机型 '$ROBOT' 缺验收登记表: $AYAML (建表见 piper_acceptance.yaml 同型)"; exit 1; }
 IFS='|' read -r SUBCHAIN_EXP JM_EXP JI_EXP JJ_EXP PLG_MOCK PLG_IGN PLG_MJ TJS_MOCK TCM_MOCK TJS_GZ TCM_GZ TJS_MJ TCM_MJ SOFT_GZ MIM_PAIRS MIM_MJ <<< "$(python3 - "$AYAML" <<'PY'
 import sys, yaml

@@ -35,6 +35,13 @@ void BackendKinematic::step(const std::vector<double> & cmd_position, std::vecto
 			continue;
 		}
 
+		// state-only 被动关节 (非 mimic, 2026-10-30 一般化): 保持现值, 速度 0 —— 无命令来源不积分
+		if (!joint.has_command)
+		{
+			state_velocity[i] = 0.0;
+			continue;
+		}
+
 		if (!integrate)   // 冻结 (pause): 独立关节保持不动, mimic 已在上方按源推导
 		{
 			continue;

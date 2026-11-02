@@ -26,10 +26,21 @@ def _launch_setup(context):
         return None
 
     robot_dir = find_robot_dir(desc_share, robot)
+    # 配置包: 框架机型住 bringup; 产品域机型 (2026-10-30 起) 按 <robot>_description 命名约定自带
+    config_pkg = 'unistackbot_bringup'
+    if robot_dir is None:
+        # 产品域机型回退: 包名约定 <robot>_description, 自带 urdf/ 与 config/ (新机型=新包, 框架零改动)
+        try:
+            pshare = get_package_share_directory(f'{robot}_description')
+        except Exception:
+            pshare = None
+        if pshare and os.path.isfile(os.path.join(pshare, 'urdf', f'{robot}.urdf.xacro')):
+            robot_dir = pshare
+            config_pkg = f'{robot}_description'
     if robot_dir is None:
         available = sorted(r for cat in CATEGORIES for r in os.listdir(os.path.join(desc_share, cat))
                            if os.path.isfile(os.path.join(desc_share, cat, r, 'urdf', f'{r}.urdf.xacro')))
-        raise RuntimeError(f'未知机型 {robot!r}: 各类别目录下均无。可用机型: {available}')
+        raise RuntimeError(f'未知机型 {robot!r}: 框架类别目录与 <robot>_description 包约定下均无。可用机型: {available}')
     xacro_path = os.path.join(robot_dir, 'urdf', f'{robot}.urdf.xacro')
 
     # 显式错误流: 机型不存在时报错并列出可用项, 不让 launch 深处崩一个难懂的面板
@@ -39,10 +50,21 @@ def _launch_setup(context):
                            if os.path.isfile(os.path.join(arms_root, d, 'urdf', f'{d}.urdf.xacro')))
         raise RuntimeError(f'未知机型 {robot!r}: 找不到 {xacro_path}. 可用机型: {available}')
 
+    # backend 参数 (2026-11-01): kinematic (mock 默认) | udp_board (FakeBoard/真机)
+    # board_ip/board_port/bind_port = udp_board 部署值 (非机型资产, 不进 URDF)
+    backend = LaunchConfiguration('backend').perform(context)
+    board_ip = LaunchConfiguration('board_ip').perform(context)
+    board_port = LaunchConfiguration('board_port').perform(context)
+    bind_port = LaunchConfiguration('bind_port').perform(context)
+
     robot_description_content = Command([
         FindExecutable(name='xacro'), ' ', xacro_path,
         ' use_ros2_control:=true',
         ' use_world:=true',
+        ' backend:=', backend,
+        ' board_ip:=', board_ip,
+        ' board_port:=', board_port,
+        ' bind_port:=', bind_port,
     ])
 
     robot_state_publisher = Node(
@@ -55,7 +77,7 @@ def _launch_setup(context):
     )
 
     controllers_yaml = os.path.join(
-        get_package_share_directory('unistackbot_bringup'),
+        get_package_share_directory(config_pkg),
         'config', f'{robot}_controllers.yaml',
     )
     if not os.path.isfile(controllers_yaml):
@@ -157,6 +179,14 @@ def generate_launch_description():
                               description='机型名(必填), 对应 unistackbot_description/arms/<robot>/ 与 bringup config/<robot>_controllers.yaml'),
         DeclareLaunchArgument('use_rviz', default_value='false',
                               description='是否启动 RViz2'),
+        DeclareLaunchArgument('backend', default_value='kinematic',
+            description='硬件后端: kinematic (mock) | udp_board (FakeBoard/真机)'),
+        DeclareLaunchArgument('board_ip', default_value='127.0.0.1',
+            description='udp_board 板地址 (部署值)'),
+        DeclareLaunchArgument('board_port', default_value='10086',
+            description='udp_board 板端口'),
+        DeclareLaunchArgument('bind_port', default_value='9090',
+            description='udp_board 绑定接收端口'),
         DeclareLaunchArgument('bus_hz', default_value='',
                               description='总线/CM 频率覆盖 (Hz, 如 500/1000); 空=yaml update_rate 生效'),
         OpaqueFunction(function=_launch_setup),
