@@ -103,6 +103,7 @@ pluginlib_export_plugin_description_file(unistackbot_algorithm ik_plugins/ik_plu
 # ---- WholeBody 插件库 ----
 add_library(whole_body_solvers SHARED
 	ik_plugins/whole_body_plugins.cpp
+	whole_body/upper_body_hqp_mos_compile.cpp   # 编译哨兵: 主模板进常规构建防烂
 )
 target_compile_features(whole_body_solvers PUBLIC cxx_std_17)
 target_include_directories(whole_body_solvers PRIVATE

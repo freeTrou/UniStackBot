@@ -82,6 +82,26 @@ enum class WholeBodyResult : uint8_t {
 | `UrdfFk` | `urdf_fk/urdf_fk.hpp` | FK、雅可比、限位、链序名（想用就用，不用不碰；实例线程私有） |
 | `CartesianPose` | 同上 | xyz + 四元数（m/rad） |
 
+### 1.5 数据边界：给你的 / 你做的 / 不碰的
+
+**摆到你盘子上的**（壳/框架已处理，双臂算法零关心）：
+
+| 数据 | 形态 | 处理者 |
+|---|---|---|
+| URDF | XML 文本（`WholeBodyConfig.urdf`，非路径） | 壳注入 |
+| 测量 | `in.q`/`in.dq` 已按 control_joints 声明序对齐（硬件乱序/名称映射壳全消化） | WB 壳按名映射 state 接口 |
+| 目标 | `in.goals` 带帧名（左右目标各一条，`/sdk` 数组→位姿翻译是网关的事） | mos_compat 网关 |
+| 节拍 | worker 线程按 dt_s 调 solve()（你不知道线程存在） | WB 壳 |
+| 出口安全 | 输出 q 的 NaN 门/限位/步长钳 | WB 壳 |
+
+**还是你的三件事**：
+
+1. **URDF → 你的运动学模型**：init 里自建双臂两条链（`UrdfFk` 现成：`fk.init(urdf, base, tip)` 来两次；用 pinocchio 亦行）
+2. **goals 按名映射，不按位置**：goals 是集合，契约不承诺 `goals[0]=左`——按 `goal.frame` 对号（按位置切 = 静默错臂）
+3. **输出序 = control_joints 声明序**：init 时从 config 拿到即锁死
+
+一句话：双臂的**数据**（哪些关节/左右哪边/测量来源/结果去向）全不用管；双臂的**几何**（两条链的数学）全是你的。范本边界实物见 `dualarm_dls.hpp`。
+
 ---
 
 ## 2. 接入（三步）

@@ -18,7 +18,7 @@
 #include <Eigen/Geometry>
 
 #include "urdf_fk/urdf_fk.hpp"
-#include "whole_body.hpp"
+#include "whole_body/whole_body.hpp"
 
 class DualArmDls : public unistackbot_algorithm::WholeBodySolver
 {

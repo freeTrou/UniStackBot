@@ -47,7 +47,7 @@
 
 #include "urdf_fk/urdf_fk.hpp"
 #include "vendor/mos_wbc/wbc_solver.h"
-#include "whole_body.hpp"
+#include "whole_body/whole_body.hpp"
 
 class UpperBodyHqpMos : public unistackbot_algorithm::WholeBodySolver
 {
