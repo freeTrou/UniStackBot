@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>unistackbot_udp_board</name>
+  <version>0.1.0</version>
+  <description>Lumos UDP 电控板接入 (mos_hal 融入 bus 第四总线, ODE 裁决4): 帧契约 BoardProtocol (golden=example_run_frames.md 实录) + FakeBoard 虚拟电机板 (零硬件仿真侧件)。主站 (MasterBase 实现) 后续批次。</description>
+  <maintainer email="todo@todo.todo">UniStackBot</maintainer>
+  <license>TODO: Declaration of license</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
