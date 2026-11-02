@@ -2,10 +2,10 @@
 #define UNISTACKBOT_UDP_BOARD__UDP_MASTER_HPP_
 /*
  * UdpMaster —— MasterBase 第三实现 (2026-11-02 总线/协议拆分; serial/canfd 同款组织):
- * 总线骨架只留 IO 工程 (socket/泵/交换), 协议内芯住 unistackbot_protocol
+ * 总线骨架只留 IO 工程 (socket/总线循环/交换), 协议内芯住 unistackbot_protocol
  * (board_protocol 聚合帧族), 状态机住 unistackbot_statemachine (BoardSafety)。
  *
- * 泵模型 (UDP 请求-应答, 与 serial 时隙/canfd 排空-发送都不同):
+ * 总线循环 (UDP 请求-应答, 与 serial 时隙/canfd 排空-发送都不同):
  *   每拍 (rate_hz): 取最新命令快照 → 聚合编码 278B Control → sendto
  *   → 非阻塞收 Response (取最新一帧, 旧帧丢弃) → 聚合解码 → 喂状态机 → 发快照。
  *   主站节拍可高于板固件节拍 (板按收到即回语义工作)。
@@ -87,7 +87,7 @@ private:
 	};
 	std::uint16_t bind_port_{0};
 
-	// 泵
+	// 总线线程
 	std::thread pump_;
 	std::atomic<bool> running_{false};
 	std::atomic<bool> quick_stop_{false};
@@ -98,7 +98,7 @@ private:
 	unistackbot_common::DynamicSpLatest<unistackbot_protocol::NodeCommand> cmd_ch_;
 	unistackbot_common::DynamicSpLatest<unistackbot_bus::NodeSnapshot> state_ch_;
 
-	// 泵暂存
+	// 总线循环暂存
 	std::vector<unistackbot_protocol::NodeCommand> cmd_rx_;
 	std::vector<unistackbot_protocol::NodeFeedback> fb_buf_;   // start 期定容 (R-a: 容量常量退役, 与节点表同源)
 	std::vector<unistackbot_bus::NodeSnapshot> snap_;

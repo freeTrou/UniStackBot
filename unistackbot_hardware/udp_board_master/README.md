@@ -28,4 +28,4 @@ bash test/run_udp_board_test.sh
 
 ## 后续批次
 
-UdpBoardMaster（MasterBase 第四实现：UDP 泵/板状态机 board_safety/RTT 遥测）——挂 Phase 3 前置，真板接入等电控组 UDP_DLY_TIME 回答（ODE 外部依赖三问）。
+UdpBoardMaster（MasterBase 第四实现：UDP 总线主站/板状态机 board_safety/RTT 遥测）——挂 Phase 3 前置，真板接入等电控组 UDP_DLY_TIME 回答（ODE 外部依赖三问）。
