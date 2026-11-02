@@ -105,6 +105,35 @@ sudo apt install ros-humble-mujoco-ros2-control ros-humble-gz-ros2-control \
 > （`pkg=0.1.2` 短串匹配会直接失败——候选是 `0.1.2-1jammy.xxx` 全串）。
 > 验证基线 = 上表；换源/换镜像后若行为异常，先 `apt-cache policy <包>` 对照此表。
 
+### 3b. 板卡部署差异（arm64, 如 RK3576; 2026-10-29 立档案）
+
+packages.ros.org 的 humble 套件**有 arm64**（ROS buildfarm 全架构发布），§1/§2/§3 流程原样适用；
+三处不同：
+
+1. **§1 装机变体**：板端 RViz 只做调试（且建议跑 PC 端），`ros-base` 即可；想留板端 rviz2 备用才装 desktop。
+   小鱼脚本支持 arm64（树莓派/Jetson 社区大量在用）；厂商镜像上跑挂就回退官方手动步骤
+   （docs.ros.org humble——源行 `arch=$(dpkg --print-architecture)` 自适应 arm64）。
+   厂商镜像 sources.list 须含 **universe** 组件（nlopt 在里面）。
+2. **§3 手动命令去掉仿真链宿主**（mujoco/gz/fortress 三行——板端构建
+   `colcon build --packages-skip unistackbot_gazebo unistackbot_mujoco unistackbot_moveit_config`
+   不编不装），板端版：
+
+   ```bash
+   sudo apt install libnlopt-cxx-dev libeigen3-dev liborocos-kdl-dev \
+       ros-humble-rmw-cyclonedds-cpp ros-humble-ros2controlcli \
+       ros-humble-xacro ros-humble-joint-state-broadcaster ros-humble-joint-trajectory-controller
+   ```
+
+3. **§5 的 `~/cyclonedds.xml` 样例是开发机单机件（绑 lo + Peers 127.0.0.1）——板端勿照抄**
+   （抄了 PC 上的 RViz 永远看不见板）：板端**不设** `CYCLONEDDS_URI` 用默认发现即可；
+   网络禁组播时另写绑板端网口 + Peers 指向 PC 的配置。
+   `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` 照旧要（verify/demo 脚本默认按它）。
+
+板端另有两件环境项（非安装命令）：`/etc/security/limits.conf` 配 `rtprio 99` + `memlock unlimited`
+（否则 FIFO 静默降级、mlockall 仅 WARN，RT 姿态全丢）；`<robot>_controllers.yaml` 的 `cpu_affinity`
+按板核序改——big.LITTLE 板 `cpu_affinity: 1` 常落在小核，以
+`/sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq` 实测定大核后改。
+
 ### 4. 可选组件
 
 - **MoveIt 2**（任务级规划, `unistackbot_moveit_config`）: `sudo apt install ros-humble-moveit`

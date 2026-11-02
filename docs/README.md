@@ -1,6 +1,7 @@
 # docs/ — 设计文档与课程笔记
 
 分类（2026-09-21）：`architecture/` 框架总纲 · `bus/` 总线与硬件 · `sim/` 仿真与测试 · `guides/` 规范与方法论 · `control_course/` 课程笔记。
+**算法域架构定稿** → `architecture/algorithm_architecture.md`（2026-11-01 终审：两包拆分 + 外部仓接入指南 + 接口文档）
 
 | 文档 | 一句话 | 备注 |
 |---|---|---|
