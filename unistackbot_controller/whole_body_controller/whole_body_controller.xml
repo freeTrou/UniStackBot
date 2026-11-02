@@ -1,0 +1,7 @@
+<library path="whole_body_controller">
+  <class name="unistackbot_controller/WholeBodyController"
+         type="unistackbot_controller::WholeBodyController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>Dual-arm whole-body controller shell (worker domain + WholeBodySolver plugin, Phase 1 2026-10-30)</description>
+  </class>
+</library>

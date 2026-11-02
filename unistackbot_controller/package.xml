@@ -22,6 +22,8 @@
   <depend>eigen</depend>
   <depend>unistackbot_interface</depend>
   <depend>unistackbot_algorithm</depend>
+  <depend>unistackbot_algorithm_solvers</depend>
+
   <depend>interactive_markers</depend>
   <depend>visualization_msgs</depend>
 
