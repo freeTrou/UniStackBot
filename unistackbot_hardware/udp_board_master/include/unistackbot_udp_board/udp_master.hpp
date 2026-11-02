@@ -100,7 +100,7 @@ private:
 
 	// 泵暂存
 	std::vector<unistackbot_protocol::NodeCommand> cmd_rx_;
-	unistackbot_protocol::NodeFeedback fb_buf_[34];   // 3×8 臂槽 + 10 底盘槽 (2026-11-02 修: 24 越界核转储)
+	std::vector<unistackbot_protocol::NodeFeedback> fb_buf_;   // start 期定容 (R-a: 容量常量退役, 与节点表同源)
 	std::vector<unistackbot_bus::NodeSnapshot> snap_;
 	std::vector<unistackbot_protocol::NodeCommand> idle_;
 	std::uint8_t tx_[278];

@@ -88,7 +88,10 @@ bool UdpMaster::start(const MasterConfig &cfg)
 	{
 		return false;
 	}
-	constexpr std::size_t kMaxSlots = 34;   // 3×8 臂槽 + 10 底盘槽 (底盘语义 M4)
+	// 槽上限 = 协议帧容量 (单一事实源住 board_protocol.hpp, 不在此复写数字)
+	constexpr std::size_t kMaxSlots =
+		unistackbot_protocol::kArmBusCount * unistackbot_protocol::kArmMotorsPerBus +
+		unistackbot_protocol::kChassisMotorCount;
 	if (cfg.nodes.size() > kMaxSlots)
 	{
 		return false;
@@ -132,6 +135,7 @@ bool UdpMaster::start(const MasterConfig &cfg)
 	cmd_ch_.init(n_, NodeCommand{});
 	state_ch_.init(n_, unistackbot_bus::NodeSnapshot{});
 	cmd_rx_.assign(n_, NodeCommand{});
+	fb_buf_.assign(n_, NodeFeedback{});
 	snap_.assign(n_, unistackbot_bus::NodeSnapshot{});
 	idle_.assign(n_, NodeCommand{});
 	for (std::size_t i = 0; i < n_; ++i)
@@ -217,7 +221,7 @@ void UdpMaster::pumpMain()
 			}
 			fresh = true;
 		}
-		if (fresh && unistackbot_protocol::decodeBoardResponse(rx_, sizeof(rx_), fb_buf_, n_))
+		if (fresh && unistackbot_protocol::decodeBoardResponse(rx_, sizeof(rx_), fb_buf_.data(), n_))
 		{
 			rx_count_.fetch_add(1, std::memory_order_relaxed);
 			for (std::size_t i = 0; i < n_; ++i)
