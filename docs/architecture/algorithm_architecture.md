@@ -112,7 +112,7 @@ enum class WholeBodyResult : uint8_t {
 cd UniStackBot_ws/src/UniStackBot && mkdir -p their_hqp/src
 ```
 
-**第 2 步** 四个文件：
+**第 2 步** 五个文件（**类与插件注册分文件**——hpp 纯数学零 ROS 可独立测试，注册宏单独 cpp）：
 
 package.xml：
 ```xml
@@ -128,14 +128,19 @@ package.xml：
 
 CMakeLists.txt：
 ```cmake
+cmake_minimum_required(VERSION 3.8)
+project(their_hqp)
+find_package(ament_cmake REQUIRED)
 find_package(unistackbot_algorithm REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(Eigen3 REQUIRED)
-add_library(their_hqp SHARED src/hqp_solver.cpp)
+add_library(their_hqp SHARED src/hqp_plugin.cpp)
+target_include_directories(their_hqp PUBLIC include)
 target_link_libraries(their_hqp unistackbot_algorithm::unistackbot_algorithm Eigen3::Eigen)
 ament_target_dependencies(their_hqp pluginlib)
 install(TARGETS their_hqp LIBRARY DESTINATION lib)
 pluginlib_export_plugin_description_file(unistackbot_algorithm plugin.xml)
+ament_package()
 ```
 
 plugin.xml：
@@ -146,16 +151,17 @@ plugin.xml：
 </library>
 ```
 
-src/hqp_solver.cpp：
+include/their_hqp/hqp_solver.hpp（**纯数学类，零 ROS**）：
 ```cpp
-#include "pluginlib/class_list_macros.hpp"
+#pragma once
+#include <string>
 #include "whole_body/whole_body.hpp"
 
 class TheirHqpSolver : public unistackbot_algorithm::WholeBodySolver {
 public:
     bool init(const unistackbot_algorithm::WholeBodyConfig & config,
               std::string & why) override {
-        // 校验拓扑/读参数；失败: why = 原因, return false
+        // 校验拓扑/建模型/读 vendor 参数；失败: why = 原因, return false
         return true;
     }
     unistackbot_algorithm::WholeBodyResult solve(
@@ -165,6 +171,12 @@ public:
         return unistackbot_algorithm::WholeBodyResult::OK;
     }
 };
+```
+
+src/hqp_plugin.cpp（注册 TU，ROS 面只此一处）：
+```cpp
+#include "pluginlib/class_list_macros.hpp"
+#include "their_hqp/hqp_solver.hpp"
 PLUGINLIB_EXPORT_CLASS(TheirHqpSolver, unistackbot_algorithm::WholeBodySolver)
 ```
 
@@ -180,10 +192,17 @@ colcon build --symlink-install --packages-select their_hqp
 ## 3. 独立测试（零框架）
 
 ```bash
-g++ -std=c++17 -O2 -Wall -I<unistackbot_algorithm>/include -I/usr/include/eigen3 \
+# 测 hpp 纯类 (零 ROS 零框架; test_solver.cpp 只 include 你的 hpp, 不碰插件宏)
+g++ -std=c++17 -O2 -Wall -Iinclude -I<unistackbot_algorithm>/include -I/usr/include/eigen3 \
     test/test_solver.cpp -L<unistackbot_algorithm>/lib -lunistackbot_algorithm \
     -o /tmp/test_solver && /tmp/test_solver
 ```
+
+> 以上全流程 2026-11-02 仓外路径 dogfood 实测通过：colcon 构建 → pluginlib 运行期装载
+> （WB 壳日志回显 solver=hqp_v1）→ 零框架独立测试。SDK 传递依赖（KDL/urdfdom）已由
+> `ament_export_dependencies` 导出，消费方 find_package 一个包即够。
+
+
 
 ## 4. 范本
 

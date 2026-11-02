@@ -55,6 +55,9 @@ install(DIRECTORY urdf_fk ik_solver ik_result whole_body base_kinematics
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
 ament_export_targets(export_${PROJECT_NAME})
+# 传递依赖导出 (2026-11-02 外部包 dogfood 实锤): imported target 的 INTERFACE 带着
+# urdf/urdfdom/KDL 链接依赖出仓, 不导出 dependencies 则外部消费方 find_package 缺传递包
+ament_export_dependencies(orocos_kdl_vendor orocos_kdl urdf urdfdom kdl_parser)
 
 if(BUILD_TESTING)
 	find_package(ament_lint_auto REQUIRED)
