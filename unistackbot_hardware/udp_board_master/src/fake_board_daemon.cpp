@@ -13,17 +13,26 @@
 #include <atomic>
 #include <cstring>
 
-#include "unistackbot_udp_board/board_protocol.hpp"
-#include "unistackbot_udp_board/fake_board.hpp"
+#include "unistackbot_protocol/board_protocol.hpp"
+#include "unistackbot_protocol/fake_board.hpp"
 
-using namespace unistackbot_udp_board;
+using namespace unistackbot_protocol;
 
 static std::atomic<bool> g_run{true};
 static void on_sig(int) { g_run.store(false); }
 
 int main(int argc, char ** argv)
 {
-	const uint16_t port = argc > 1 ? static_cast<uint16_t>(std::atoi(argv[1])) : 10086;
+	uint16_t port = 10086;   // 默认
+	for (int i = 1; i < argc; ++i)   // 首个纯数字参数 (ros2 launch 注入 --ros-args 族不可作 port)
+	{
+		bool numeric = argv[i][0] != '\0';
+		for (const char * q = argv[i]; *q != '\0'; ++q)
+		{
+			if (*q < '0' || *q > '9') { numeric = false; break; }
+		}
+		if (numeric) { port = static_cast<uint16_t>(std::atoi(argv[i])); break; }
+	}
 	std::signal(SIGINT, on_sig);
 	std::signal(SIGTERM, on_sig);
 

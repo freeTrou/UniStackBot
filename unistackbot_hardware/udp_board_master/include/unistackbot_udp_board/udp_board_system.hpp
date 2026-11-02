@@ -1,23 +1,17 @@
 #ifndef UNISTACKBOT_UDP_BOARD__UDP_BOARD_SYSTEM_HPP_
 #define UNISTACKBOT_UDP_BOARD__UDP_BOARD_SYSTEM_HPP_
 /*
- * UdpBoardSystem —— ros2_control SystemInterface 插件 (Phase 3, 2026-10-30)
+ * UdpBoardSystem —— ros2_control SystemInterface 薄消费者 (2026-11-02 总线/协议拆分)
  *
- * udp_board = 第四条总线 (ODE 裁决4): Lumos 电控板接入。
- * 泵模型: read() 非阻塞收 Response 帧 → 解码填状态接口; write() 打包 Control 帧 → 非阻塞发。
- * 控制器管理器 500Hz 驱动 read→update→write = 总线泵拍 (与板固件 200Hz 兼容——主站节拍可高,
- * 板侧按收到即回的语义工作; 真板对齐留 M4 真机批次)。
+ * 全工程唯一碰 ROS 的总线路径 (MasterBase 契约): createMaster("udp") → start(cfg)
+ * → read()=take_state / write()=publish_cmd。总线/协议/状态机全在轴上:
+ *   UdpMaster (本包) · board_protocol (unistackbot_protocol) · BoardSafety (statemachine)
  *
- * 仿真模式: dest_ip=127.0.0.1 → FakeBoard (零硬件端到端);
- * 真机模式: dest_ip=<板地址> (M4 真机批次, 协议同款)。
+ * URDF <param>: dest_ip / dest_port / bind_port / rate_hz (缺省 500)
+ * (节点表 = URDF joint 声明序, 槽位 = 序号; 底盘槽 M4)。
+ * 仿真模式: dest_ip=127.0.0.1 → FakeBoard (零硬件端到端); 真机 = 板地址。
  */
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#include <cstring>
-#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -25,8 +19,7 @@
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp_lifecycle/state.hpp"
-
-#include "unistackbot_udp_board/board_protocol.hpp"
+#include "unistackbot_bus/master_base.hpp"
 
 namespace unistackbot_udp_board
 {
@@ -54,28 +47,17 @@ public:
 		const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
-	// UDP
-	int sock_{-1};
-	sockaddr_in board_addr_{};
-	uint16_t bind_port_{9090};
-	uint8_t tx_seq_{0};
-	uint8_t rx_seq_{0};
+	std::unique_ptr<unistackbot_bus::MasterBase> master_;
+	std::vector<unistackbot_bus::NodeSnapshot> snap_;
 
-	// 关节状态 (interface 序 = URDF 声明序)
-	std::vector<double> cmd_pos_;    // 写入命令 (position)
-	std::vector<double> state_pos_;  // 读取状态 (position)
-	std::vector<double> state_vel_;  // 读取状态 (velocity)
-	std::vector<double> state_eff_;  // 读取状态 (effort, 恒 0)
+	// 接口镜像 (interface 序 = URDF 声明序 = 节点槽序)
+	std::vector<double> cmd_pos_;
+	std::vector<double> state_pos_;
+	std::vector<double> state_vel_;
+	std::vector<double> state_eff_;
 	std::vector<std::string> joint_names_;
-
-	// 帧缓冲
-	uint8_t tx_buf_[kControlFrameSize];
-	uint8_t rx_buf_[kResponseFrameSize];
-
-	// 定标 (raw ↔ 物理; Phase 3 简化为恒 1:1, 真机批次接 HAL 标定 yaml)
-	static constexpr double kPosScale = 1000.0;   // raw ↔ rad (实录: tar_vel raw ≈ rad/s × 1000)
+	std::vector<unistackbot_protocol::NodeCommand> cmd_tx_;
 };
 
 }  // namespace unistackbot_udp_board
-
 #endif  // UNISTACKBOT_UDP_BOARD__UDP_BOARD_SYSTEM_HPP_

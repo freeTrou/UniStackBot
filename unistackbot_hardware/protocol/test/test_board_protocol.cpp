@@ -10,10 +10,10 @@
 #include <cstdio>
 #include <cstring>
 
-#include "unistackbot_udp_board/board_protocol.hpp"
-#include "unistackbot_udp_board/fake_board.hpp"
+#include "unistackbot_protocol/board_protocol.hpp"
+#include "unistackbot_protocol/fake_board.hpp"
 
-using namespace unistackbot_udp_board;
+using namespace unistackbot_protocol;
 
 static int g_pass = 0, g_fail = 0;
 #define CHECK(cond, name)                                                                                              \
@@ -141,6 +141,40 @@ int main()
 		expect[0] = 255;
 		expect[1] = kControlFrameId;
 		CHECK(std::memcmp(buf, expect, sizeof(buf)) == 0, "zero frame deterministic bytes");
+	}
+
+	// ── 5. 聚合编解码 (中立词汇; 2026-11-02 总线/协议拆分) ──
+	{
+		NodeCommand cmds[3] = {};
+		cmds[0].mode = NodeMode::kRun; cmds[0].position = 0.5; cmds[0].speed = 0.25;
+		cmds[1].mode = NodeMode::kStop; cmds[1].position = -1.0;
+		cmds[2].mode = NodeMode::kRun; cmds[2].position = 0.123;
+		uint8_t buf[kControlFrameSize] = {0};
+		CHECK(encodeBoardControl(cmds, 3, buf, sizeof(buf)), "encodeBoardControl ok");
+		ControlFrameBits f{};
+		CHECK(decodeControl(buf, sizeof(buf), f), "聚合帧字节可回解");
+		CHECK(f.bus[0].motor[0].enable == 1 && f.bus[0].motor[0].tar_pos == 500, "槽0 enable+pos×1000");
+		CHECK(f.bus[0].motor[1].enable == 0 && f.bus[0].motor[1].tar_pos == -1000, "槽1 stop+负位");
+		CHECK(f.bus[0].motor[0].tar_vel == 250, "槽0 speed×1000");
+		// 经 FakeBoard 回声 → 中立词汇回环
+		FakeBoard board;
+		NodeFeedback fbs[3] = {};
+		CHECK(decodeBoardResponse(reinterpret_cast<const uint8_t *>("") , 0, fbs, 3) == false, "坏帧拒收");
+		const ResponseFrameBits rsp = board.process(f);
+		uint8_t rbuf[kResponseFrameSize];
+		CHECK(encodeResponse(rsp, rbuf, sizeof(rbuf)), "response 编码");
+		CHECK(decodeBoardResponse(rbuf, sizeof(rbuf), fbs, 3), "decodeBoardResponse ok");
+		CHECK(fbs[0].node_id == 0 && fbs[0].position > 0.49 && fbs[0].position < 0.51, "槽0 位置回环");
+		CHECK(fbs[0].mode == NodeMode::kRun && fbs[1].mode == NodeMode::kStop, "mode 回环");
+		CHECK((fbs[0].state_raw & 0x100) != 0 && (fbs[1].state_raw & 0x100) == 0, "state_raw enable 位打包");
+		// 非有限拒收 + ctrl_word 覆盖
+		NodeCommand bad[1] = {};
+		bad[0].mode = NodeMode::kRun; bad[0].position = 1.0 / 0.0 * 0.0;   // NaN
+		CHECK(!encodeBoardControl(bad, 1, buf, sizeof(buf)), "NaN 拒收");
+		NodeCommand ok1[1] = {};
+		ok1[0].mode = NodeMode::kRun;
+		CHECK(encodeBoardControl(ok1, 1, buf, sizeof(buf), kCtrlWordReset) &&
+			decodeControl(buf, sizeof(buf), f) && f.bus[0].ctrl_word == kCtrlWordReset, "ctrl_word 覆盖");
 	}
 
 	std::printf("board_protocol: %d pass, %d fail\n", g_pass, g_fail);

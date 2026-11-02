@@ -5,6 +5,7 @@
 #include "unistackbot_statemachine/unitree_im_safety.hpp"
 #include "unistackbot_statemachine/cia402_safety.hpp"
 #include "unistackbot_statemachine/dm_safety.hpp"
+#include "unistackbot_statemachine/board_safety.hpp"
 
 namespace unistackbot_statemachine
 {
@@ -27,6 +28,8 @@ const std::map<std::string, Maker> & registry()
 		// 达妙 (2026-10-21 第三个): 码表全系列同, 型号无关; 两 key 与协议工厂同一把
 		{"dm4310", []() -> std::unique_ptr<NodeSafety> { return std::make_unique<DmSafety>(); }},
 		{"dm4340", []() -> std::unique_ptr<NodeSafety> { return std::make_unique<DmSafety>(); }},
+		// UDP 电控板 (2026-11-02 第四个, 总线/协议拆分随建); key 与协议家族同名
+		{"udp_board", []() -> std::unique_ptr<NodeSafety> { return std::make_unique<BoardSafety>(); }},
 	};
 	return reg;
 }

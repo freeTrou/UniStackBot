@@ -15,11 +15,11 @@
 #include <thread>
 #include <vector>
 
-#include "unistackbot_udp_board/board_protocol.hpp"
-#include "unistackbot_udp_board/fake_board.hpp"
+#include "unistackbot_protocol/board_protocol.hpp"
+#include "unistackbot_protocol/fake_board.hpp"
 
 using namespace std::chrono;
-using namespace unistackbot_udp_board;
+using namespace unistackbot_protocol;
 
 int main()
 {

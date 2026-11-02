@@ -8,6 +8,13 @@
   <license>TODO: Declaration of license</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>rclcpp</depend>
+  <depend>pluginlib</depend>
+  <depend>hardware_interface</depend>
+  <depend>unistackbot_bus</depend>
+  <depend>unistackbot_statemachine</depend>
+  <depend>unistackbot_protocol</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

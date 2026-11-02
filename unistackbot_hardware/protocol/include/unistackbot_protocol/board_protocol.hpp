@@ -1,7 +1,8 @@
-#ifndef UNISTACKBOT_UDP_BOARD__BOARD_PROTOCOL_HPP_
-#define UNISTACKBOT_UDP_BOARD__BOARD_PROTOCOL_HPP_
+#ifndef UNISTACKBOT_PROTOCOL__BOARD_PROTOCOL_HPP_
+#define UNISTACKBOT_PROTOCOL__BOARD_PROTOCOL_HPP_
 /*
- * Lumos UDP 电控板帧契约 (Phase 0B, 2026-10-30 动工; ODE 附录 A 归宿: mos_hal 融入 bus 第四总线)
+ * Lumos UDP 电控板帧契约 (Phase 0B 2026-10-30 动工; 2026-11-02 协议轴归位——
+ * 自 udp_board_master 包迁入 protocol 包, 总线骨架 (UdpMaster) 只留 IO 工程, serial 先例同款)
  *
  * golden 来源 (单一事实源, 按可信度排序):
  *   1. debug/example_run_frames.md 字节实录 (mos_hal2.0 @ origin/feature/single-motor-control)
@@ -24,7 +25,9 @@
 #include <string>
 #include <vector>
 
-namespace unistackbot_udp_board
+#include "unistackbot_protocol/protocol_core.hpp"   // NodeCommand/NodeFeedback (中立词汇)
+
+namespace unistackbot_protocol
 {
 
 // ---- 帧常量 (实测/golden) ----
@@ -139,7 +142,25 @@ struct ResponseFrameBits
 static_assert(sizeof(ResponseFrameBits) == kResponseFrameSize, "ResponseFrameBits size");
 #pragma pack(pop)
 
-// ---- 纯函数编解码 (对拍 fake_motor.py 的小端整帧解释; 失败不改 out, 显式错误流) ----
+// ---- 中立词汇聚合编解码 (2026-11-02 总线/协议拆分: UdpMaster 消费; 整板帧族) ----
+// 形态注: 本族为 **聚合帧协议** —— 一帧载全机节点, 与 per-node ProtocolCore
+// (encode 单节点一帧) 并列的 codec 形状, 不入 per-node 工厂; EC domain 同款预告。
+// 定标 (raw↔物理, 实录证据: tar_vel raw ≈ rad/s × 1000): 位置/速度 ×kBoardScale;
+// tau/kp/kd 定标无实录证据 → 恒写 0 (不启用, 纯位置命令语义; M4 对 HAL 标定 yaml 后开)。
+inline constexpr double kBoardScale = 1000.0;
+
+// 命令: n 个中立 NodeCommand (槽序 = 节点表序, n≤kArmBusCount×kArmMotorsPerBus)
+// → 278B Control 帧。mode: kRun/kEnable→enable=1, 其余→0; 非有限值拒收。
+// ctrl_word 覆盖 (默认 PD/MIT): 主站清故障拍发 kCtrlWordReset (0x1, M4 验证)。
+[[nodiscard]] bool encodeBoardControl(const NodeCommand * cmds, std::size_t n,
+	std::uint8_t * out, std::size_t cap, std::uint8_t ctrl_word = kCtrlWordPdMit);
+
+// 反馈: 474B Response 帧 → n 个 NodeFeedback (node_id=槽序)。
+// state_raw 打包 = (enable<<8)|status (BoardSafety 消费); error_raw = 错误位掩码原样。
+[[nodiscard]] bool decodeBoardResponse(const std::uint8_t * buf, std::size_t len,
+	NodeFeedback * fbs, std::size_t n);
+
+// ---- 字节级纯函数 (对拍 fake_motor.py 的小端整帧解释; 失败不改 out, 显式错误流) ----
 // 注: 本族只覆盖 Control/Response 两帧; Query (2B, id=0x00) 与 HAL main tip 的
 // "零化 Control 当 Query" 漂移形态归主站批次处理 (届时加 encodeQuery/守门)。
 // 位域字段值域: 15 位有符号 [-16384, 16383] / 12 位 [-2048, 2047] / kp 11 位 [0,2047] /
@@ -157,5 +178,5 @@ static_assert(sizeof(ResponseFrameBits) == kResponseFrameSize, "ResponseFrameBit
 [[nodiscard]] const MotorCmdBits * chassisCmdMotor(const ControlFrameBits & f, size_t i);
 [[nodiscard]] const MotorStateChassisBits * chassisStateMotor(const ResponseFrameBits & f, size_t i);
 
-}  // namespace unistackbot_udp_board
-#endif  // UNISTACKBOT_UDP_BOARD__BOARD_PROTOCOL_HPP_
+}  // namespace unistackbot_protocol
+#endif  // UNISTACKBOT_PROTOCOL__BOARD_PROTOCOL_HPP_

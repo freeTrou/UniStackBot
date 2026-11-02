@@ -73,6 +73,7 @@ def generate_launch_description():
         executable='fake_board_daemon',
         output='screen',
         condition=IfCondition(LaunchConfiguration('fake_board')),
+        arguments=[LaunchConfiguration('board_port')],
     )
 
     return LaunchDescription([

@@ -1,6 +1,6 @@
-#include "unistackbot_udp_board/fake_board.hpp"
+#include "unistackbot_protocol/fake_board.hpp"
 
-namespace unistackbot_udp_board
+namespace unistackbot_protocol
 {
 
 ResponseFrameBits FakeBoard::process(const ControlFrameBits & cmd)
@@ -43,4 +43,4 @@ ResponseFrameBits FakeBoard::process(const ControlFrameBits & cmd)
 	return rsp;
 }
 
-}  // namespace unistackbot_udp_board
+}  // namespace unistackbot_protocol

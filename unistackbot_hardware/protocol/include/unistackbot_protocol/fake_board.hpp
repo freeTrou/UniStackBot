@@ -16,7 +16,7 @@
 
 #include "board_protocol.hpp"
 
-namespace unistackbot_udp_board
+namespace unistackbot_protocol
 {
 
 class FakeBoard
@@ -32,5 +32,5 @@ private:
 	uint64_t frames_{0};
 };
 
-}  // namespace unistackbot_udp_board
+}  // namespace unistackbot_protocol
 #endif  // UNISTACKBOT_UDP_BOARD__FAKE_BOARD_HPP_

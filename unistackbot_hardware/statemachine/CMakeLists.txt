@@ -15,8 +15,10 @@ add_library(${PROJECT_NAME}
   src/unitree_im_safety.cpp
   src/cia402_safety.cpp
   src/dm_safety.cpp
+  src/board_safety.cpp
   src/node_safety_factory.cpp
 )
+set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)   # 2026-11-02: 首个 .so 消费者 (udp_board_system 插件) 要求静态库对象 PIC
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
