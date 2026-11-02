@@ -19,6 +19,7 @@ set(INTERFACE_FILES
 	msg/JointCommand.msg
 	msg/CartesianMotionStatus.msg
 	msg/SystemAlert.msg
+	srv/SetControlMode.srv
 )
 if(INTERFACE_FILES)
 	rosidl_generate_interfaces(${PROJECT_NAME} ${INTERFACE_FILES}

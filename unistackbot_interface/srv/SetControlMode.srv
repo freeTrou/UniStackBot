@@ -1,0 +1,6 @@
+# 控制模式切换 (mos SDK 兼容)
+# mode: 0=kIdle 1=kJointServo 2=kCartesianServo 3=kJointPlan 4=kCartesianPlan
+uint8 mode
+---
+bool success
+string message
