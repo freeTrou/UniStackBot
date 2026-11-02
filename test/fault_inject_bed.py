@@ -2,10 +2,10 @@
 """故障注入测试床 F2/F3/F5 (毒命令流 → write 防线应拦) + F1 (断流保持) + F6 (断流语义: 收敛最后帧+恢复受界) + F7 (mimic 耦合)。
 
 链参数化 (2026-09-21, 批次3): 关节表/阈值经环境变量注入 (由 fault_injection.sh 按
---chain 设置), 默认值 = mock xarm7 (向后兼容):
+--chain 设置), 默认值 = mock piper:
 
   BED_JOINTS    逗号分隔关节表 (默认 joint1..joint7)
-  BED_VMAX      F5 速度界基数 rad/s (默认 3.14 = xarm7)
+  BED_VMAX      F5 速度界基数 rad/s (默认 5.0 = piper)
   BED_F6_TARGET F6 流目标 (首关节; 默认 5.0)
   BED_F6_STREAM F6 流时长 s (默认 1.0)
   BED_MIMIC     mimic 断言 "master:follower:coef,..." (默认空 = 跳过 F7)
@@ -17,7 +17,7 @@ from rclpy.node import Node
 from unistackbot_interface.msg import JointCommand
 
 JOINTS = (os.environ.get('BED_JOINTS') or ','.join(f'joint{i}' for i in range(1, 8))).split(',')
-VMAX = float(os.environ.get('BED_VMAX', '3.14'))
+VMAX = float(os.environ.get('BED_VMAX', '5.0'))
 F6_TARGET = float(os.environ.get('BED_F6_TARGET', '5.0'))
 F6_STREAM = float(os.environ.get('BED_F6_STREAM', '1.0'))
 MIMIC = [s for s in os.environ.get('BED_MIMIC', '').split(',') if s]
@@ -123,7 +123,7 @@ results.append(('F1 断流2s漂移', f'漂移 {drift:.5f} rad', drift < 0.005))
 # 账: 流 F6_STREAM 秒 (末帧=目标) → 停发; 臂应收敛到目标 (不 shortfall) 并静止;
 #     随后单发远目标 —— 恢复路径与任何大跳变同源, 受 vmax 界 (超限保护兜底, 无跳变)
 send([F6_TARGET] + [0.0] * (N - 1), dur=F6_STREAM, hz=100)
-time.sleep(6.0)   # ruckig 收敛余量 (xarm7 全程 ~2.2s, 动力学链更慢)
+time.sleep(6.0)   # ruckig 收敛余量 (动力学链更慢)
 rclpy.spin_once(node, timeout_sec=0.1)
 p1 = dict(latest)
 time.sleep(0.8)

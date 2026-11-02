@@ -162,7 +162,7 @@ class MinimalCartesianDemo(Node):
         #    接口至多一个 active 持有; 笛卡尔域的第一动作就是拿到 CM 控制权)
         self.ensure_controllers(activate=['cartesian_motion_controller'],
                                 deactivate=['@js'])
-        self.get_logger().info('CM 接管: z 走 %+.0fcm (单程; 多点位看 r1_7a_demo_cartesian)' % (dz * 100))
+        self.get_logger().info('CM 接管: z 走 %+.0fcm (单程; 多点位看机型专属 demo)' % (dz * 100))
         pub = self.create_publisher(PoseStamped, CM_CMD,
             QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
                        history=HistoryPolicy.KEEP_LAST, depth=1))

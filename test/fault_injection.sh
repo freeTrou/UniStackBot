@@ -4,11 +4,10 @@
 # 场景: F1 断流保持 / F2 NaN命令 / F3 限位外 / F5 超速 / F6 断流收敛+恢复受界 / F7 mimic(mujoco piper)
 #       (F4 状态跳变由 /sim_control set_joint_state 服务测试覆盖, 见 smoke_sim_control.sh)。
 # 前置: colcon build + 本机 DDS 配置 (~/cyclonedds.xml)。
-# 用法: bash test/fault_injection.sh --robot <piper|xarm7> [--chain mock|mujoco]
+# 用法: bash test/fault_injection.sh --robot piper [--chain mock|mujoco]
 #   --chain mock   (默认) 理想执行器 —— 逻辑/防线层 (write 层 clamp 在此链)
 #   --chain mujoco        真实动力学 —— 防线在动力学上的表现 (+ piper 的 F7 equality)
 #   例: bash test/fault_injection.sh --robot piper --chain mujoco
-#   注意: xarm7×mujoco 组合首跑时留意 F6 账面 (窗口按 xarm7 vmax 推算, 未历史验证)。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WS_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -20,21 +19,18 @@ CHAIN="mock"; ROBOT=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--chain) CHAIN="${2:?--chain 需要值: mock|mujoco}"; shift 2 ;;
-		--robot) ROBOT="${2:?--robot 需要值: piper|xarm7}"; shift 2 ;;
-		*) echo "未知参数 '$1' (支持: --robot <piper|xarm7> [--chain mock|mujoco])"; exit 2 ;;
+		--robot) ROBOT="${2:?--robot 需要值: piper}"; shift 2 ;;
+		*) echo "未知参数 '$1' (支持: --robot piper [--chain mock|mujoco])"; exit 2 ;;
 	esac
 done
-[ -n "$ROBOT" ] || { echo "缺 --robot: bash $0 --robot <piper|xarm7> [--chain mock|mujoco]"; exit 2; }
+[ -n "$ROBOT" ] || { echo "缺 --robot: bash $0 --robot piper [--chain mock|mujoco]"; exit 2; }
 
 # ---- 阈值账 (按机型) ----
 case "$ROBOT" in
 	piper)  # vmax 5.0; joint1 限位 ±2.618 → F6 目标 2.4 流 0.1s → 断流后收敛到 2.4 保持
 		export BED_VMAX=5.0 BED_F6_TARGET=2.4 BED_F6_STREAM=0.1
 		;;
-	xarm7)  # vmax 3.14; F6 目标 5.0 流 1.0s → 断流后收敛到 5.0 保持
-		export BED_VMAX=3.14 BED_F6_TARGET=5.0 BED_F6_STREAM=1.0
-		;;
-	*) echo "未知机型 '$ROBOT' (piper|xarm7)"; exit 2 ;;
+	*) echo "未知机型 '$ROBOT' (本分支仅 piper; stationlite/mos_p20 账未建——机型清理 2026-11-02)"; exit 2 ;;
 esac
 
 # ---- 命令关节集 (按 机型×链: piper 手指在 mock 可直令 / 在 mujoco 为 equality 被动) ----
@@ -42,7 +38,6 @@ if [ "$ROBOT" = "piper" ] && [ "$CHAIN" = "mock" ]; then
 	export BED_JOINTS="$(printf 'joint%s,' {1..6})gripper,gripper_joint1,gripper_joint2"
 else
 	export BED_JOINTS="$(printf 'joint%s,' {1..6})gripper"
-	[ "$ROBOT" = "xarm7" ] && export BED_JOINTS="$(printf 'joint%s,' {1..6})joint7"
 fi
 
 # ---- F7 mimic 断言 (仅 piper×mujoco: MJCF equality) ----

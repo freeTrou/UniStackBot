@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # RT 链路基准测试套件 (2026-09-20; 2026-09-22 机型参数化 --robot + 终端进度提示)。
-# 用法: bash test/rt_chain_bench.sh <标签> --robot <piper|xarm7> [--chain mock|mujoco]
+# 用法: bash test/rt_chain_bench.sh <标签> --robot <piper> [--chain mock|mujoco]
 #   --chain mock   (默认) → C 节 = 纯算法 WCET (理想执行器)
 #   --chain mujoco        → C 节 = 动力学仿真下 WCET (物理线程与 CM RT 线程同机争用的真实代价)
 # 前置: colcon build + source; 无残留链; 输出 test/results/rt_<标签>.md (终端有分步进度)
@@ -8,19 +8,19 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 WS_ROOT="$(dirname "$(dirname "$REPO_ROOT")")"
-TAG="${1:?用法: rt_chain_bench.sh <标签> --robot <piper|xarm7> [--chain mock|mujoco]}"
+TAG="${1:?用法: rt_chain_bench.sh <标签> --robot <piper> [--chain mock|mujoco]}"
 OUT="$REPO_ROOT/test/results/rt_${TAG}.md"
 shift
 CHAIN="mock"; ROBOT=""
 while [ $# -gt 0 ]; do
 	case "$1" in
-		--robot) ROBOT="${2:?--robot 需要值: piper|xarm7}"; shift 2 ;;
+		--robot) ROBOT="${2:?--robot 需要值: piper}"; shift 2 ;;
 		--chain) CHAIN="${2:?--chain 需要值: mock|mujoco}"; shift 2 ;;
-		*) echo "未知参数 '$1' (支持: --robot <piper|xarm7> --chain mock|mujoco)"; exit 2 ;;
+		*) echo "未知参数 '$1' (支持: --robot <piper> --chain mock|mujoco)"; exit 2 ;;
 	esac
 done
-[ -n "$ROBOT" ] || { echo "缺 --robot: bash $0 <标签> --robot <piper|xarm7> [--chain mock|mujoco]"; exit 2; }
-case "$ROBOT" in piper|xarm7) ;; *) echo "未知机型 '$ROBOT' (piper|xarm7)"; exit 2 ;; esac
+[ -n "$ROBOT" ] || { echo "缺 --robot: bash $0 <标签> --robot <piper> [--chain mock|mujoco]"; exit 2; }
+case "$ROBOT" in piper) ;; *) echo "未知机型 '$ROBOT' (本分支 piper)"; exit 2 ;; esac
 case "$CHAIN" in mock|mujoco) ;; *) echo "未知链 '$CHAIN' (mock|mujoco)"; exit 2 ;; esac
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 

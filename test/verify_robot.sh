@@ -7,7 +7,7 @@
 # 轨迹目标不写死: 从各链渲染的 URDF <ros2_control> 限位推算 (min + 0.3*(max-min), 恒在限位内);
 # 关节集随链变 (mujoco/gz 的 piper 手指 passive → 7 关节, mock 9 关节)。
 # 用法: bash test/verify_robot.sh <robot> [--with-gazebo] [--with-mujoco]
-#   例: bash test/verify_robot.sh xarm7 --with-mujoco
+#   例: bash test/verify_robot.sh stationlite --with-mujoco
 set -u
 
 ROBOT="${1:?用法: verify_robot.sh <robot> [--with-gazebo] [--with-mujoco]}"

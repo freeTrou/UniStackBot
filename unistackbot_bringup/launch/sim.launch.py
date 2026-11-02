@@ -66,7 +66,7 @@ def generate_launch_description():
 		DeclareLaunchArgument('chain', default_value='mock',
 		                      description='仿真链: mock(kinematic) | gz(Gazebo Fortress) | mujoco(MuJoCo)'),
 		DeclareLaunchArgument('robot',
-		                      description='机型名(必填): piper | xarm7'),
+		                      description='机型名(必填), 类别目录自动发现 (本分支: piper/stationlite/arm7_test/mos_p20)'),
 		DeclareLaunchArgument('use_rviz', default_value='false',
 		                      description='是否启动 RViz2 (三链通用)'),
 		DeclareLaunchArgument('gui', default_value='true',

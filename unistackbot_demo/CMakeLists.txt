@@ -45,12 +45,9 @@ install(PROGRAMS
 
 # 机型专属 demo (2026-10-12 约定): scripts/<robot>_arm/ 每机一文件夹, 文件名带
 # 机型前缀 —— install 平铺进 lib/ (ros2 run 不认子目录, 重名即冲突)。
-# r1_7a_arm = 首件 (关节+笛卡尔); r1_pro_arm = 四件式首例 (双 JS 实例+@js 通配切换)。
+# 机型清理 2026-11-02 (StationPro 分支): r1_7a_arm/r1_pro_arm 随机型出清 (住 dev/main);
+# arm7_test = StationPro 测试版。
 install(PROGRAMS
-  scripts/r1_7a_arm/r1_7a_demo_joint.py
-  scripts/r1_7a_arm/r1_7a_demo_cartesian.py
-  scripts/r1_pro_arm/r1_pro_demo_joint.py
-  scripts/r1_pro_arm/r1_pro_demo_cartesian.py
   scripts/arm7_test_arm/arm7_test_demo_joint.py
   DESTINATION lib/${PROJECT_NAME}
 )

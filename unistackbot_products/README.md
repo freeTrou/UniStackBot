@@ -5,8 +5,8 @@
 
 | 子域 | 内容 | 首件 |
 |---|---|---|
-| `mos_legacy/` | mos 合并线的机型与兼容件 | `mos_p20_description`（P20 URDF+meshes，Phase 0A） |
-| `wheeled_family/` | 轮臂家族五变体（预留，`docs/architecture/wheeled_arm_family.md`） | — |
 | `mos_compat/` | MosCompat 门面 + /sdk ROS 面节点（Phase 2 落） | — |
+
+> 2026-11-02 (StationPro 分支): mos_p20 机型资产迁入 `unistackbot_description/mobile_manipulators/mos_p20/`——本分支产品机型就是主角, 机器资产统一一个家; products 只留产品**软件**。基座仓 (dev/main) 保留产品域布局。
 
 约定：机型包命名 `<machine>_description`；CODEOWNERS 随第一个外部维护者进来时补。

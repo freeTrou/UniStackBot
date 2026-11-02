@@ -28,7 +28,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 [ -n "$ROBOT" ] || { echo "缺 --robot"; exit 2; }
-case "$ROBOT" in piper|xarm7) ;; *) echo "未知机型 '$ROBOT' (piper|xarm7)"; exit 2 ;; esac
+case "$ROBOT" in piper) ;; *) echo "未知机型 '$ROBOT' (本分支 piper)"; exit 2 ;; esac
 case "$CHAIN" in mock|mujoco) ;; *) echo "未知链 '$CHAIN' (mock|mujoco; gz 链 CM 在插件内不支持 bus_hz)"; exit 2 ;; esac
 case "$BUS_HZ" in 500|1000) ;; *) echo "--bus-hz 须为 500|1000 (矩阵定义; 其他值直接改 yaml /**.update_rate)"; exit 2 ;; esac
 case "$CMD_HZ" in 50|100|200) ;; *) echo "--cmd-hz 须为 50|100|200 (矩阵定义)"; exit 2 ;; esac
