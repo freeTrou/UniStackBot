@@ -17,7 +17,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 分支与仓形态（2026-11-02 定稿）
 
 - **`StationPro` = 当前开发主分支**（产品线：mos 合并/P20/stationlite；基座 `dev`、收口 `main` 保留）。日常开发默认在 StationPro。
-- **同仓外部化 = 最终形态**：仓内部分包当作外部仓对待（逻辑外部、物理同仓、永不拆分独立 git 仓）。边界三纪律：**归属外部维护者（框架组当租户）/ 依赖单向只指向 SDK 与自选库 / 框架包对它们零改动**。
+- **同仓外部化 = 最终形态**，且**每个包 = 一个逻辑独立仓库**（用户 2026-11-02：物理放一起只是没拆，各包当作不同仓库拷贝进来的）。边界纪律按"真拆了"执行：**跨包依赖只走包的正式导出面（find_package + exported target/include），新代码禁止 `../邻居目录` 直够**——真独立仓够不到兄弟目录。
+- **拆仓阻力账本**（存量 `../` 直引，三档，动它时按档处置）：① `unistackbot_interface/include` 直引 ×6 包 = 冗余（包已导出，删即可）；② `unistackbot_common` 组件库直引 ×6 包 = 结构项（common 非 colcon 包无法 find_package，需升格导出包或各自 vendor）；③ **controller 直引 `../unistackbot_algorithm_solvers` = 方向违例**（框架主干伸手进外部化包，tools 调试 CLI 应迁 solvers，controller tools 只许消费 SDK 契约头）。
+- 外部化边界三纪律：**归属外部维护者（框架组当租户）/ 依赖单向只指向 SDK 与自选库 / 框架包对它们零改动**。
 - **包归属全图（用户 2026-11-02 逐件点名）**：
   - **框架主干（我们自己的核心）**：`unistackbot_bringup` + `unistackbot_hardware`（四总线子包 + udp_board_master） + `unistackbot_controller` —— 控制链脊柱（编排/总线主站/控制器），机制只进这里。
   - 框架支撑（同样我们自己的）：`interface`（契约）/ `algorithm` Pkg1 SDK / `sim_control` / `description`（框架机型资产）/ `common` / `tool` / `demo` / `moveit_config`。
