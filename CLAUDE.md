@@ -17,9 +17,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 分支与仓形态（2026-11-02 定稿）
 
 - **`StationPro` = 当前开发主分支**（产品线：mos 合并/P20/stationlite；基座 `dev`、收口 `main` 保留）。日常开发默认在 StationPro。
-- **同仓外部化 = 最终形态**：仓内部分包当作外部仓对待（逻辑外部、物理同仓、永不拆分独立 git 仓）。边界三纪律：**归属外部维护者（框架组当租户）/ 依赖单向只指向 SDK 与自选库 / 框架包对它们零改动**。当前归属此列的包：
-  - `unistackbot_algorithm_solvers` — 臂算法组的参考实现+插件注册家（Pkg 2；算法团队的 HQP/重力/碰撞新包同款落兄弟目录）
-  - `unistackbot_products/` — 产品域全部（机型资产 mos_p20_description、/sdk 兼容门面 mos_compat；外部贡献者 PR 不触框架包）
+- **同仓外部化 = 最终形态**：仓内部分包当作外部仓对待（逻辑外部、物理同仓、永不拆分独立 git 仓）。边界三纪律：**归属外部维护者（框架组当租户）/ 依赖单向只指向 SDK 与自选库 / 框架包对它们零改动**。
+- **包归属全图（用户 2026-11-02 逐件点名）**：
+  - **框架主干（我们自己的核心）**：`unistackbot_bringup` + `unistackbot_hardware`（四总线子包 + udp_board_master） + `unistackbot_controller` —— 控制链脊柱（编排/总线主站/控制器），机制只进这里。
+  - 框架支撑（同样我们自己的）：`interface`（契约）/ `algorithm` Pkg1 SDK / `sim_control` / `description`（框架机型资产）/ `common` / `tool` / `demo` / `moveit_config`。
+  - **外部化：算法组** — `unistackbot_algorithm_solvers`（Pkg 2；算法团队的 HQP/重力/碰撞新包同款落兄弟目录）。
+  - **外部化：产品域** — `unistackbot_products/` 全部（mos_p20_description、mos_compat；外部贡献者 PR 不触框架包）。
+  - **外部化：遥操作**（M2 起）— 未来 teleop 兄弟包；input_source 缝在框架域，实现（TeleopManager 重述/VR 桥/手柄/主从臂）外部化；demo_teleop_* 留 demo 包（回归工具定位）。
 - 物理独立 git 仓路径仍被 pluginlib/colcon 支持（clone 进 src/ 等价），但不是目标形态；外部包接入三步指南见 `docs/architecture/algorithm_architecture.md` §4。
 
 ## Project Overview
