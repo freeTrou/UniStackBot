@@ -1,26 +1,33 @@
 # unistackbot_algorithm
 
-纯算法库（2026-09-17 自 `unistackbot_controller` 拆出，范围裁决见该包 README）：**形态盲运动学解算 + 数值 IK**。**核心库零 ROS / 零 nlopt**（无 rclcpp/controller_interface），外部仓库（算法团队/RL 训练侧/ARM 交叉编译）只依赖核心库即可复用；TRAC-IK 与 pluginlib 注册库是可选子件（方案 C，2026-10-08 / 缝③，2026-10-22），见下。
+**算法 SDK（Pkg 1）**——契约头 + 可选共享 FK，**零本仓包依赖、零 ROS、零 nlopt**（ldd 实证：libunistackbot_algorithm.so 不链任何 unistackbot 库）。
+2026-11-01 两包拆分定稿：参考实现与插件注册住 **Pkg 2 `unistackbot_algorithm_solvers`**（算法组之家）；**算法团队最小开发闭包 = 本包一个**（兄弟目录拷走即用，系统依赖仅 Eigen/KDL/urdfdom）。架构定稿与接口文档（normative）：`docs/architecture/algorithm_architecture.md`。
 
-## 内容（目录 = 每算法一个文件夹，后续新算法各起一个，互不交叉）
+## 内容
 
-| 文件夹 | 说明 | 测试 |
-|---|---|---|
-| `urdf_fk/` | URDF → KDL 链 → FK + 雅可比 + 限位 + `chain()` 只读访问；实例不可跨线程共享（见头文件契约）| `bash urdf_fk/test/run_urdf_fk_test.sh <robot> <tip> <base> [strict]`（拓扑必填无默认）；TF 对拍 `../test/check_fk_tf.sh` |
-| `dls_ik/` | 数值 IK：boxed DLS + 种子阶梯 + 墙钟预算 + 奇异遥测 + 可选种子库；继承 `IkSolver` 接口（RT-capable：零 malloc 可进任意线程；数值解默认已让位 trac_ik，本类=RT 场景/离线调试 fallback）| `bash dls_ik/test/run_ik_test.sh <robot>` |
-| `analytic_piper/` | piper 球腕 6 轴闭式解析解（IKFast 生成物 vendored，Apache-2.0；`check_spherical_wrist` 结构指纹选拒；再生管线 `gen/`） | `bash analytic_piper/test/run_wrist_check_test.sh` |
-| `analytic_stationlite/` | stationlite 三平行轴（Pieper 形式二）闭式解析解（IKFast；指纹 j2∥j3∥j4+正交对选拒；B 线 2026-10-21） | `bash analytic_stationlite/test/run_stationlite_ik_test.sh` |
-| `ik_solver/` | **IkSolver 抽象接口**（CM 可插拔求解层，5 硬契约在 hpp，契约 4=调用域纪律两类实现自声明；**对外插件缝**——虚签名变更=破坏性变更）。新求解器 = 实现接口 + 插件注册（自包 `PLUGINLIB_EXPORT_CLASS` + plugin.xml + `pluginlib_export_plugin_description_file`，外部交付零仓库改动）+ playbook 六阶段 | 由实现方测试覆盖 |
-| `analytic_common/` | **闭式解析解适配层公共件**（头内联 detail 层：周期折叠+去重+限位过滤+距种子最近；2026-10-26 审核修 F10 抽取——piper/stationlite 双消费者已现，此前逐字复制已漂移） | 随两适配层黄金测试覆盖 |
-| `ik_plugins/` | **IkSolver pluginlib 注册库**（缝③ 2026-10-22，ROS-thin 可选子库：4 条 `PLUGINLIB_EXPORT_CLASS`，yaml `ik_solver` 值 = xml class name 裸短名，五机型 yaml 零改动；住 trac_ik 开关块内——按构造依赖 trac_ik） | 装载路径由 CM 活链回归覆盖（`verify_robot.sh`） |
-| `trac_ik_solver/` | **TracIk 适配层 + vendored TRAC-IK**（traclabs rolling，BSD-3，回调线程专用——内部起线程+分配，禁入 RT 环）。编入独立可选子库 `unistackbot_trac_ik`（rclcpp+nlopt 只挂子库），`UNISTACKBOT_BUILD_TRAC_IK=OFF` 可关（交叉编译核心库时） | AB 工具账见 `trac_ik_solver.hpp` 头注 |
-| `base_kinematics/` | **底盘运动学可插拔层**（body twist ↔ 执行通道闭式双向变换，urdf_fk 同族纯函数；消费者=BaseTwistController；参考实现 diff 已入，n_steer/pass_through 按底盘域阶段 B/D 进） | `g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -I.. base_kinematics.cpp test_base_kinematics.cpp -o /tmp/t_bk && /tmp/t_bk`（base_kinematics/ 目录下，纯 std 零依赖） |
-| `dls_ik/test/` 工具链 | 种子库生成/增量 + Oracle 基准；库资产在 `unistackbot_description/arms/<robot>/ik/` | — |
+| 目录 | 是什么 |
+|---|---|
+| `ik_solver/` | **IkSolver 抽象接口**（CM 的可插拔求解层，5 条硬契约在 hpp 头注释：失败不改 out_q / 墙钟预算 / SolveMode 语义 / 调用域自声明 / stats）+ `redundancy.hpp`（RedundancyPreference——7 轴冗余消解词汇，2026-11-02 自 interface 迁入：契约归契约的主人） |
+| `ik_result/` | **IkResult 结果码枚举** + 人话消息函数（2026-11-02 自 interface 迁入） |
+| `whole_body/` | **WholeBodySolver 契约**（v0.3：同步 solve 纯函数 + goals 集合 + WholeBodyResult 五值枚举 + WholeBodyConfig 显式无默认）。**待算法团队 co-sign**——适配层行为变更对照表见 Pkg 2 `whole_body/README.md` |
+| `base_kinematics/` | **BaseKinematics 抽象接口** + 注册工厂（底盘运动学契约；实现住 Pkg 2） |
+| `urdf_fk/` | 可选共享库：URDF→KDL 链→FK/雅可比/限位/链序名/结构指纹数据源/`chain()` 只读访问（想用就用，不用完全不碰；实例线程私有，RT 零分配）。测试 `urdf_fk/test/run_urdf_fk_test.sh` |
 
-验证方法论 SOP（六阶段 + 参数审计 + 换臂流程）：`docs/guides/ik_validation_playbook.md`。
+## 边界（SDK 不提供的东西）
+
+- **不含任何 IK/WB 实现**——参考实现住 Pkg 2，正式归宿是算法团队自己的包
+- **不含 gravity_torque / collision**——SDK 定义接口不选库（2026-11-01 原则性修正：算法用什么 pinocchio/KDL/qpoase 自己的事；`WholeBodyOutput.gravity/tasks` 字段由求解器填）
+- 不含 rclcpp/pluginlib/nlopt——ARM 交叉编译友好
+
+## 实现一个求解器（三步）
+
+1. 实现接口（范本：Pkg 2 `whole_body/dualarm_dls.hpp` 纯仓内栈 / `analytic_piper/` IKFast 适配层）
+2. 自带 `PLUGINLIB_EXPORT_CLASS` + plugin.xml 注册
+3. 机型 yaml 一行选用（`ik_solver:` / `solver:`），启动日志回显激活解
+
+完整指南（外部包接入三步 + 独立测试路径 + 归属终表）：`docs/architecture/algorithm_architecture.md` §4。
 
 ## 纪律
 
-- 依赖单向：`unistackbot_algorithm → unistackbot_interface`；**永不依赖** controller/controller_manager 生态
-- **核心库零 ROS / 零 nlopt**（方案 C，2026-10-08，交叉编译考量）：rclcpp+nlopt 只进可选子库 `unistackbot_trac_ik` 与 `ik_solvers` 注册库（vendored 上游特例，用户裁决不剥离上游代码；`UNISTACKBOT_BUILD_TRAC_IK=OFF` 时核心库纯 Eigen+KDL，ARM/RT 侧随便交叉编——注册库同块不构建，controller 本体可编：CM 已 pluginlib 化不直链 trac_ik 头，2026-10-22）
-- 测试为 g++ 直编（不进 colcon test），见各脚本头注释；与 `unistackbot_common` 组件同型
+- 契约词汇（IkResult/Redundancy）住本包，**实现永不反向定义契约**；虚签名变更 = 破坏性变更需评审
+- 验证方法论 SOP（六阶段 + 参数审计 + 换臂流程）：`docs/guides/ik_validation_playbook.md`

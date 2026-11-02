@@ -58,7 +58,7 @@
 │  变更频率: 高（随时加实现，不影响 SDK）                      │
 │                                                             │
 │  IK 实现:                                                   │
-│  ├── dls_ik/                       ← DLS 数值 IK            │
+│  ├── dls_ik/  (StationPro 分支出清, 住 dev/main) ← DLS 数值 IK │
 │  ├── analytic_piper/ + IKFast vendored ← piper 闭式解      │
 │  ├── analytic_stationlite/ + IKFast vendored ← stationlite │
 │  ├── analytic_common/              ← 解析解公共件           │
@@ -66,7 +66,7 @@
 │                                                             │
 │  WholeBody 实现:                                            │
 │  ├── whole_body/dualarm_dls.hpp    ← 双臂占位实现           │
-│  ├── whole_body/single_arm_dls.hpp ← 单臂参考示例           │
+│  ├── whole_body/single_arm_dls.hpp (StationPro 分支出清)     │
 │  └── whole_body/upper_body_hqp_mos.hpp + vendor ← mos 适配 │
 │                                                             │
 │  Plugin 注册:                                               │
