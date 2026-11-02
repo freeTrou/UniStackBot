@@ -14,6 +14,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **任何结论下笔前读实际代码验证**——接口形态、参数名、行为、某实现是否存在，都以代码为准；文档（含本文件）、记忆、外部资料都是时点快照，可能与代码脱节，冲突时代码赢。
 - **有任何不确定 = 去读代码，不要猜**；代码里找不到实物 = 向用户确认所指，不要用推测补齐（反例教训 2026-09-21：用户说"我的 IK"，未核实所指即默认"外部新实现"凭空写了接入骨架——实际指工程内的 dls_ik）。
 
+## 分支与仓形态（2026-11-02 定稿）
+
+- **`StationPro` = 当前开发主分支**（产品线：mos 合并/P20/stationlite；基座 `dev`、收口 `main` 保留）。日常开发默认在 StationPro。
+- **同仓外部化 = 最终形态**：仓内部分包当作外部仓对待（逻辑外部、物理同仓、永不拆分独立 git 仓）。边界三纪律：**归属外部维护者（框架组当租户）/ 依赖单向只指向 SDK 与自选库 / 框架包对它们零改动**。当前归属此列的包：
+  - `unistackbot_algorithm_solvers` — 臂算法组的参考实现+插件注册家（Pkg 2；算法团队的 HQP/重力/碰撞新包同款落兄弟目录）
+  - `unistackbot_products/` — 产品域全部（机型资产 mos_p20_description、/sdk 兼容门面 mos_compat；外部贡献者 PR 不触框架包）
+- 物理独立 git 仓路径仍被 pluginlib/colcon 支持（clone 进 src/ 等价），但不是目标形态；外部包接入三步指南见 `docs/architecture/algorithm_architecture.md` §4。
+
 ## Project Overview
 
 UniStackBot is a ROS 2 Humble workspace for a general-purpose, multi-morphology real-time robot control framework. It targets fixed-base arms, wheeled bases, quadrupeds, wheeled-arm humanoids, and bipedal humanoids from a single layered architecture. One-line positioning (README): 对上是 VLA/RL/传统控制等算法的**可靠接入底座**（不可信命令源经校验+OTG 进门）；对下是**总线与电机协议的实时主站**（CAN/EtherCAT，驱动器自带看门狗为安全终点）；URDF+契约是贯穿全框架的配置轴；核心对形态与算法保持"形态盲、流派盲"——扩展只发生在插件与配置，**验收 = 每次接入新机器人后框架包 git diff 为零**。The first concrete robot is the **Piper arm**: URDF/Xacro description + the unified sim-control layer (`unistackbot_sim_control`, ros2_control hardware plugin with pluggable backends) + Gazebo integration. `unistackbot_controller` hosts the CartesianMotionController CM plugin (P1.5, IK servoing on the control loop) and JointStreamController (关节级 topic 流式控制器, 2026-09-18 取代 JTC action 层); `unistackbot_hardware` (real driver) is still a skeleton.

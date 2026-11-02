@@ -4,6 +4,7 @@
 > **依据**：MoveIt / ros2_control / Nav2 三个头部生态的插件架构先例；六机型实证；mos 合并策略（ODE）。
 > **决策者**：用户，2026-11-01 终审。
 > **修正**（2026-11-01 同日）：SDK 不提供"库的等价替代品"——算法需要什么用什么，SDK 只定义接口不选库。
+> **形态定稿**（2026-11-02）：**"外部仓" = 同仓外部化**——外部团队的包以兄弟包形态住本仓（StationPro 分支），物理不拆分；边界靠归属/依赖单向/框架零改动三纪律维持。物理独立 git 仓仍被 pluginlib 路径支持，但不再是目标形态。
 
 ---
 
@@ -14,11 +15,11 @@
 - 算法团队在实现里用 pinocchio / KDL / qpoase / OSQP / 自研，都是他们自己的选择
 - SDK 的 `urdf_fk` 是**可选便利**——想用就用，不想用完全不碰
 - SDK **不提供** gravity_torque / collision 等"等价替代品"
-- 重力补偿、碰撞检测等算法的归宿 = 算法团队自己的外部仓
+- 重力补偿、碰撞检测等算法的归宿 = 算法团队自己的外部包（同仓外部化，见形态定稿）
 
 ---
 
-## 1. 定稿方案：两包 + 外部仓
+## 1. 定稿方案：两包 + 外部包（同仓外部化）
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -79,12 +80,13 @@
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│ 外部仓 × N（算法团队自己的 git 仓库）                        │
+│ 外部包 × N（同仓外部化 = 最终形态, 2026-11-02 定稿）        │
 │                                                             │
-│  维护者: 各算法团队                                         │
-│  依赖: 只依赖 Package 1（SDK）                              │
+│  物理形态: 本仓兄弟包（StationPro 分支）, 不拆独立 git 仓   │
+│  逻辑形态: 外部仓——归属外部维护者, 框架组当租户对待        │
+│  依赖: 只依赖 Package 1（SDK）+ 自选库                      │
 │  注册: 自带 plugin.xml，pluginlib 运行期自动发现            │
-│  我们的仓: 零改动                                           │
+│  我们的框架包: 零改动                                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -97,9 +99,9 @@
 | **MoveIt** | `moveit_core`（kinematics_base.hpp） | `moveit_kinematics`（KDL/LMA/SRV） | `trac_ik_kinematics_plugin`（独立仓） |
 | **ros2_control** | `hardware_interface`（SystemInterface） | `mock_components` | 我们（UniStackBot）的 SimControlHardware |
 | **Nav2** | `nav2_core`（Controller/Planner 接口） | `dwb_controller` | 各大学规划器仓 |
-| **UniStackBot** | `unistackbot_algorithm`（IkSolver/WB/BaseKin） | `unistackbot_algorithm_solvers` | 算法团队的 HQP 仓 |
+| **UniStackBot** | `unistackbot_algorithm`（IkSolver/WB/BaseKin） | `unistackbot_algorithm_solvers` | 算法团队的 HQP 包（同仓外部化） |
 
-**共同模式**：契约 SDK 在框架主仓（稳定、极少变）→ 参考实现在框架仓内（活文档）→ 外部实现在独立仓（团队自主）→ pluginlib 运行期发现 → yaml 一行选用。
+**共同模式**：契约 SDK 在框架主仓（稳定、极少变）→ 参考实现在框架仓内（活文档）→ 外部实现在独立包（同仓外部化=团队自主，物理独立仓亦可）→ pluginlib 运行期发现 → yaml 一行选用。
 
 **否决的替代方案**：
 - ❌ SDK 独立成仓：跨仓版本同步地狱；参考实现与契约脱节；非行业标准
@@ -226,13 +228,16 @@ public:
 
 ---
 
-## 4. 外部仓接入操作（三步完成）
+## 4. 外部包接入操作（三步完成）
 
-### 第 1 步：创建你的仓
+> 物理落点两可（2026-11-02 形态定稿）：**首选 = 本仓兄弟包**（同仓外部化最终形态，目录即归属边界）；
+> 亦支持物理独立 git 仓 clone 进工作区（colcon 视角等价）。下文以同仓包为默认路径。
+
+### 第 1 步：建你的包目录
 
 ```bash
-mkdir their_hqp && cd their_hqp
-git init
+cd UniStackBot_ws/src/UniStackBot        # 本仓根
+mkdir -p their_hqp/src && cd their_hqp   # 兄弟包目录 = 归属边界
 ```
 
 ### 第 2 步：写这四个文件
@@ -314,17 +319,17 @@ public:
 PLUGINLIB_EXPORT_CLASS(TheirHqpSolver, unistackbot_algorithm::WholeBodySolver)
 ```
 
-### 第 3 步：集成到工作区
+### 第 3 步：构建集成
 
 ```bash
-cd UniStackBot_ws/src
-git clone git@:algorithms/their_hqp.git
-cd ..
-colcon build --symlink-install
+cd UniStackBot_ws
+colcon build --symlink-install --packages-select their_hqp
 # yaml 改一行:
 # whole_body_controller.ros__parameters.solver: hqp_v1
-# 完成——我们的仓零改动
+# 完成——框架包零改动
 ```
+
+（物理独立仓路径：`git clone` 进 `src/` 后同命令——colcon 视角两者等价，pluginlib 发现机制相同。）
 
 ### 独立测试（不需要框架）
 
@@ -349,13 +354,13 @@ g++ -std=c++17 -O2 -Wall \
 | `analytic_stationlite` | IkSolver | algorithm_solvers | stationlite 平行轴闭式解 |
 | `trac_ik` | IkSolver | algorithm_solvers | TRAC-IK 数值（回调线程专用） |
 | `dualarm_dls` | WholeBodySolver | algorithm_solvers | 双臂独立链 DLS 占位 |
-| `hqp_v1` | WholeBodySolver | **their_hqp**（外部仓） | 算法团队的 HQP |
+| `hqp_v1` | WholeBodySolver | **their_hqp**（外部包，同仓兄弟目录） | 算法团队的 HQP |
 
 ---
 
 ## 6. 各算法域归属终表（2026-11-01 修正：SDK 不做库的替代品）
 
-| 算法域 | 契约在 | 参考实现在 | 外部仓 | 维护者 | SDK 提供？ |
+| 算法域 | 契约在 | 参考实现在 | 外部包 | 维护者 | SDK 提供？ |
 |---|---|---|---|---|---|
 | 臂 IK | Pkg 1 | Pkg 2 | 可有 | 臂算法组 | 契约 + 可选 urdf_fk |
 | 全身/多臂 | Pkg 1 | Pkg 2 | **主力** | 臂算法组 | 契约 + 可选 urdf_fk |
