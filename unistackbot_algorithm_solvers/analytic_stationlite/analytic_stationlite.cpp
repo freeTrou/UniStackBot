@@ -13,7 +13,7 @@ using unistackbot_algorithm::analytic_detail::closestToSeed;
 using unistackbot_algorithm::analytic_detail::filterToLimits;
 using unistackbot_algorithm::analytic_detail::isDuplicateSolution;
 using unistackbot_algorithm::analytic_detail::wrapToLimits;
-using unistackbot_interface::RedundancyType;
+// RedundancyType 经 ik_solver.hpp = 本域词汇 (2026-11-02 迁入)
 
 namespace unistackbot_algorithm
 {

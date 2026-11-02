@@ -5,15 +5,12 @@
 #include <string>
 #include <vector>
 
+#include "ik_result/ik_result.hpp"
+#include "ik_solver/redundancy.hpp"
 #include "urdf_fk/urdf_fk.hpp"
-#include "unistackbot_interface/ik_result.hpp"
-#include "unistackbot_interface/robot_command.hpp"   // RedundancyPreference/RedundancyType
 
 namespace unistackbot_algorithm
 {
-
-using unistackbot_interface::IkResult;
-using unistackbot_interface::RedundancyPreference;
 
 /*
  * IK 求解器抽象接口 (2026-09-21) —— CM (CartesianMotionController) 的可插拔求解层。

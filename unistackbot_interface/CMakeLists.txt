@@ -9,6 +9,10 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+# 算法域词汇引用 (2026-11-02 Redundancy/IkResult 迁 SDK 后): robot_command.hpp 的
+# redundancy 字段类型住算法包; 方向 = 运行面引算法层 (controller 同款), 无环
+# (algorithm 已零 interface 依赖)。硬件四子包零 ROS 链不引本包, 不受影响。
+find_package(unistackbot_algorithm REQUIRED)
 
 # 接口定义目录:
 #   msg/   话题与服务字段定义 (rosidl 生成 C++/Python 类型)
@@ -33,7 +37,7 @@ install(DIRECTORY include/
 )
 # 契约头对消费方可见 (rosidl 生成头由 rosidl 管道导出, 纯 C++ 头需显式导出)
 ament_export_include_directories(include)
-ament_export_dependencies(rclcpp std_srvs std_msgs geometry_msgs)
+ament_export_dependencies(rclcpp std_srvs std_msgs geometry_msgs unistackbot_algorithm)
 
 if(BUILD_TESTING)
 	find_package(ament_lint_auto REQUIRED)

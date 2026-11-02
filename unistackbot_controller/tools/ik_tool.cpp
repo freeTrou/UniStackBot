@@ -115,7 +115,7 @@ int main(int argc, char ** argv)
 	const auto r = ik.solve(target, seed, pre, q);
 	if (r != unistackbot_algorithm::IkResult::OK)
 	{
-		std::fprintf(stderr, "求解失败: %s\n", unistackbot_interface::ik_result_message(r));
+		std::fprintf(stderr, "求解失败: %s\n", unistackbot_algorithm::ik_result_message(r));
 		return 1;
 	}
 

@@ -1,13 +1,14 @@
-#ifndef UNISTACKBOT_INTERFACE__IK_RESULT_HPP_
-#define UNISTACKBOT_INTERFACE__IK_RESULT_HPP_
+#ifndef UNISTACKBOT_ALGORITHM__IK_RESULT_HPP_
+#define UNISTACKBOT_ALGORITHM__IK_RESULT_HPP_
 
 #include <cstdint>
 
-namespace unistackbot_interface
+namespace unistackbot_algorithm
 {
 
 /*
- * IK 求解结果 —— 算法层自持的结果枚举 (2026-09-17 分层裁决:
+ * IK 求解结果 —— 算法层自持的结果枚举 (2026-09-17 分层裁决;
+ * 2026-11-02 自 interface 迁入 SDK——求解器契约的结果码词汇, 契约归契约的主人; SDK 自包含, 算法团队最小闭包 = 本包)。
  * 错误跟着产生它的那一层走; 设备状态住 RobotFeedback, 仿真层用 SimResult)。
  * 长文本留给日志 (ik_result_message), 短码给上层程序逻辑。
  */
@@ -59,5 +60,5 @@ enum class IkResult : uint8_t
 	return "未知 IkResult";
 }
 
-}  // namespace unistackbot_interface
-#endif  // UNISTACKBOT_INTERFACE__IK_RESULT_HPP_
+}  // namespace unistackbot_algorithm
+#endif  // UNISTACKBOT_ALGORITHM__IK_RESULT_HPP_

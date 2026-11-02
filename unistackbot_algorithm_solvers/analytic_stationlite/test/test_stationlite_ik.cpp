@@ -32,8 +32,8 @@ using unistackbot_algorithm::IkResult;
 using unistackbot_algorithm::ParallelAxisFingerprint;
 using unistackbot_algorithm::UrdfFk;
 using unistackbot_algorithm::check_parallel_axes;
-using unistackbot_interface::RedundancyPreference;
-using unistackbot_interface::RedundancyType;
+using unistackbot_algorithm::RedundancyPreference;
+using unistackbot_algorithm::RedundancyType;
 
 namespace
 {

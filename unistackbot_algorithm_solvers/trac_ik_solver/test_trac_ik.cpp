@@ -28,7 +28,7 @@ using unistackbot_algorithm::CartesianPose;
 using unistackbot_algorithm::DlsIkStats;
 using unistackbot_algorithm::IkResult;
 using unistackbot_algorithm::RedundancyPreference;
-using unistackbot_interface::RedundancyType;
+using unistackbot_algorithm::RedundancyType;
 using unistackbot_algorithm::SolveMode;
 using unistackbot_algorithm::TracIk;
 using unistackbot_algorithm::UrdfFk;

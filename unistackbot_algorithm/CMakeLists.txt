@@ -17,14 +17,14 @@ find_package(urdf REQUIRED)
 find_package(urdfdom REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(kdl_parser REQUIRED)
-find_package(unistackbot_interface REQUIRED)
 
 # ============================================================================
-# SDK 包 (2026-11-01 两包拆分定稿):
-#   契约头 (纯 .hpp): ik_solver / whole_body / base_kinematics
+# SDK 包 (2026-11-01 两包拆分定稿; 2026-11-02 自包含收口):
+#   契约头 (纯 .hpp): ik_solver / ik_result / whole_body / base_kinematics
 #   可选共享库: urdf_fk (FK/雅可比, 想用就用)
-#   不含: IK/WB 实现、base_kinematics 实现 (均住 Pkg 2 solvers)、
-#         gravity_torque、collision (SDK 不替算法选库)
+#   零本仓包依赖 (IkResult/Redundancy 词汇已从 interface 迁入)——
+#   算法团队最小闭包 = 本包一个; 不含: IK/WB 实现 (住 Pkg 2)、
+#   gravity_torque、collision (SDK 不替算法选库)
 # ============================================================================
 
 add_library(${PROJECT_NAME} SHARED
@@ -32,8 +32,6 @@ add_library(${PROJECT_NAME} SHARED
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include>
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common>
 	$<INSTALL_INTERFACE:include>
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
@@ -49,7 +47,7 @@ install(TARGETS ${PROJECT_NAME}
 	RUNTIME DESTINATION bin
 )
 # 契约头 + SDK 库头 整体安装 (只装 .hpp, test/ 不进 install)
-install(DIRECTORY urdf_fk ik_solver whole_body base_kinematics
+install(DIRECTORY urdf_fk ik_solver ik_result whole_body base_kinematics
 	DESTINATION include
 	FILES_MATCHING PATTERN "*.hpp"
 )

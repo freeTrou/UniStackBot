@@ -14,7 +14,7 @@ using unistackbot_algorithm::analytic_detail::closestToSeed;
 using unistackbot_algorithm::analytic_detail::filterToLimits;
 using unistackbot_algorithm::analytic_detail::isDuplicateSolution;
 using unistackbot_algorithm::analytic_detail::wrapToLimits;
-using unistackbot_interface::RedundancyType;
+using unistackbot_algorithm::RedundancyType;
 
 namespace unistackbot_algorithm
 {

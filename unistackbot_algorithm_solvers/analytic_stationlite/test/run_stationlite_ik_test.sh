@@ -7,14 +7,15 @@
 # (与 colcon 出货配置逐项同构); 适配层/测试 TU 不带 (其 IkReal 为全局 typedef)。
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKG="$DIR/../.."
+PKG="$DIR/../.."                                # solvers 包根
+SDK="$DIR/../../../unistackbot_algorithm"      # SDK 兄弟包 (urdf_fk 住 Pkg1)
 URDF="$DIR/../gen/stationlite_canonical.urdf"
 [ -f "$URDF" ] || { echo "缺 $URDF (gen/ 管线产物)"; exit 1; }
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-COMMON_CXX=(-std=c++17 -O2 -Wall -Wextra -Wpedantic -I"$PKG" -I"$PKG/../unistackbot_interface/include"
+COMMON_CXX=(-std=c++17 -O2 -Wall -Wextra -Wpedantic -I"$PKG" -I"$SDK"
 	-I/usr/include/eigen3 -I/opt/ros/humble/include/kdl_parser -I/opt/ros/humble/include/orocos_kdl
 	-I/opt/ros/humble/include/urdfdom -I/opt/ros/humble/include/urdfdom_model)
 
@@ -25,6 +26,6 @@ g++ "${COMMON_CXX[@]}" \
 
 g++ "${COMMON_CXX[@]}" -Wconversion \
 	"$DIR/test_stationlite_ik.cpp" "$PKG/analytic_stationlite/analytic_stationlite.cpp" \
-	"$PKG/urdf_fk/urdf_fk.cpp" "$WORK/ikfast.o" -o "$WORK/test_stationlite_ik" \
+	"$SDK/urdf_fk/urdf_fk.cpp" "$WORK/ikfast.o" -o "$WORK/test_stationlite_ik" \
 	-lurdfdom_model -lorocos-kdl -lkdl_parser -L/opt/ros/humble/lib
 "$WORK/test_stationlite_ik" "$URDF"

@@ -20,7 +20,7 @@
 using unistackbot_algorithm::UrdfFk;
 using unistackbot_algorithm::check_spherical_wrist;
 using unistackbot_algorithm::WristFingerprint;
-using unistackbot_interface::RedundancyPreference;
+using unistackbot_algorithm::RedundancyPreference;
 
 // pi_ 前缀系 (2026-10-26 审核修 F5 同步): 生成物 C API 已族前缀隔离
 namespace piper_ikfast
@@ -150,7 +150,7 @@ int main(int argc, char ** argv)
 			unistackbot_algorithm::DlsIkStats st;
 			const auto r = ik.solve(t, q, red, out, &st,
 			                        unistackbot_algorithm::SolveMode::STREAMING);
-			if (r != unistackbot_interface::IkResult::OK)
+			if (r != unistackbot_algorithm::IkResult::OK)
 			{
 				if (skipped < 3)   // 首例诊断: 结果码 + ComputeFk 对拍 + 原始解数
 				{

@@ -3,12 +3,10 @@
 #include <chrono>
 #include <cmath>
 
-#include "unistackbot_interface/robot_command.hpp"
-
 namespace unistackbot_algorithm
 {
 
-using unistackbot_interface::RedundancyType;
+// RedundancyType 经 ik_solver.hpp = 本域词汇 (2026-11-02 迁入)
 
 // STREAMING 分支粘性阈 [rad, L1] (DlsIk jump_threshold 同款口径, 契约 3)
 static constexpr double kStreamJumpL1 = 1.5;

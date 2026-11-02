@@ -103,6 +103,8 @@
 
 **共同模式**：契约 SDK 在框架主仓（稳定、极少变）→ 参考实现在框架仓内（活文档）→ 外部实现在独立包（同仓外部化=团队自主，物理独立仓亦可）→ pluginlib 运行期发现 → yaml 一行选用。
 
+**SDK 自包含（2026-11-02 收口）**：IkResult（`ik_result/ik_result.hpp`）与 RedundancyPreference/RedundancyType（`ik_solver/redundancy.hpp`）已从 interface 迁入 SDK——算法契约词汇归契约的主人。**SDK 零本仓包依赖**（ldd 实证：libunistackbot_algorithm.so 不链任何 unistackbot 库），**算法团队最小闭包 = `unistackbot_algorithm` 一个包**。运行面反向引用：interface 的 RobotCommand.redundancy 字段经 include 引用算法域类型（方向 = 运行面引算法层，与 controller 同款，无环；硬件四子包零 ROS 链不受影响）。
+
 **否决的替代方案**：
 - ❌ SDK 独立成仓：跨仓版本同步地狱；参考实现与契约脱节；非行业标准
 - ❌ 三包拆分（SDK + 臂 + 底盘）：BaseVelocityController 跨包链接工厂断裂

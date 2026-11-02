@@ -5,8 +5,8 @@ set -euo pipefail
 ROBOT="${1:-xarm7}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(dirname "$SCRIPT_DIR")"            # dls_ik/ 算法文件夹
-ALGO_PKG="$(dirname "$PKG_ROOT")"              # unistackbot_algorithm 包根 (include 基)
-REPO_ROOT="$(dirname "$ALGO_PKG")"             # 仓库根
+ALGO_PKG="$(dirname "$(dirname "$PKG_ROOT")")/unistackbot_algorithm"  # SDK 兄弟包 (两包拆分后 urdf_fk/契约头住 Pkg1)
+REPO_ROOT="$(dirname "$ALGO_PKG")"             # 仓库根 (seed_lib 用)
 
 URDF="/tmp/verify_${ROBOT}.urdf"
 ORACLE="$PKG_ROOT/test/ik_oracle_${ROBOT}.txt"
@@ -15,8 +15,8 @@ ORACLE="$PKG_ROOT/test/ik_oracle_${ROBOT}.txt"
 
 echo "== 编译 =="
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
-	-I"$ALGO_PKG" \
-	-I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser -I"$REPO_ROOT/unistackbot_interface/include" -I"$REPO_ROOT/unistackbot_common" \
+	-I"$(dirname "$PKG_ROOT")" -I"$ALGO_PKG" -I"$REPO_ROOT/unistackbot_common" \
+	-I/usr/include/eigen3 -I/usr/include -I/opt/ros/humble/include -I/opt/ros/humble/include/kdl_parser \
 	"$PKG_ROOT/test_dls_ik.cpp" \
 	"$PKG_ROOT/dls_ik.cpp" \
 	"$ALGO_PKG/urdf_fk/urdf_fk.cpp" \

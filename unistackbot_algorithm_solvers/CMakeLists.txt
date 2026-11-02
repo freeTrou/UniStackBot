@@ -11,7 +11,6 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(unistackbot_algorithm REQUIRED)
-find_package(unistackbot_interface REQUIRED)
 find_package(orocos_kdl REQUIRED)
 find_package(urdf REQUIRED)
 find_package(urdfdom REQUIRED)
@@ -21,7 +20,6 @@ find_package(pluginlib REQUIRED)
 
 # 显式 include 路径 (same workspace monorepo)
 set(SDK_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_algorithm)
-set(IFACE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_interface/include)
 set(COMMON_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common)
 
 # IK 源文件 (含 IKFast 生成物, 直接编进插件库)
@@ -50,7 +48,7 @@ target_compile_features(ik_solvers PUBLIC cxx_std_17)
 target_include_directories(ik_solvers PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${SDK_INCLUDE_DIR}
-	${IFACE_INCLUDE_DIR}
+
 	${COMMON_INCLUDE_DIR}
 )
 ament_target_dependencies(ik_solvers
@@ -80,7 +78,6 @@ if(UNISTACKBOT_BUILD_TRAC_IK)
 		${CMAKE_CURRENT_SOURCE_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/trac_ik_solver/vendor
 		${SDK_INCLUDE_DIR}
-		${IFACE_INCLUDE_DIR}
 	)
 	ament_target_dependencies(unistackbot_trac_ik
 		rclcpp urdf urdfdom orocos_kdl kdl_parser
@@ -113,7 +110,7 @@ target_include_directories(whole_body_solvers PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${SDK_INCLUDE_DIR}
 	${SDK_INCLUDE_DIR}/whole_body
-	${IFACE_INCLUDE_DIR}
+
 	${COMMON_INCLUDE_DIR}
 )
 ament_target_dependencies(whole_body_solvers

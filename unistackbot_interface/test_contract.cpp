@@ -2,13 +2,13 @@
  * unistackbot_interface 契约头单元测试 (g++ 直编, common 组件同型, 不进 colcon)。
  * 编译运行:
  *   g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Iinclude \
- *       test_contract.cpp -o /tmp/test_interface && /tmp/test_interface
+ *       -I../unistackbot_algorithm test_contract.cpp -o /tmp/test_interface && /tmp/test_interface
+ * (2026-11-02 起 Redundancy/IkResult 词汇住算法包——本测试经 robot_command.hpp 传递引用)
  */
 #include <cstdint>
 #include <cstdio>
 #include <type_traits>
 
-#include "unistackbot_interface/ik_result.hpp"
 #include "unistackbot_interface/joint_capacity.hpp"
 #include "unistackbot_interface/robot_command.hpp"
 #include "unistackbot_interface/robot_feedback.hpp"
@@ -23,7 +23,7 @@ static int g_pass = 0;
 // ---- 编译期断言: POD 纪律 (与 SimCommand 同型) ----
 static_assert(std::is_trivially_copyable_v<RobotFeedback>, "RobotFeedback POD");
 static_assert(std::is_trivially_copyable_v<RobotCommand>, "RobotCommand POD");
-static_assert(std::is_trivially_copyable_v<RedundancyPreference>, "RedundancyPreference POD");
+static_assert(std::is_trivially_copyable_v<unistackbot_algorithm::RedundancyPreference>, "RedundancyPreference POD (类型住算法域)");
 
 // ---- 编译期断言: 定长数组容量 = 唯一常量 ----
 static_assert(RobotFeedback{}.position.size() == kMaxJoints, "feedback capacity");
@@ -57,20 +57,12 @@ int main()
 	cmd.kp[3] = 120.0;                  // MIT 模式: 单关节设增益
 	cmd.kd[3] = 8.0;
 	CHECK(cmd.kp[3] > 119.0 && cmd.kd[3] < 9.0);
-	CHECK(cmd.redundancy.type == RedundancyType::PRESERVE);
+	CHECK(cmd.redundancy.type == unistackbot_algorithm::RedundancyType::PRESERVE);
 	CHECK(cmd.redundancy.joint_index == 0);
-	cmd.redundancy = {RedundancyType::LOCK_JOINT, 4, 0.0};
+	cmd.redundancy = {unistackbot_algorithm::RedundancyType::LOCK_JOINT, 4, 0.0};
 	CHECK(cmd.redundancy.joint_index == 4);
-	cmd.redundancy = {RedundancyType::ARM_ANGLE, 0, 0.785};
+	cmd.redundancy = {unistackbot_algorithm::RedundancyType::ARM_ANGLE, 0, 0.785};
 	CHECK(cmd.redundancy.psi > 0.78 && cmd.redundancy.psi < 0.79);
-
-	// ---- IK 结果: 码值互异 + 每码有非空信息 ----
-	CHECK(IkResult::OK != IkResult::UNREACHABLE);
-	for (uint8_t v = 0; v <= 6; ++v)
-	{
-		CHECK(ik_result_message(static_cast<IkResult>(v)) != nullptr);
-	}
-	CHECK(ik_result_message(IkResult::UNREACHABLE)[0] != '\0');
 
 	// ---- 仿真结果: 每码有非空信息 ----
 	for (uint8_t v = 0; v <= 5; ++v)

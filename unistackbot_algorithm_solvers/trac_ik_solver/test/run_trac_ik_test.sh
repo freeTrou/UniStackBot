@@ -5,11 +5,12 @@ set -euo pipefail
 ROBOT="${1:-r1_7a}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(dirname "$SCRIPT_DIR")"            # trac_ik_solver/ 算法文件夹
-ALGO_PKG="$(dirname "$PKG_ROOT")"              # unistackbot_algorithm 包根 (include 基)
+ALGO_PKG="$(dirname "$(dirname "$PKG_ROOT")")/unistackbot_algorithm"  # SDK 兄弟包 (两包拆分后 urdf_fk/契约头住 Pkg1)
 REPO_ROOT="$(dirname "$ALGO_PKG")"             # 仓库根
+SOLVERS_PKG="$(dirname "$PKG_ROOT")"        # solvers 包根 (oracle 住 dls_ik/test)
 
 URDF="/tmp/verify_${ROBOT}.urdf"
-ORACLE="$ALGO_PKG/dls_ik/test/ik_oracle_${ROBOT}.txt"
+ORACLE="$SOLVERS_PKG/dls_ik/test/ik_oracle_${ROBOT}.txt"
 [ -f "$URDF" ] || { echo "缺 $URDF (先跑 bash test/verify_robot.sh $ROBOT 生成)"; exit 1; }
 [ -f "$ORACLE" ] || { echo "缺 $ORACLE"; exit 1; }
 
@@ -27,15 +28,15 @@ for p in rclcpp rcl rmw rmw_implementation rmw_dds_common rcutils rcpputils \
 	[ -d "/opt/ros/humble/include/$p" ] && INC="$INC -I/opt/ros/humble/include/$p"
 done
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
-	-I"$ALGO_PKG" -I"$REPO_ROOT/unistackbot_interface/include" \
+	-I"$SOLVERS_PKG" -I"$ALGO_PKG" \
 	-I/opt/ros/humble/include/kdl_parser -I"$PKG_ROOT/vendor" $INC -I/usr/include/eigen3 \
 	-c "$PKG_ROOT/test_trac_ik.cpp" -o /tmp/test_trac_ik_main.o
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
-	-I"$ALGO_PKG" -I"$REPO_ROOT/unistackbot_interface/include" \
+	-I"$SOLVERS_PKG" -I"$ALGO_PKG" \
 	-I/opt/ros/humble/include/kdl_parser -I"$PKG_ROOT/vendor" $INC -I/usr/include/eigen3 \
 	-c "$PKG_ROOT/trac_ik_solver.cpp" -o /tmp/tik_solver.o
 g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Wconversion \
-	-I"$ALGO_PKG" -I"$REPO_ROOT/unistackbot_interface/include" \
+	-I"$SOLVERS_PKG" -I"$ALGO_PKG" \
 	-I/opt/ros/humble/include/kdl_parser $INC -I/usr/include/eigen3 \
 	-c "$ALGO_PKG/urdf_fk/urdf_fk.cpp" -o /tmp/tik_urdf_fk.o
 # vendored 上游单独编 (固有警告单文件关, 与 CMake 同口径); -o 显式落 /tmp

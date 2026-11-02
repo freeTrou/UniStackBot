@@ -17,7 +17,7 @@ namespace unistackbot_algorithm
 {
 
 // 契约类型来自 interface 包 (跨层共享); IkResult/RedundancyPreference 经 ik_solver.hpp 引入
-using unistackbot_interface::RedundancyType;
+using unistackbot_algorithm::RedundancyType;
 
 /*
  * 数值 IK 求解器 (P1.4) —— 策略层自研, 数值层用库 (Eigen SVD + KDL 雅可比)。
