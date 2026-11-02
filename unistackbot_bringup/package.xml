@@ -8,6 +8,12 @@
   <license>TODO: Declaration of license</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>unistackbot_udp_board</depend>
+  <depend>unistackbot_bus</depend>
+  <depend>unistackbot_statemachine</depend>
+  <depend>unistackbot_protocol</depend>
+  <depend>pluginlib</depend>
+  <depend>hardware_interface</depend>
 
   <!-- 编排层最小版 supervisor_node (0d); 操作态通道契约头 (kPausedTopic) -->
   <depend>rclcpp</depend>

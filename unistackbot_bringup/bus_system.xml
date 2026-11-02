@@ -1,0 +1,7 @@
+<library path="unistackbot_bus_system">
+  <class name="unistackbot_bringup/BusSystem"
+         type="unistackbot_bringup::BusSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>通用总线适配器 (组合根 bringup): bus/endpoint 参数选总线, 节点表=URDF joint 序</description>
+  </class>
+</library>

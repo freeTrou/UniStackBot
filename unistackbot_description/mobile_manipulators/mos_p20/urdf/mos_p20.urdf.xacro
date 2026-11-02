@@ -18,10 +18,13 @@
         <param name="backend">kinematic</param>
       </xacro:if>
       <xacro:unless value="${backend == 'kinematic'}">
-        <plugin>unistackbot_udp_board/UdpBoardSystem</plugin>
-        <param name="dest_ip">$(arg board_ip)</param>
-        <param name="dest_port">$(arg board_port)</param>
-        <param name="bind_port">$(arg bind_port)</param>
+        <!-- 通用总线适配器 (组合根 bringup): bus 选总线, endpoint 格式由总线解释 -->
+        <plugin>unistackbot_bringup/BusSystem</plugin>
+        <param name="bus">udp</param>
+        <param name="endpoint">$(arg board_ip):$(arg board_port):$(arg bind_port)</param>
+        <param name="rate_hz">500</param>
+        <param name="protocol">udp_board</param>
+        <param name="statemachine">udp_board</param>
       </xacro:unless>
     </hardware>
 

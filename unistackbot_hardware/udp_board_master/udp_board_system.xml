@@ -1,7 +1,0 @@
-<library path="udp_board_system">
-  <class name="unistackbot_udp_board/UdpBoardSystem"
-         type="unistackbot_udp_board::UdpBoardSystem"
-         base_class_type="hardware_interface::SystemInterface">
-    <description>Lumos UDP 电控板 SystemInterface (第四总线; Phase 3 2026-10-30)</description>
-  </class>
-</library>
