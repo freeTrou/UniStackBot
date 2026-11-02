@@ -1,7 +1,4 @@
 <library path="ik_solvers">
-  <class name="dls" type="unistackbot_algorithm::DlsIk" base_class_type="unistackbot_algorithm::IkSolver">
-    <description>DLS 数值 IK（RT-capable 零分配；yaml: ik_solver: dls）</description>
-  </class>
   <class name="analytic_piper" type="unistackbot_algorithm::AnalyticPiper" base_class_type="unistackbot_algorithm::IkSolver">
     <description>Piper 球腕 6 轴闭式解析解（IKFast；yaml: ik_solver: analytic_piper）</description>
   </class>

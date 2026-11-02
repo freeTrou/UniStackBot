@@ -10,13 +10,12 @@
 | 目录 | 内容 | 注册插件名 | 测试 |
 |---|---|---|---|
 | `ik_plugins/` | pluginlib 注册面（IK + WB + trac_ik 可选块） | — | — |
-| `dls_ik/` | DLS 数值 IK（RT-capable：零 malloc/锁，可进任何线程） | `dls` | `test/run_ik_test.sh [robot]` |
 | `analytic_common/` | IKFast 系适配层公共件 | — | （随两机型测试覆盖） |
 | `analytic_piper/` | piper 球腕 6 轴闭式解（IKFast 生成 + 结构指纹选拒） | `analytic_piper` | `test/run_wrist_check_test.sh` |
 | `analytic_stationlite/` | stationlite 平行轴闭式解（IKFast + 指纹选拒 + 周期折叠） | `analytic_stationlite` | `test/run_stationlite_ik_test.sh` |
 | `trac_ik_solver/` | TRAC-IK 适配层（vendored，**回调线程专用**——契约 4b：内部起线程+分配，禁入 RT 环） | `trac_ik` | `test/run_trac_ik_test.sh [robot]` |
-| `whole_body/` | 全身/多臂解算：`single_arm_dls`（单臂示例）/ `dualarm_dls`（双臂占位）/ `upper_body_hqp_mos`（mos HQP 适配，见其 README） | `dualarm_dls` | `whole_body/README.md`（实例验证路径） |
-| `base_kinematics/` | 底盘运动学（diff + n_steer；BaseVelocityController 编译期消费，工厂自注册） | — | `test_base_kinematics.cpp`（g++ 直编） |
+| `whole_body/` | 全身/多臂解算：`dualarm_dls`（双臂占位，mos_p20 WB 在用）/ `upper_body_hqp_mos`（mos HQP 适配，见其 README） | `dualarm_dls` | `whole_body/README.md`（实例验证路径） |
+| `base_kinematics/` | 底盘运动学（n_steer；diff 已出清 2026-11-02——A3 示范件零真实消费者，住 dev/main。**mos 4WS 机制重述（M3）落地时在此挂注册**） | — | `test_base_kinematics.cpp`（g++ 直编） |
 
 ## 依赖与构建
 
@@ -30,18 +29,18 @@ cd UniStackBot_ws && colcon build --symlink-install --packages-select unistackbo
 ```
 
 选型账（详见各机型 `ik_decision_card.md` 与 CLAUDE.md）：`analytic_*` = 闭式正解；`trac_ik` = 数值默认
-（Distance 档保流式连续性）；`dls` = RT 场景/离线 fallback。per-robot yaml 显式声明、无默认值（fail-fast 纪律）。
+（Distance 档保流式连续性）。per-robot yaml 显式声明、无默认值（fail-fast 纪律）。
+**出清记录（2026-11-02 产品化）**：`dls_ik`（零机型引用 + oracle 已随机型出清）、`single_arm_dls`（教学示例）、
+`diff`（A3 示范件）——三件住 dev/main 基座仓；本包每件都有本分支活消费者。
 
 ## 测试（g++ 直编，零 colcon）
 
 | 脚本 | 前置 | 期望 |
 |---|---|---|
-| `dls_ik/test/run_ik_test.sh [robot]` | `/tmp/verify_<robot>.urdf`（verify_robot.sh 展开）+ oracle | 冷启动高成功率 + 流式步长账（xarm7 参考值见脚本头） |
 | `analytic_piper/test/run_wrist_check_test.sh` | 工作区已 source | 指纹正反例 + FK-IK 回代黄金，全部通过 |
 | `analytic_stationlite/test/run_stationlite_ik_test.sh` | 工作区已 source | 2026 cases 全过 |
-| `trac_ik_solver/test/run_trac_ik_test.sh [robot]` | 同 dls_ik 前置 | AB 分层账全 PASS |
+| `trac_ik_solver/test/run_trac_ik_test.sh [robot]` | `/tmp/verify_<robot>.urdf`（verify_robot.sh 展开） | AB 分层账全 PASS |
 
-oracle 与种子库可再生：`test/gen_ik_oracle.py` / `test/gen_seed_library.py` / `test/seed_lib_incremental.py`。
 
 ## IKFast 再生成管线（analytic_*/gen/）
 
@@ -58,7 +57,7 @@ oracle 与种子库可再生：`test/gen_ik_oracle.py` / `test/gen_seed_library.
 
 ## 加一个新实现（三步）
 
-1. 建目录写实现（对照 `dls_ik/` 或 `whole_body/single_arm_dls.hpp` 为范本；失败不改 out、墙钟预算、调用域自声明——契约 5 条硬规则见 SDK `ik_solver.hpp`）
+1. 建目录写实现（对照 `analytic_piper/`（IK 适配层）或 `whole_body/dualarm_dls.hpp`（纯仓内栈）为范本；失败不改 out、墙钟预算、调用域自声明——契约 5 条硬规则见 SDK `ik_solver.hpp`）
 2. `ik_plugins/` 加注册三件：EXPORT_CLASS + plugin.xml + CMake 一行
 3. 机型 yaml 改一行选用（`ik_solver:` / `solver:`），启动日志回显激活解
 

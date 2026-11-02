@@ -24,7 +24,6 @@ set(COMMON_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../unistackbot_common)
 
 # IK 源文件 (含 IKFast 生成物, 直接编进插件库)
 set(IK_SOURCES
-	dls_ik/dls_ik.cpp
 	analytic_piper/analytic_piper.cpp
 	analytic_piper/piper_ikfast.cpp
 	analytic_stationlite/analytic_stationlite.cpp
@@ -131,6 +130,6 @@ if(UNISTACKBOT_BUILD_TRAC_IK)
 	install(FILES ik_plugins/ik_plugins_trac_ik.xml DESTINATION share/${PROJECT_NAME}/ik_plugins)
 endif()
 install(FILES ik_plugins/whole_body_plugins.xml DESTINATION share/${PROJECT_NAME}/ik_plugins)
-install(DIRECTORY whole_body dls_ik analytic_piper analytic_stationlite analytic_common DESTINATION include FILES_MATCHING PATTERN "*.hpp")
+install(DIRECTORY whole_body analytic_piper analytic_stationlite analytic_common DESTINATION include FILES_MATCHING PATTERN "*.hpp")
 
 ament_package()
